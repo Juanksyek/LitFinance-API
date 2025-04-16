@@ -1,0 +1,119 @@
+import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import * as bcrypt from 'bcryptjs';
+import { JwtService } from '@nestjs/jwt';
+import { randomBytes } from 'crypto';
+
+import { RegisterAuthDto } from './dto/register-auth.dto';
+import { LoginAuthDto } from './dto/login-auth.dto';
+import { User, UserDocument } from '../user/schemas/user.schema/user.schema';
+import { EmailService } from '../email/email.service';
+
+@Injectable()
+export class AuthService {
+    constructor(
+        @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+        private readonly jwtService: JwtService,
+        private readonly emailService: EmailService,
+    ) { }
+
+    private async generateUniqueId(): Promise<string> {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        let id: string;
+        let exists: UserDocument | null;
+
+        do {
+            id = '';
+            for (let i = 0; i < 7; i++) {
+                id += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            exists = await this.userModel.findOne({ id });
+        } while (exists);
+
+        return id;
+    }
+
+    async register(dto: RegisterAuthDto) {
+        const activationToken = randomBytes(32).toString('hex');
+        const tokenExpires = new Date(Date.now() + 30 * 60 * 1000);
+        const { email, password, confirmPassword } = dto;
+
+        const existing = await this.userModel.findOne({ email });
+        if (existing) {
+            throw new BadRequestException('El correo ya está registrado');
+        }
+
+        if (password !== confirmPassword) {
+            throw new BadRequestException('Las contraseñas no coinciden');
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const generatedId = await this.generateUniqueId();
+
+        const user = new this.userModel({
+            ...dto,
+            id: generatedId,
+            password: hashedPassword,
+            proveedor: null,
+            isActive: false,
+            activationToken,
+            tokenExpires,
+        });
+
+        await user.save();
+        await this.emailService.sendConfirmationEmail(user.email, activationToken, user.nombreCompleto);
+
+        return {
+            message: 'Usuario registrado correctamente',
+            userId: user.id,
+        };
+    }
+
+    async login(dto: LoginAuthDto) {
+        const { email, password } = dto;
+
+        const user = await this.userModel.findOne({ email });
+        if (!user) {
+            throw new UnauthorizedException('Credenciales inválidas');
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            throw new UnauthorizedException('Credenciales inválidas');
+        }
+
+        const payload = {
+            sub: user._id,
+            email: user.email,
+            nombre: user.nombreCompleto,
+        };
+
+        const accessToken = await this.jwtService.signAsync(payload);
+
+        return {
+            message: 'Login exitoso',
+            accessToken,
+            user: {
+                id: user._id,
+                email: user.email,
+                nombre: user.nombreCompleto,
+            },
+        };
+    }
+
+    async confirmAccount(token: string) {
+        const user = await this.userModel.findOne({ activationToken: token });
+
+        if (!user || !user.tokenExpires || user.tokenExpires < new Date()) {
+            throw new BadRequestException('Token inválido o expirado');
+        }
+
+        user.isActive = true;
+        user.activationToken = undefined;
+        user.tokenExpires = undefined;
+        await user.save();
+
+        return { success: true, message: 'Cuenta activada correctamente' };
+    }
+}
