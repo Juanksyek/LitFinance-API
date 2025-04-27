@@ -85,6 +85,9 @@ export class AuthService {
             throw new UnauthorizedException('Credenciales inválidas');
         }
 
+        user.lastActivityAt = new Date();
+        await user.save();
+
         const payload = {
             sub: user.id,
             email: user.email,
@@ -130,7 +133,7 @@ export class AuthService {
         const resetTokenExpires = new Date(Date.now() + 30 * 60 * 1000);
 
         user.resetToken = resetToken;
-        user.resetTokenExpires = resetTokenExpires;    
+        user.resetTokenExpires = resetTokenExpires;
         await user.save();
 
         await this.emailService.sendResetPasswordEmail(user.email, resetToken, user.nombreCompleto);
