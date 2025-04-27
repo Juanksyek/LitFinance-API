@@ -2,10 +2,12 @@ import { Controller, Post, Body, Get, Query, BadRequestException } from '@nestjs
 import { AuthService } from './auth.service';
 import { RegisterAuthDto } from './dto/register-auth.dto';
 import { LoginAuthDto } from './dto/login-auth.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto/reset-password.dto';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Post('register')
   async register(@Body() dto: RegisterAuthDto): Promise<any> {
@@ -22,4 +24,15 @@ export class AuthController {
     if (!token) throw new BadRequestException('Token no proporcionado');
     return await this.authService.confirmAccount(token);
   }
+
+  @Post('forgot-password')
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return await this.authService.forgotPassword(dto);
+  }
+
+  @Post('reset-password')
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return await this.authService.resetPassword(dto);
+  }
+
 }
