@@ -9,6 +9,8 @@ import { RegisterAuthDto } from './dto/register-auth.dto';
 import { LoginAuthDto } from './dto/login-auth.dto';
 import { User, UserDocument } from '../user/schemas/user.schema/user.schema';
 import { EmailService } from '../email/email.service';
+import { ForgotPasswordDto } from './dto/forgot-password.dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto/reset-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -84,7 +86,7 @@ export class AuthService {
         }
 
         const payload = {
-            sub: user._id,
+            sub: user.id,
             email: user.email,
             nombre: user.nombreCompleto,
         };
@@ -95,7 +97,7 @@ export class AuthService {
             message: 'Login exitoso',
             accessToken,
             user: {
-                id: user._id,
+                id: user.id,
                 email: user.email,
                 nombre: user.nombreCompleto,
             },
@@ -115,5 +117,43 @@ export class AuthService {
         await user.save();
 
         return { success: true, message: 'Cuenta activada correctamente' };
+    }
+
+    async forgotPassword(dto: ForgotPasswordDto) {
+        const user = await this.userModel.findOne({ email: dto.email });
+
+        if (!user) {
+            throw new BadRequestException('No existe una cuenta con ese correo.');
+        }
+
+        const resetToken = randomBytes(32).toString('hex');
+        const resetTokenExpires = new Date(Date.now() + 30 * 60 * 1000);
+
+        user.resetToken = resetToken;
+        user.resetTokenExpires = resetTokenExpires;    
+        await user.save();
+
+        await this.emailService.sendResetPasswordEmail(user.email, resetToken, user.nombreCompleto);
+
+        return { message: 'Se ha enviado un correo para recuperar la contraseña.', resetToken };
+    }
+
+    async resetPassword(dto: ResetPasswordDto) {
+        const { token, newPassword } = dto;
+
+        const user = await this.userModel.findOne({ resetToken: token });
+
+        if (!user || !user.resetTokenExpires || user.resetTokenExpires < new Date()) {
+            throw new BadRequestException('Token inválido o expirado.');
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+        user.password = hashedPassword;
+        user.resetToken = undefined;
+        user.resetTokenExpires = undefined;
+        await user.save();
+
+        return { message: 'La contraseña ha sido cambiada exitosamente.' };
     }
 }
