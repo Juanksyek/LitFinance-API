@@ -38,6 +38,12 @@ export class User {
 
     @Prop({ required: false })
     tokenExpires?: Date;
+
+    @Prop({ type: String })
+    resetToken?: string;
+    
+    @Prop({ type: Date })
+    resetTokenExpires?: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
