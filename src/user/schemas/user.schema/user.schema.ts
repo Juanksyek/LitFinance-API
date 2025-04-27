@@ -44,6 +44,9 @@ export class User {
     
     @Prop({ type: Date })
     resetTokenExpires?: Date;
+
+    @Prop({ type: Date, default: Date.now })
+    lastActivityAt: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
