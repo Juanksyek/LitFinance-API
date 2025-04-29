@@ -47,6 +47,9 @@ export class User {
 
     @Prop({ type: Date, default: Date.now })
     lastActivityAt: Date;
+
+    @Prop({ default: 'usuario' })
+    rol: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
