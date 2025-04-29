@@ -92,6 +92,7 @@ export class AuthService {
             sub: user.id,
             email: user.email,
             nombre: user.nombreCompleto,
+            rol: user.rol,
         };
 
         const accessToken = await this.jwtService.signAsync(payload);
@@ -104,6 +105,7 @@ export class AuthService {
                 email: user.email,
                 nombre: user.nombreCompleto,
             },
+            rol: user.rol,
         };
     }
 
