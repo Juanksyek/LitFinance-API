@@ -9,6 +9,11 @@ import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { GoalsModule } from './goals/goals.module';
+import { CuentaModule } from './cuenta/cuenta.module';
+import { SubcuentaModule } from './subcuenta/subcuenta.module';
+import { MonedaModule } from './moneda/moneda.module';
+import { MonedaService } from './moneda/moneda.service';
+import { MonedaController } from './moneda/moneda.controller';
 
 @Module({
   imports: [
@@ -18,8 +23,11 @@ import { GoalsModule } from './goals/goals.module';
     AuthModule,
     TransactionsModule,
     GoalsModule,
+    CuentaModule,
+    SubcuentaModule,
+    MonedaModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  controllers: [AppController, MonedaController],
+  providers: [AppService, MonedaService],
 })
 export class AppModule {}
