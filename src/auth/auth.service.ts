@@ -11,11 +11,13 @@ import { User, UserDocument } from '../user/schemas/user.schema/user.schema';
 import { EmailService } from '../email/email.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto/reset-password.dto';
+import { Cuenta, CuentaDocument } from '../cuenta/schemas/cuenta.schema/cuenta.schema';
 
 @Injectable()
 export class AuthService {
     constructor(
         @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+        @InjectModel(Cuenta.name) private readonly cuentaModel: Model<CuentaDocument>,
         private readonly jwtService: JwtService,
         private readonly emailService: EmailService,
     ) { }
@@ -65,6 +67,19 @@ export class AuthService {
 
         await user.save();
         await this.emailService.sendConfirmationEmail(user.email, activationToken, user.nombreCompleto);
+
+        const cuentaPrincipal = new this.cuentaModel({
+            id: await this.generateUniqueId(),
+            usuarioId: user.id,
+            nombre: 'Cuenta Principal',
+            moneda: 'MXN',
+            cantidad: 0,
+            simbolo: '$',
+            color: '#1A2C23',
+            isPrincipal: true,
+          });
+          
+          await cuentaPrincipal.save();
 
         return {
             message: 'Usuario registrado correctamente',
