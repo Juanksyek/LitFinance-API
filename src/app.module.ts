@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ThrottlerModule, ThrottlerGuard, seconds } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -12,13 +14,19 @@ import { GoalsModule } from './goals/goals.module';
 import { CuentaModule } from './cuenta/cuenta.module';
 import { SubcuentaModule } from './subcuenta/subcuenta.module';
 import { MonedaModule } from './moneda/moneda.module';
-import { MonedaService } from './moneda/moneda.service';
-import { MonedaController } from './moneda/moneda.controller';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     MongooseModule.forRoot(process.env.MONGO_URI!),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: seconds(60),
+          limit: 10,
+        },
+      ],
+    }),
     UserModule,
     AuthModule,
     TransactionsModule,
@@ -27,7 +35,13 @@ import { MonedaController } from './moneda/moneda.controller';
     SubcuentaModule,
     MonedaModule,
   ],
-  controllers: [AppController, MonedaController],
-  providers: [AppService, MonedaService],
+  controllers: [AppController],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

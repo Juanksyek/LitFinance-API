@@ -3,9 +3,11 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { CuentaService } from './cuenta.service';
 import { CuentaController } from './cuenta.controller';
 import { Cuenta, CuentaSchema } from './schemas/cuenta.schema/cuenta.schema';
+import { MonedaModule } from '../moneda/moneda.module';
 
 @Module({
   imports: [
+    MonedaModule,
     MongooseModule.forFeature([
       { name: Cuenta.name, schema: CuentaSchema },
     ]),
