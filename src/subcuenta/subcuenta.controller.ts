@@ -10,37 +10,25 @@ export class SubcuentaController {
   constructor(private readonly subcuentaService: SubcuentaService) {}
 
   @Post()
-  async crear(@Req() req, @Body() dto: Omit<CreateSubcuentaDto, 'cuentaId'> & { cuentaPrincipalId: string }) {
-    const subcuentaDto = {
-      ...dto,
-      userId: req.user.id || req.user.sub,
-    };
-  
-    const result = await this.subcuentaService.crear(subcuentaDto, subcuentaDto.userId);
-  
-    const response = result.toObject?.() ?? result;
-    delete response.cuentaId;
-  
-    return {
-      ...response,
-      cuentaPrincipalId: dto.cuentaPrincipalId,
-    };
+  async crear(@Req() req, @Body() dto: CreateSubcuentaDto) {
+    console.log('🧾 req.user.sub:', req.user?.sub);
+    return this.subcuentaService.crear(dto, req.user.sub);
   }
 
   @Get()
   async listar(
     @Req() req,
-    @Query('cuentaPrincipalId') cuentaPrincipalId?: string,
+    @Query('cuentaId') cuentaId?: string,
     @Query('search') search?: string,
     @Query('page') page = 1,
     @Query('limit') limit = 10,
   ) {
-    return this.subcuentaService.listar(req.user.sub, cuentaPrincipalId, search, +page, +limit);
+    return this.subcuentaService.listar(req.user.sub, cuentaId, search, +page, +limit);
   }
 
   @Patch(':id')
   async actualizar(@Req() req, @Param('id') id: string, @Body() dto: UpdateSubcuentaDto) {
-    return this.subcuentaService.actualizar(id, dto, req.user.sub);
+    return this.subcuentaService.actualizar(id, req.user.sub);
   }
 
   @Delete(':id')
