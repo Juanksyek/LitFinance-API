@@ -37,10 +37,6 @@ export class CreateSubcuentaDto {
   @IsString()
   cuentaPrincipalId?: string;
 
-  @IsOptional()
   @IsString()
-  subCuentaId?: string;
-
-  @IsString()
-  userId: string
+  userId?: string;
 }
