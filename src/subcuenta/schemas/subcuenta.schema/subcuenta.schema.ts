@@ -11,6 +11,12 @@ export class Subcuenta {
   @Prop({ required: true })
   cantidad: number;
 
+  @Prop()
+  divisaConvertida?: number;
+
+  @Prop()
+  tasaCambioUsada?: number;
+
   @Prop({ required: true })
   moneda: string;
 
@@ -28,6 +34,9 @@ export class Subcuenta {
 
   @Prop({ required: true })
   userId: string;
+
+  @Prop()
+  subCuentaId: string;
 }
 
 export const SubcuentaSchema = SchemaFactory.createForClass(Subcuenta);

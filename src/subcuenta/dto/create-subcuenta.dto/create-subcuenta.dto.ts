@@ -24,4 +24,19 @@ export class CreateSubcuentaDto {
 
   @IsBoolean()
   afectaCuenta: boolean;
+  
+  @IsOptional()
+  @IsNumber()
+  divisaConvertida?: number;
+
+  @IsOptional()
+  @IsNumber()
+  tasaCambioUsada?: number;
+
+  @IsOptional()
+  @IsString()
+  cuentaPrincipalId?: string;
+
+  @IsString()
+  userId?: string;
 }
