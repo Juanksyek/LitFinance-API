@@ -15,20 +15,20 @@ export class SubcuentaController {
     return this.subcuentaService.crear(dto, req.user.sub);
   }
 
-  @Get()
-  async listar(
-    @Req() req,
-    @Query('cuentaId') cuentaId?: string,
+  @Get(':userId')
+  async listarPorUserId(
+    @Param('userId') userId: string,
+    @Query('subCuentaId') subCuentaId?: string,
     @Query('search') search?: string,
     @Query('page') page = 1,
     @Query('limit') limit = 10,
   ) {
-    return this.subcuentaService.listar(req.user.sub, cuentaId, search, +page, +limit);
+    return this.subcuentaService.listar(userId, subCuentaId, search, +page, +limit);
   }
 
   @Patch(':id')
   async actualizar(@Req() req, @Param('id') id: string, @Body() dto: UpdateSubcuentaDto) {
-    return this.subcuentaService.actualizar(id, req.user.sub);
+    return this.subcuentaService.actualizar(id, dto);
   }
 
   @Delete(':id')
@@ -40,6 +40,11 @@ export class SubcuentaController {
   @Get(':id/historial')
   async obtenerHistorial(@Param('id') id: string, @Req() req) {
     return this.subcuentaService.obtenerHistorial(id, req.user.sub);
+  }
+
+  @Get('historial')
+  async historialGeneral(@Req() req) {
+    return this.subcuentaService.obtenerHistorial(null, req.user.sub);
   }
 
   @Patch(':id/activar')
@@ -55,6 +60,6 @@ export class SubcuentaController {
   @UseGuards(JwtAuthGuard)
   @Get('participacion/:cuentaId')
   async calcularParticipacion(@Param('cuentaId') cuentaId: string, @Req() req) {
-    return this.subcuentaService.calcularParticipacion(cuentaId, req.user.sub);
+    return this.subcuentaService.calcularParticipacion(req.user.sub);
   }
 }

@@ -43,9 +43,12 @@ export class SubcuentaService {
 
     const { cuentaPrincipalId, userId: _omitUserId, ...restoDto } = dto;
 
+    const subCuentaId = await generateUniqueId(this.subcuentaModel, 'subCuentaId');
+
     const payload = {
       ...restoDto,
       userId,
+      subCuentaId,
     };
 
     console.log('🧱 [crear] Payload final para Mongoose:', payload);
@@ -81,17 +84,21 @@ export class SubcuentaService {
       userId,
       tipo: 'creacion',
       descripcion: 'Subcuenta creada exitosamente',
-      datos: { ...dto, cuentaPrincipalId },
+      datos: { ...dto, cuentaPrincipalId, subCuentaId },
     });
 
-    return creada;
+    return {
+      ...creada.toObject(),
+      subCuentaId,
+    };
   }
 
   async listar(userId: string, subCuentaId?: string, search = '', page = 1, limit = 10) {
+    console.log('📥 Parámetros listar - userId:', userId, 'subCuentaId:', subCuentaId, 'search:', search);
     const query: any = { userId, activa: true };
     if (subCuentaId) query.subCuentaId = subCuentaId;
     if (search) query.nombre = { $regex: search, $options: 'i' };
-
+    console.log('🔍 Query final para listar:', query);
     return this.subcuentaModel
       .find(query)
       .skip((page - 1) * limit)
@@ -99,136 +106,143 @@ export class SubcuentaService {
   }
 
   async actualizar(id: string, dto: UpdateSubcuentaDto) {
-    const actualizado = await this.subcuentaModel.findByIdAndUpdate(id, dto, { new: true });
-
-    if (actualizado) {
+    const antes = await this.subcuentaModel.findOne({ subCuentaId: id });
+    const actualizado = await this.subcuentaModel.findOneAndUpdate(
+      { subCuentaId: id },
+      dto,
+      { new: true }
+    );
+  
+    if (actualizado && antes) {
+      const cambios: Record<string, { antes: any; despues: any }> = {};
+  
+      for (const key of Object.keys(dto)) {
+        const nuevoValor = dto[key];
+        const valorAnterior = antes[key];
+  
+        if (nuevoValor !== undefined && nuevoValor !== valorAnterior) {
+          cambios[key] = {
+            antes: valorAnterior,
+            despues: actualizado[key],
+          };
+        }
+      }
+  
       await this.historialModel.create({
-        subsubCuentaId: actualizado._id,
+        subcuentaId: actualizado.subCuentaId,
         userId: actualizado.userId,
         tipo: 'modificacion',
         descripcion: 'Subcuenta modificada exitosamente',
-        datos: { ...dto },
+        datos: cambios,
       });
     }
-
+  
     return actualizado;
   }
 
   async eliminar(id: string, userId: string) {
-    const sub = await this.subcuentaModel.findById(id);
+    const sub = await this.subcuentaModel.findOne({ subCuentaId: id });
     if (!sub || sub.userId !== userId) throw new NotFoundException('Subcuenta no encontrada');
-
-    if (sub.afectaCuenta && sub.subCuentaId) {
-      const cuenta = await this.cuentaModel.findOne({ _id: sub.subCuentaId, userId });
-      let cantidadAjustada = sub.cantidad;
-
-      if (sub.moneda && cuenta?.moneda && sub.moneda !== cuenta.moneda) {
-        const conversion = await this.monedaService.obtenerTasaCambio(sub.moneda, cuenta.moneda);
-        cantidadAjustada = sub.cantidad * conversion.tasa;
+  
+    if (sub.afectaCuenta && sub.cuentaId) {
+      const cuenta = await this.cuentaModel.findOne({ _id: sub.cuentaId, userId });
+      if (cuenta) {
+        let cantidadAjustada = sub.cantidad;
+    
+        if (sub.moneda && cuenta.moneda && sub.moneda !== cuenta.moneda) {
+          const conversion = await this.monedaService.obtenerTasaCambio(sub.moneda, cuenta.moneda);
+          cantidadAjustada = sub.cantidad * conversion.tasa;
+        }
+    
+        await this.cuentaModel.findOneAndUpdate(
+          { _id: sub.cuentaId, userId },
+          { $inc: { cantidad: -cantidadAjustada } },
+        );
       }
-
-      await this.cuentaModel.findOneAndUpdate(
-        { _id: sub.subCuentaId, userId },
-        { $inc: { cantidad: -cantidadAjustada } },
-      );
     }
-
+  
     await sub.deleteOne();
-
+  
     await this.historialModel.create({
-      subsubCuentaId: sub._id,
+      subcuentaId: sub.subCuentaId,
       userId,
       tipo: 'eliminacion',
       descripcion: 'Subcuenta eliminada exitosamente',
       datos: { id },
     });
-
+  
     return { message: 'Subcuenta eliminada' };
   }
 
   async obtenerHistorial(
-    subsubCuentaId: string,
+    subcuentaId: string | null,
     userId: string,
     tipo?: string,
     desde?: string,
     hasta?: string,
   ) {
-    const query: any = {
-      subsubCuentaId,
-      userId,
-    };
-
-    if (tipo) {
-      query.tipo = tipo;
-    }
-
+    const query: any = { userId };
+    if (subcuentaId) query.subcuentaId = subcuentaId;
+  
+    if (tipo) query.tipo = tipo;
+  
     if (desde || hasta) {
       query.createdAt = {};
-      if (desde) {
-        query.createdAt.$gte = new Date(desde);
-      }
-      if (hasta) {
-        query.createdAt.$lte = new Date(hasta);
-      }
+      if (desde) query.createdAt.$gte = new Date(desde);
+      if (hasta) query.createdAt.$lte = new Date(hasta);
     }
-
+  
     return this.historialModel.find(query).sort({ createdAt: -1 });
   }
 
   async desactivar(id: string, userId: string) {
     const updated = await this.subcuentaModel.findOneAndUpdate(
-      { _id: id, userId },
+      { subCuentaId: id, userId },
       { $set: { activa: false } },
       { new: true }
     );
-
+  
     if (!updated) throw new NotFoundException('Subcuenta no encontrada');
-
+  
     await this.historialModel.create({
-      subsubCuentaId: updated._id,
+      subcuentaId: updated.subCuentaId,
       userId,
       tipo: 'desactivacion',
       descripcion: 'Subcuenta desactivada',
-      datos: { id },
+      datos: { activa: false },
     });
-
+  
     return updated;
   }
 
   async activar(id: string, userId: string) {
     const updated = await this.subcuentaModel.findOneAndUpdate(
-      { _id: id, userId },
+      { subCuentaId: id, userId },
       { $set: { activa: true } },
       { new: true }
     );
-
+  
     if (!updated) throw new NotFoundException('Subcuenta no encontrada');
-
+  
     await this.historialModel.create({
-      subsubCuentaId: updated._id,
+      subcuentaId: updated.subCuentaId,
       userId,
       tipo: 'activacion',
       descripcion: 'Subcuenta reactivada',
-      datos: { id },
+      datos: { activa: true },
     });
-
+  
     return updated;
   }
 
-  async calcularParticipacion(userId: string, subCuentaId: string) {
-    const cuenta = await this.cuentaModel.findOne({ _id: subCuentaId, userId });
-    if (!cuenta) {
-      throw new NotFoundException('Cuenta principal no encontrada');
-    }
-
+  async calcularParticipacion(userId: string) {
     const subcuentas = await this.subcuentaModel.find({
-      subCuentaId,
       userId,
       activa: true,
     });
-
+  
     const total = subcuentas.reduce((sum, sub) => sum + sub.cantidad, 0);
-
+  
     return subcuentas.map((sub) => ({
       subsubCuentaId: sub._id,
       nombre: sub.nombre,
