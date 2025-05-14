@@ -37,6 +37,9 @@ export class Subcuenta {
 
   @Prop()
   subCuentaId: string;
+
+  @Prop({ default: true })
+  activa: boolean;
 }
 
 export const SubcuentaSchema = SchemaFactory.createForClass(Subcuenta);
