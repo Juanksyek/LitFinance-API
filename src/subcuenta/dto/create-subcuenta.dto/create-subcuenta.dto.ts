@@ -1,10 +1,12 @@
 import { IsString, IsNumber, IsOptional, IsBoolean } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateSubcuentaDto {
   @IsString()
   nombre: string;
 
   @IsNumber()
+  @Type(() => Number)
   cantidad: number;
 
   @IsString()
@@ -27,10 +29,12 @@ export class CreateSubcuentaDto {
   
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   divisaConvertida?: number;
 
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   tasaCambioUsada?: number;
 
   @IsOptional()
