@@ -23,6 +23,9 @@ export class SubcuentaHistorial {
 
   @Prop({ required: true })
   subcuentaId: string;
+
+  @Prop({ type: Object })
+  datos: any;
 }
 
 export const SubcuentaHistorialSchema = SchemaFactory.createForClass(SubcuentaHistorial);
