@@ -21,7 +21,7 @@ export class SubcuentaHistorial {
   @Prop({ type: Object })
   datosActuales?: any;
 
-  @Prop({ required: true })
+  @Prop({ required: false })
   subcuentaId: string;
 
   @Prop({ type: Object })
