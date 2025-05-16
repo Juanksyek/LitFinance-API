@@ -1,0 +1,42 @@
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document } from 'mongoose';
+
+export type RecurrenteDocument = Recurrente & Document;
+
+@Schema({ timestamps: true })
+export class Recurrente {
+  @Prop({ required: true, unique: true })
+  recurrenteId: string;
+
+  @Prop({ required: true })
+  nombre: string;
+
+  @Prop({ required: true })
+  plataforma: string;
+
+  @Prop({ required: true })
+  frecuenciaDias: number;
+
+  @Prop({ required: true })
+  monto: number;
+
+  @Prop({ required: true })
+  afectaCuentaPrincipal: boolean;
+
+  @Prop()
+  cuentaId?: string;
+
+  @Prop()
+  subcuentaId?: string;
+
+  @Prop({ required: true })
+  afectaSubcuenta: boolean;
+
+  @Prop({ required: true })
+  proximaEjecucion: Date;
+
+  @Prop({ required: true })
+  userId: string;
+}
+
+export const RecurrenteSchema = SchemaFactory.createForClass(Recurrente);

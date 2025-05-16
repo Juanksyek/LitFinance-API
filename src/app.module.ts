@@ -14,6 +14,7 @@ import { GoalsModule } from './goals/goals.module';
 import { CuentaModule } from './cuenta/cuenta.module';
 import { SubcuentaModule } from './subcuenta/subcuenta.module';
 import { MonedaModule } from './moneda/moneda.module';
+import { RecurrentesModule } from './recurrentes/recurrentes.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { MonedaModule } from './moneda/moneda.module';
     CuentaModule,
     SubcuentaModule,
     MonedaModule,
+    RecurrentesModule,
   ],
   controllers: [AppController],
   providers: [
