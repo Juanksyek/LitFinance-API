@@ -37,6 +37,9 @@ export class Recurrente {
 
   @Prop({ required: true })
   userId: string;
+
+  @Prop({ type: [Number], default: [] })
+  recordatorios: number[];
 }
 
 export const RecurrenteSchema = SchemaFactory.createForClass(Recurrente);
