@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerModule, ThrottlerGuard, seconds } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -15,11 +16,13 @@ import { CuentaModule } from './cuenta/cuenta.module';
 import { SubcuentaModule } from './subcuenta/subcuenta.module';
 import { MonedaModule } from './moneda/moneda.module';
 import { RecurrentesModule } from './recurrentes/recurrentes.module';
+import { NotificacionesModule } from './notificaciones/notificaciones.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     MongooseModule.forRoot(process.env.MONGO_URI!),
+    ScheduleModule.forRoot(),
     ThrottlerModule.forRoot({
       throttlers: [
         {
@@ -36,6 +39,7 @@ import { RecurrentesModule } from './recurrentes/recurrentes.module';
     SubcuentaModule,
     MonedaModule,
     RecurrentesModule,
+    NotificacionesModule,
   ],
   controllers: [AppController],
   providers: [
