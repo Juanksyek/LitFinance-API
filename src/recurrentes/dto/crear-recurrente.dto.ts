@@ -8,4 +8,5 @@ export class CrearRecurrenteDto {
   subcuentaId?: string;
   afectaSubcuenta: boolean;
   userId: string;
+  recordatorios?: number[];
 }
