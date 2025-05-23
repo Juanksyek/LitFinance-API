@@ -1,12 +1,36 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SubcuentaService } from './subcuenta.service';
+import { getModelToken } from '@nestjs/mongoose';
+import { MonedaService } from '../moneda/moneda.service';
+import { Cuenta } from '../cuenta/schemas/cuenta.schema/cuenta.schema';
+import { Subcuenta } from './schemas/subcuenta.schema/subcuenta.schema';
+import { SubcuentaHistorial } from './schemas/subcuenta-historial.schema/subcuenta-historial.schema';
 
 describe('SubcuentaService', () => {
   let service: SubcuentaService;
 
+  const mockModel = {
+    findOne: jest.fn(),
+    find: jest.fn(),
+    findOneAndUpdate: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+    deleteOne: jest.fn(),
+  };
+
+  const mockMonedaService = {
+    obtenerTasaCambio: jest.fn().mockResolvedValue({ tasa: 1 }),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [SubcuentaService],
+      providers: [
+        SubcuentaService,
+        { provide: getModelToken(Subcuenta.name), useValue: mockModel },
+        { provide: getModelToken(Cuenta.name), useValue: mockModel },
+        { provide: getModelToken(SubcuentaHistorial.name), useValue: mockModel },
+        { provide: MonedaService, useValue: mockMonedaService },
+      ],
     }).compile();
 
     service = module.get<SubcuentaService>(SubcuentaService);
