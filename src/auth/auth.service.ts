@@ -70,7 +70,7 @@ export class AuthService {
 
         const cuentaPrincipal = new this.cuentaModel({
             id: await this.generateUniqueId(),
-            usuarioId: user.id,
+            userId: user.id,
             nombre: 'Cuenta Principal',
             moneda: 'MXN',
             cantidad: 0,
