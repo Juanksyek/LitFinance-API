@@ -17,6 +17,7 @@ import { SubcuentaModule } from './subcuenta/subcuenta.module';
 import { MonedaModule } from './moneda/moneda.module';
 import { RecurrentesModule } from './recurrentes/recurrentes.module';
 import { NotificacionesModule } from './notificaciones/notificaciones.module';
+import { ConceptosModule } from './conceptos/conceptos.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { NotificacionesModule } from './notificaciones/notificaciones.module';
     MonedaModule,
     RecurrentesModule,
     NotificacionesModule,
+    ConceptosModule,
   ],
   controllers: [AppController],
   providers: [
