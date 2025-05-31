@@ -77,34 +77,52 @@ export class TransactionsService {
 
   async listar(userId: string, rango?: string) {
     const query: any = { userId };
-    const now = new Date();
   
     if (rango) {
-      let desde: Date | null;
+      const now = new Date();
+      let desde: Date | null = null;
+      let hasta: Date | null = null;
+  
       switch (rango) {
         case 'dia':
-          desde = new Date(now.setHours(0, 0, 0, 0));
+          desde = new Date(now);
+          desde.setHours(0, 0, 0, 0);
+          hasta = new Date(now);
+          hasta.setHours(23, 59, 59, 999);
           break;
+  
         case 'semana':
-          desde = new Date(now.setDate(now.getDate() - 7));
+          desde = new Date(now);
+          desde.setDate(now.getDate() - 7);
           break;
+  
         case 'mes':
-          desde = new Date(now.setMonth(now.getMonth() - 1));
+          desde = new Date(now);
+          desde.setMonth(now.getMonth() - 1);
           break;
+  
         case '3meses':
-          desde = new Date(now.setMonth(now.getMonth() - 3));
+          desde = new Date(now);
+          desde.setMonth(now.getMonth() - 3);
           break;
+  
         case '6meses':
-          desde = new Date(now.setMonth(now.getMonth() - 6));
+          desde = new Date(now);
+          desde.setMonth(now.getMonth() - 6);
           break;
+  
         case 'año':
-          desde = new Date(now.setFullYear(now.getFullYear() - 1));
+          desde = new Date(now);
+          desde.setFullYear(now.getFullYear() - 1);
           break;
+  
         default:
-          desde = null;
+          break;
       }
   
-      if (desde) {
+      if (desde && hasta) {
+        query.createdAt = { $gte: desde, $lte: hasta };
+      } else if (desde) {
         query.createdAt = { $gte: desde };
       }
     }
