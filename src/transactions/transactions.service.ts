@@ -75,8 +75,41 @@ export class TransactionsService {
     return { message: 'Transacción eliminada correctamente' };
   }
 
-  async listar(userId: string) {
-    return this.transactionModel.find({ userId }).sort({ createdAt: -1 });
+  async listar(userId: string, rango?: string) {
+    const query: any = { userId };
+    const now = new Date();
+  
+    if (rango) {
+      let desde: Date | null;
+      switch (rango) {
+        case 'dia':
+          desde = new Date(now.setHours(0, 0, 0, 0));
+          break;
+        case 'semana':
+          desde = new Date(now.setDate(now.getDate() - 7));
+          break;
+        case 'mes':
+          desde = new Date(now.setMonth(now.getMonth() - 1));
+          break;
+        case '3meses':
+          desde = new Date(now.setMonth(now.getMonth() - 3));
+          break;
+        case '6meses':
+          desde = new Date(now.setMonth(now.getMonth() - 6));
+          break;
+        case 'año':
+          desde = new Date(now.setFullYear(now.getFullYear() - 1));
+          break;
+        default:
+          desde = null;
+      }
+  
+      if (desde) {
+        query.createdAt = { $gte: desde };
+      }
+    }
+  
+    return this.transactionModel.find(query).sort({ createdAt: -1 });
   }
 
   async buscar(userId: string, filtros: { concepto?: string; motivo?: string; monto?: number }) {
