@@ -30,8 +30,8 @@ import { Controller, Post, Get, Body, Param, Patch, Delete, Query, Req, UseGuard
     }
   
     @Get()
-    async listar(@Req() req, @Query('rango') rango?: string) {
-      return this.transactionsService.listar(req.user.sub, rango);
+      async listar(@Req() req, @Query('rango') rango?: string) {
+        return this.transactionsService.listar(req.user.sub, rango);
     }
   
     @Get('buscar')
