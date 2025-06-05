@@ -18,6 +18,7 @@ import { MonedaModule } from './moneda/moneda.module';
 import { RecurrentesModule } from './recurrentes/recurrentes.module';
 import { NotificacionesModule } from './notificaciones/notificaciones.module';
 import { ConceptosModule } from './conceptos/conceptos.module';
+import { CuentaHistorialModule } from './cuenta-historial/cuenta-historial.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { ConceptosModule } from './conceptos/conceptos.module';
     RecurrentesModule,
     NotificacionesModule,
     ConceptosModule,
+    CuentaHistorialModule,
   ],
   controllers: [AppController],
   providers: [
