@@ -8,6 +8,7 @@ import { Cuenta } from '../cuenta/schemas/cuenta.schema/cuenta.schema';
 import { InjectModel as InjectCuentaModel } from '@nestjs/mongoose';
 import { MonedaService } from '../moneda/moneda.service';
 import { SubcuentaHistorial, SubcuentaHistorialDocument } from './schemas/subcuenta-historial.schema/subcuenta-historial.schema';
+import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.service';
 import * as mongoose from 'mongoose';
 
 const generateUniqueId = async (model: Model<any>, field: string = 'subsubCuentaId'): Promise<string> => {
@@ -35,50 +36,78 @@ export class SubcuentaService {
     @InjectCuentaModel(Cuenta.name) private cuentaModel: Model<Cuenta>,
     private readonly monedaService: MonedaService,
     @InjectModel(SubcuentaHistorial.name) private historialModel: Model<SubcuentaHistorialDocument>,
+    private readonly cuentaHistorialService: CuentaHistorialService
   ) {}
 
   async crear(dto: CreateSubcuentaDto, userId: string) {
     console.log('🧾 [crear] userId recibido:', userId);
     console.log('📦 [crear] dto recibido:', dto);
-
-    const { cuentaPrincipalId, userId: _omitUserId, ...restoDto } = dto;
-
+  
+    const {
+      cuentaPrincipalId,
+      tipoHistorialCuenta,
+      descripcionHistorialCuenta,
+      userId: _omitUserId,
+      ...restoDto
+    } = dto;
+  
     const subCuentaId = await generateUniqueId(this.subcuentaModel, 'subCuentaId');
-
+  
     const payload = {
       ...restoDto,
       userId,
       subCuentaId,
+      cuentaId: cuentaPrincipalId,
     };
 
-    console.log('🧱 [crear] Payload final para Mongoose:', payload);
 
+    console.log('🧱 [crear] Payload final para Mongoose:', payload);
+  
     const subcuenta = new this.subcuentaModel(payload);
     subcuenta.set('subsubCuentaId', await generateUniqueId(this.subcuentaModel));
-
+  
     const creada = await subcuenta.save();
-
+  
+    // Afectar cuenta principal solo si aplica
     if (dto.afectaCuenta && cuentaPrincipalId) {
-      if (!mongoose.Types.ObjectId.isValid(cuentaPrincipalId)) {
-        throw new NotFoundException('El ID de cuenta no es válido');
-      }
-
-      const cuenta = await this.cuentaModel.findOne({ _id: cuentaPrincipalId, userId });
+      const cuenta = await this.cuentaModel.findOne({ id: cuentaPrincipalId, userId });
       if (!cuenta) throw new NotFoundException('Cuenta principal no encontrada');
-
+    
       let cantidadAjustada = dto.cantidad;
-
+    
       if (dto.moneda && dto.moneda !== cuenta.moneda) {
         const conversion = await this.monedaService.obtenerTasaCambio(dto.moneda, cuenta.moneda);
         cantidadAjustada = dto.cantidad * conversion.tasa;
       }
-
+    
       await this.cuentaModel.findOneAndUpdate(
-        { _id: cuentaPrincipalId, userId },
+        { id: cuentaPrincipalId, userId },
         { $inc: { cantidad: cantidadAjustada } },
       );
+    
+      const tipo = dto.tipoHistorialCuenta || 'ajuste_subcuenta';
+      const descripcion = dto.descripcionHistorialCuenta || 'Subcuenta creada con afectación';
+    
+      console.log('📘 Registrando historial de cuenta principal con:', {
+        cuentaId: cuentaPrincipalId,
+        monto: cantidadAjustada,
+        tipo,
+        descripcion,
+        subcuentaId: subCuentaId,
+      });
+    
+      await this.cuentaHistorialService.registrarMovimiento({
+        cuentaId: cuentaPrincipalId,
+        monto: cantidadAjustada,
+        tipo,
+        descripcion,
+        fecha: new Date().toISOString(),
+        subcuentaId: subCuentaId,
+      });
     }
 
+
+    // Historial de subcuenta
     await this.historialModel.create({
       subcuentaId: creada._id,
       userId,
@@ -86,7 +115,7 @@ export class SubcuentaService {
       descripcion: 'Subcuenta creada exitosamente',
       datos: { ...dto, cuentaPrincipalId, subCuentaId },
     });
-
+  
     return {
       ...creada.toObject(),
       subCuentaId,
