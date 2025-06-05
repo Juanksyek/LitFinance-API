@@ -9,25 +9,7 @@ import { InjectModel as InjectCuentaModel } from '@nestjs/mongoose';
 import { MonedaService } from '../moneda/moneda.service';
 import { SubcuentaHistorial, SubcuentaHistorialDocument } from './schemas/subcuenta-historial.schema/subcuenta-historial.schema';
 import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.service';
-import * as mongoose from 'mongoose';
-
-const generateUniqueId = async (model: Model<any>, field: string = 'subsubCuentaId'): Promise<string> => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let id: string;
-  let exists: any;
-
-  do {
-    id = '';
-    for (let i = 0; i < 7; i++) {
-      id += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    const query: any = {};
-    query[field] = id;
-    exists = await model.findOne(query);
-  } while (exists);
-
-  return id;
-};
+import { generateUniqueId } from '../utils/generate-id';
 
 @Injectable()
 export class SubcuentaService {
@@ -40,8 +22,6 @@ export class SubcuentaService {
   ) {}
 
   async crear(dto: CreateSubcuentaDto, userId: string) {
-    console.log('🧾 [crear] userId recibido:', userId);
-    console.log('📦 [crear] dto recibido:', dto);
   
     const {
       cuentaPrincipalId,
@@ -59,9 +39,6 @@ export class SubcuentaService {
       subCuentaId,
       cuentaId: cuentaPrincipalId,
     };
-
-
-    console.log('🧱 [crear] Payload final para Mongoose:', payload);
   
     const subcuenta = new this.subcuentaModel(payload);
     subcuenta.set('subsubCuentaId', await generateUniqueId(this.subcuentaModel));
@@ -87,14 +64,6 @@ export class SubcuentaService {
     
       const tipo = dto.tipoHistorialCuenta || 'ajuste_subcuenta';
       const descripcion = dto.descripcionHistorialCuenta || 'Subcuenta creada con afectación';
-    
-      console.log('📘 Registrando historial de cuenta principal con:', {
-        cuentaId: cuentaPrincipalId,
-        monto: cantidadAjustada,
-        tipo,
-        descripcion,
-        subcuentaId: subCuentaId,
-      });
     
       await this.cuentaHistorialService.registrarMovimiento({
         cuentaId: cuentaPrincipalId,
@@ -123,11 +92,9 @@ export class SubcuentaService {
   }
 
   async listar(userId: string, subCuentaId?: string, search = '', page = 1, limit = 10) {
-    console.log('📥 Parámetros listar - userId:', userId, 'subCuentaId:', subCuentaId, 'search:', search);
     const query: any = { userId, activa: true };
     if (subCuentaId) query.subCuentaId = subCuentaId;
     if (search) query.nombre = { $regex: search, $options: 'i' };
-    console.log('🔍 Query final para listar:', query);
     return this.subcuentaModel
       .find(query)
       .skip((page - 1) * limit)
