@@ -43,4 +43,12 @@ export class CreateSubcuentaDto {
 
   @IsString()
   userId?: string;
+
+  @IsOptional()
+  @IsString()
+  tipoHistorialCuenta?: 'ingreso' | 'egreso' | 'ajuste_subcuenta' | 'recurrente';
+  
+  @IsOptional()
+  @IsString()
+  descripcionHistorialCuenta?: string;
 }
