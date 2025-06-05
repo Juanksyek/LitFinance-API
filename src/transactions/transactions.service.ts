@@ -7,6 +7,7 @@ import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { SubcuentaHistorial } from '../subcuenta/schemas/subcuenta-historial.schema/subcuenta-historial.schema';
 import { Cuenta } from '../cuenta/schemas/cuenta.schema/cuenta.schema';
 import { Subcuenta } from '../subcuenta/schemas/subcuenta.schema/subcuenta.schema';
+import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.service';
 import { generateUniqueId } from '../utils/generate-id';
 
 @Injectable()
@@ -16,6 +17,7 @@ export class TransactionsService {
     @InjectModel(SubcuentaHistorial.name) private readonly historialModel: Model<any>,
     @InjectModel(Cuenta.name) private readonly cuentaModel: Model<any>,
     @InjectModel(Subcuenta.name) private readonly subcuentaModel: Model<any>,
+    private readonly historialService: CuentaHistorialService
   ) {}
 
   async crear(dto: CreateTransactionDto, userId: string) {
@@ -29,6 +31,17 @@ export class TransactionsService {
   
     const guardada = await nueva.save();
     await this.aplicarTransaccion(guardada);
+    
+    if (dto.afectaCuenta && dto.cuentaId) {
+      await this.historialService.registrarMovimiento({
+        cuentaId: dto.cuentaId,
+        monto: dto.monto,
+        tipo: dto.tipo,
+        descripcion: `Transacción manual de tipo ${dto.tipo}`,
+        fecha: new Date().toISOString(),
+        conceptoId: dto.concepto,
+      });
+    }
   
     return guardada;
   }
@@ -36,27 +49,42 @@ export class TransactionsService {
   async editar(id: string, dto: UpdateTransactionDto, userId: string) {
     const actual = await this.transactionModel.findOne({ transaccionId: id });
     if (!actual) throw new NotFoundException('Transacción no encontrada');
-
-    const actualizada = await this.transactionModel.findOneAndUpdate({ transaccionId: id }, dto, { new: true });
+  
+    const actualizada = await this.transactionModel.findOneAndUpdate(
+      { transaccionId: id },
+      dto,
+      { new: true }
+    );
     if (!actualizada) throw new NotFoundException('No se pudo actualizar');
-
+  
     const historialPayload: any = {
-        userId: actualizada.userId,
+      userId: actualizada.userId,
+      tipo: actualizada.tipo,
+      descripcion: `Transacción de tipo ${actualizada.tipo} actualizada`,
+      datos: {
+        concepto: actualizada.concepto,
+        monto: actualizada.monto,
+        afectaCuenta: actualizada.afectaCuenta,
+      },
+    };
+  
+    if (actualizada.subCuentaId) {
+      historialPayload.subcuentaId = actualizada.subCuentaId;
+    }
+  
+    await this.historialModel.create(historialPayload);
+  
+    if (actualizada.afectaCuenta && actualizada.cuentaId) {
+      await this.historialService.registrarMovimiento({
+        cuentaId: actualizada.cuentaId,
+        monto: actualizada.monto,
         tipo: actualizada.tipo,
-        descripcion: `Transacción de tipo ${actualizada.tipo} aplicada`,
-        datos: {
-          concepto: actualizada.concepto,
-          monto: actualizada.monto,
-          afectaCuenta: actualizada.afectaCuenta,
-        },
-      };
-      
-      if (actualizada.subCuentaId) {
-        historialPayload.subcuentaId = actualizada.subCuentaId;
-      }
-      
-      await this.historialModel.create(historialPayload);
-
+        descripcion: `Edición de transacción tipo ${actualizada.tipo}`,
+        fecha: new Date().toISOString(),
+        conceptoId: actualizada.concepto,
+      });
+    }
+  
     return actualizada;
   }
 
