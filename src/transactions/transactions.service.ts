@@ -34,6 +34,7 @@ export class TransactionsService {
     
     if (dto.afectaCuenta && dto.cuentaId) {
       await this.historialService.registrarMovimiento({
+        userId: dto.userId ?? userId,
         cuentaId: dto.cuentaId,
         monto: dto.monto,
         tipo: dto.tipo,
@@ -76,6 +77,7 @@ export class TransactionsService {
   
     if (actualizada.afectaCuenta && actualizada.cuentaId) {
       await this.historialService.registrarMovimiento({
+        userId: dto.userId ?? userId,
         cuentaId: actualizada.cuentaId,
         monto: actualizada.monto,
         tipo: actualizada.tipo,
