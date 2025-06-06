@@ -4,12 +4,15 @@ export class CreateCuentaHistorialDto {
   @IsString()
   cuentaId: string;
 
+  @IsString()
+  userId: string;
+
   @IsNumber()
   monto: number;
 
   @IsString()
-  @IsIn(['ingreso', 'egreso', 'ajuste_subcuenta', 'recurrente'])
-  tipo: 'ingreso' | 'egreso' | 'ajuste_subcuenta' | 'recurrente';
+  @IsIn(['ingreso', 'egreso', 'ajuste_subcuenta', 'recurrente', 'cambio_moneda'])
+  tipo: 'ingreso' | 'egreso' | 'ajuste_subcuenta' | 'recurrente' | 'cambio_moneda';
 
   @IsString()
   descripcion: string;
@@ -24,4 +27,7 @@ export class CreateCuentaHistorialDto {
   @IsOptional()
   @IsString()
   conceptoId?: string;
+
+  @IsOptional()
+  metadata?: any;
 }
