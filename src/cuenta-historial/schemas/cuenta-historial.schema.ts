@@ -16,9 +16,9 @@ export class CuentaHistorial {
 
   @Prop({
     required: true,
-    enum: ['ingreso', 'egreso', 'ajuste_subcuenta', 'recurrente'],
+    enum: ['ingreso', 'egreso', 'ajuste_subcuenta', 'recurrente', 'cambio_moneda'],
   })
-  tipo: 'ingreso' | 'egreso' | 'ajuste_subcuenta' | 'recurrente';
+  tipo: 'ingreso' | 'egreso' | 'ajuste_subcuenta' | 'recurrente' | 'cambio_moneda';
 
   @Prop({ required: true })
   descripcion: string;
@@ -31,6 +31,9 @@ export class CuentaHistorial {
 
   @Prop()
   conceptoId?: string;
+
+  @Prop({ type: Object, default: null })
+  metadata?: Record<string, any>;
 }
 
 export const CuentaHistorialSchema = SchemaFactory.createForClass(CuentaHistorial);
