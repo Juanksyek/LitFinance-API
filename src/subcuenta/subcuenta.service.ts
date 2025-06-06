@@ -66,6 +66,7 @@ export class SubcuentaService {
       const descripcion = dto.descripcionHistorialCuenta || 'Subcuenta creada con afectación';
     
       await this.cuentaHistorialService.registrarMovimiento({
+        userId,
         cuentaId: cuentaPrincipalId,
         monto: cantidadAjustada,
         tipo,
