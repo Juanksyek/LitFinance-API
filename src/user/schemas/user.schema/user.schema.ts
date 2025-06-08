@@ -5,51 +5,47 @@ export type UserDocument = User & Document;
 
 @Schema({ timestamps: true })
 export class User {
-    @Prop({
-        type: String,
-        unique: true,
-        required: true,
-    })
-    id: string;
+  @Prop({ type: String, unique: true, required: true })
+  id: string;
 
-    @Prop({ required: true })
-    nombreCompleto: string;
+  @Prop({ required: true })
+  nombreCompleto: string;
 
-    @Prop({ required: true })
-    edad: number;
+  @Prop({ required: true })
+  edad: number;
 
-    @Prop({ type: String, required: true })
-    ocupacion: string;
+  @Prop({ type: String, required: true })
+  ocupacion: string;
 
-    @Prop({ required: true, unique: true })
-    email: string;
+  @Prop({ required: true, unique: true })
+  email: string;
 
-    @Prop({ required: true })
-    password: string;
+  @Prop({ required: true })
+  password: string;
 
-    @Prop({ default: null })
-    proveedor?: string;
+  @Prop({ default: null })
+  proveedor?: string;
 
-    @Prop({ default: false })
-    isActive: boolean;
+  @Prop({ default: false })
+  isActive: boolean;
 
-    @Prop({ required: false })
-    activationToken?: string;
+  @Prop({ required: false })
+  activationToken?: string;
 
-    @Prop({ required: false })
-    tokenExpires?: Date;
+  @Prop({ required: false })
+  tokenExpires?: Date;
 
-    @Prop({ type: String })
-    resetToken?: string;
-    
-    @Prop({ type: Date })
-    resetTokenExpires?: Date;
+  @Prop({ type: String, required: false })
+  resetCode?: string;
 
-    @Prop({ type: Date, default: Date.now })
-    lastActivityAt: Date;
+  @Prop({ type: Date, required: false })
+  resetExpires?: Date;
 
-    @Prop({ default: 'usuario' })
-    rol: string;
+  @Prop({ type: Date, default: Date.now })
+  lastActivityAt: Date;
+
+  @Prop({ default: 'usuario' })
+  rol: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
