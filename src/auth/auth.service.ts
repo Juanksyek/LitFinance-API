@@ -3,15 +3,17 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
-import { randomBytes } from 'crypto';
+import { randomBytes, randomInt } from 'crypto';
 
 import { RegisterAuthDto } from './dto/register-auth.dto';
 import { LoginAuthDto } from './dto/login-auth.dto';
-import { User, UserDocument } from '../user/schemas/user.schema/user.schema';
-import { EmailService } from '../email/email.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto/change-password.dto';
+
+import { User, UserDocument } from '../user/schemas/user.schema/user.schema';
 import { Cuenta, CuentaDocument } from '../cuenta/schemas/cuenta.schema/cuenta.schema';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class AuthService {
@@ -77,9 +79,9 @@ export class AuthService {
             simbolo: '$',
             color: '#1A2C23',
             isPrincipal: true,
-          });
-          
-          await cuentaPrincipal.save();
+        });
+
+        await cuentaPrincipal.save();
 
         return {
             message: 'Usuario registrado correctamente',
@@ -146,34 +148,60 @@ export class AuthService {
             throw new BadRequestException('No existe una cuenta con ese correo.');
         }
 
-        const resetToken = randomBytes(32).toString('hex');
-        const resetTokenExpires = new Date(Date.now() + 30 * 60 * 1000);
+        const code = randomInt(1000, 9999).toString(); // código de 4 dígitos
+        const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
 
-        user.resetToken = resetToken;
-        user.resetTokenExpires = resetTokenExpires;
+        user.resetCode = code;
+        user.resetExpires = expires;
         await user.save();
 
-        await this.emailService.sendResetPasswordEmail(user.email, resetToken, user.nombreCompleto);
+        await this.emailService.sendResetPasswordCode(user.email, code, user.nombreCompleto);
 
-        return { message: 'Se ha enviado un correo para recuperar la contraseña.', resetToken };
+        return { message: 'Se ha enviado un código de recuperación a tu correo.' };
     }
 
     async resetPassword(dto: ResetPasswordDto) {
-        const { token, newPassword } = dto;
+        const { email, code, newPassword, confirmPassword } = dto;
 
-        const user = await this.userModel.findOne({ resetToken: token });
+        const user = await this.userModel.findOne({ email });
 
-        if (!user || !user.resetTokenExpires || user.resetTokenExpires < new Date()) {
-            throw new BadRequestException('Token inválido o expirado.');
+        if (
+            !user ||
+            user.resetCode !== code ||
+            !user.resetExpires ||
+            user.resetExpires < new Date()
+        ) {
+            throw new BadRequestException('Código inválido o expirado.');
         }
 
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        if (newPassword !== confirmPassword) {
+            throw new BadRequestException('Las contraseñas no coinciden.');
+        }
 
-        user.password = hashedPassword;
-        user.resetToken = undefined;
-        user.resetTokenExpires = undefined;
+        user.password = await bcrypt.hash(newPassword, 10);
+        user.resetCode = undefined;
+        user.resetExpires = undefined;
         await user.save();
 
         return { message: 'La contraseña ha sido cambiada exitosamente.' };
+    }
+
+    async changePassword(userId: string, dto: ChangePasswordDto) {
+        const { currentPassword, newPassword, confirmPassword } = dto;
+
+        const user = await this.userModel.findOne({ id: userId });
+
+        if (!user || !(await bcrypt.compare(currentPassword, user.password))) {
+            throw new BadRequestException('La contraseña actual es incorrecta.');
+        }
+
+        if (newPassword !== confirmPassword) {
+            throw new BadRequestException('Las contraseñas no coinciden.');
+        }
+
+        user.password = await bcrypt.hash(newPassword, 10);
+        await user.save();
+
+        return { message: 'Contraseña actualizada correctamente.' };
     }
 }
