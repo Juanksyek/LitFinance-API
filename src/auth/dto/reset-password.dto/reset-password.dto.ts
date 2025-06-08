@@ -1,10 +1,16 @@
-import { IsString, MinLength } from 'class-validator';
+import { IsEmail, IsString, Length } from 'class-validator';
 
 export class ResetPasswordDto {
-  @IsString()
-  token: string;
+  @IsEmail()
+  email: string;
 
   @IsString()
-  @MinLength(6)
+  @Length(4, 4, { message: 'El código debe tener 4 dígitos' })
+  code: string;
+
+  @IsString()
   newPassword: string;
+
+  @IsString()
+  confirmPassword: string;
 }

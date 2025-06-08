@@ -21,20 +21,19 @@ export class EmailService {
         });
     }
 
-    async sendResetPasswordEmail(to: string, token: string, nombre: string) {
-        const resetUrl = `${process.env.FRONTEND_RESET_URL}${token}`;
+    async sendResetPasswordCode(to: string, code: string, nombre: string) {
         await this.resend.emails.send({
             from: 'LitFinance <onboarding@resend.dev>',
             to,
-            subject: 'Recuperar contraseña',
+            subject: 'Código para recuperar contraseña',
             html: `
-            <h2>Hola ${nombre}</h2>
-            <p>Solicitaste cambiar tu contraseña.</p>
-            <p>Haz clic en el botón para restablecerla:</p>
-            <a href="${resetUrl}" style="background-color:#53F29D;padding:10px 15px;border-radius:5px;text-decoration:none;color:#000;">Cambiar contraseña</a>
-            <p>Este enlace expirará en 30 minutos.</p>
-          `,
+        <h2>Hola ${nombre}</h2>
+        <p>Tu código para restablecer la contraseña es:</p>
+        <div style="font-size: 2rem; letter-spacing: 6px; margin: 20px 0; font-weight: bold;">
+          ${code}
+        </div>
+        <p>Este código expirará en 10 minutos.</p>
+      `,
         });
     }
-
 }
