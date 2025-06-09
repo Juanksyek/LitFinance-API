@@ -21,7 +21,7 @@ export class SubcuentaController {
     @Query('subCuentaId') subCuentaId?: string,
     @Query('search') search?: string,
     @Query('page') page = 1,
-    @Query('limit') limit = 10,
+    @Query('limit') limit = 4,
   ) {
     return this.subcuentaService.listar(userId, subCuentaId, search, +page, +limit);
   }
