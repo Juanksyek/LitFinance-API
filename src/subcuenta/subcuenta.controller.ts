@@ -26,6 +26,11 @@ export class SubcuentaController {
     return this.subcuentaService.listar(userId, subCuentaId, search, +page, +limit);
   }
 
+  @Get('buscar/:subCuentaId')
+  async buscarPorSubCuentaId(@Param('subCuentaId') subCuentaId: string) {
+    return this.subcuentaService.buscarPorSubCuentaId(subCuentaId);
+  }
+
   @Patch(':id')
   async actualizar(@Req() req, @Param('id') id: string, @Body() dto: UpdateSubcuentaDto) {
     return this.subcuentaService.actualizar(id, dto);
