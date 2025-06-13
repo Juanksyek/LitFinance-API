@@ -102,6 +102,14 @@ export class SubcuentaService {
       .limit(limit);
   }
 
+  async buscarPorSubCuentaId(subCuentaId: string) {
+    const resultado = await this.subcuentaModel.findOne({ subCuentaId }).lean();
+    if (!resultado) {
+      throw new NotFoundException(`Subcuenta no encontrada`);
+    }
+    return resultado;
+  }
+
   async actualizar(id: string, dto: UpdateSubcuentaDto) {
     const antes = await this.subcuentaModel.findOne({ subCuentaId: id });
     const actualizado = await this.subcuentaModel.findOneAndUpdate(
