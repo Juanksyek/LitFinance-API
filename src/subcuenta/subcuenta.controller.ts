@@ -21,9 +21,14 @@ export class SubcuentaController {
     @Query('subCuentaId') subCuentaId?: string,
     @Query('search') search?: string,
     @Query('page') page = 1,
-    @Query('limit') limit = 10,
+    @Query('limit') limit = 4,
   ) {
     return this.subcuentaService.listar(userId, subCuentaId, search, +page, +limit);
+  }
+
+  @Get('buscar/:subCuentaId')
+  async buscarPorSubCuentaId(@Param('subCuentaId') subCuentaId: string) {
+    return this.subcuentaService.buscarPorSubCuentaId(subCuentaId);
   }
 
   @Patch(':id')
