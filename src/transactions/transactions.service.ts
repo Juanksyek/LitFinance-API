@@ -30,7 +30,7 @@ export class TransactionsService {
     });
   
     const guardada = await nueva.save();
-    await this.aplicarTransaccion(guardada);
+    const subcuentaActualizada = await this.aplicarTransaccion(guardada);
     
     if (dto.afectaCuenta && dto.cuentaId) {
       await this.historialService.registrarMovimiento({
@@ -44,7 +44,10 @@ export class TransactionsService {
       });
     }
   
-    return guardada;
+    return {
+      transaccion: guardada,
+      subcuenta: subcuentaActualizada,
+    };
   }
 
   async editar(id: string, dto: UpdateTransactionDto, userId: string) {
@@ -209,5 +212,11 @@ export class TransactionsService {
         afectaCuenta: t.afectaCuenta,
       },
     });
+    
+    if (t.subCuentaId) {
+      return await this.subcuentaModel.findOne({ subCuentaId: t.subCuentaId });
+    }
+    
+    return null;
   }
 }
