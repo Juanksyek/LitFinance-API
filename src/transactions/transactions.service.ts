@@ -184,23 +184,29 @@ export class TransactionsService {
   private async aplicarTransaccion(t: Transaction) {
     const factor = t.tipo === 'ingreso' ? 1 : -1;
     const montoAjustado = t.monto * factor;
-
+  
     if (t.subCuentaId) {
       const subcuenta = await this.subcuentaModel.findOne({ subCuentaId: t.subCuentaId });
       if (!subcuenta) throw new NotFoundException('Subcuenta no encontrada');
-
-      await this.subcuentaModel.updateOne({ subCuentaId: t.subCuentaId }, { $inc: { cantidad: montoAjustado } });
-
+  
+      await this.subcuentaModel.updateOne(
+        { subCuentaId: t.subCuentaId },
+        { $inc: { cantidad: montoAjustado } }
+      );
+  
       if (t.afectaCuenta && subcuenta.cuentaId) {
         await this.cuentaModel.updateOne(
           { id: subcuenta.cuentaId, userId: t.userId },
-          { $inc: { cantidad: montoAjustado } },
+          { $inc: { cantidad: montoAjustado } }
         );
       }
     } else if (t.cuentaId) {
-      await this.cuentaModel.updateOne({ id: t.cuentaId, userId: t.userId }, { $inc: { cantidad: montoAjustado } });
+      await this.cuentaModel.updateOne(
+        { id: t.cuentaId, userId: t.userId },
+        { $inc: { cantidad: montoAjustado } }
+      );
     }
-
+  
     await this.historialModel.create({
       subcuentaId: t.subCuentaId ?? null,
       userId: t.userId,
@@ -212,11 +218,11 @@ export class TransactionsService {
         afectaCuenta: t.afectaCuenta,
       },
     });
-    
+  
     if (t.subCuentaId) {
-      return await this.subcuentaModel.findOne({ subCuentaId: t.subCuentaId });
+      return await this.subcuentaModel.findOne({ subCuentaId: t.subCuentaId }).lean();
     }
-    
+  
     return null;
   }
 }
