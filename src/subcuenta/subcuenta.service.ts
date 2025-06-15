@@ -112,20 +112,36 @@ export class SubcuentaService {
 
   async actualizar(id: string, dto: UpdateSubcuentaDto) {
     const antes = await this.subcuentaModel.findOne({ subCuentaId: id });
+    if (!antes) throw new NotFoundException('Subcuenta no encontrada');
+  
+    let cambios: Record<string, { antes: any; despues: any }> = {};
+  
+    if (dto.moneda && dto.moneda !== antes.moneda) {
+      const conversion = await this.monedaService.obtenerTasaCambio(antes.moneda, dto.moneda);
+      const nuevaCantidad = antes.cantidad * conversion.tasa;
+  
+      dto.cantidad = nuevaCantidad;
+  
+      cambios['moneda'] = { antes: antes.moneda, despues: dto.moneda };
+      cambios['cantidad'] = { antes: antes.cantidad, despues: nuevaCantidad };
+    }
+  
     const actualizado = await this.subcuentaModel.findOneAndUpdate(
       { subCuentaId: id },
       dto,
       { new: true }
     );
   
-    if (actualizado && antes) {
-      const cambios: Record<string, { antes: any; despues: any }> = {};
-  
+    if (actualizado) {
       for (const key of Object.keys(dto)) {
         const nuevoValor = dto[key];
         const valorAnterior = antes[key];
   
-        if (nuevoValor !== undefined && nuevoValor !== valorAnterior) {
+        if (
+          nuevoValor !== undefined &&
+          JSON.stringify(nuevoValor) !== JSON.stringify(valorAnterior) &&
+          !cambios[key]
+        ) {
           cambios[key] = {
             antes: valorAnterior,
             despues: actualizado[key],
