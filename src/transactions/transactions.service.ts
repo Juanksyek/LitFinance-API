@@ -30,8 +30,8 @@ export class TransactionsService {
     });
   
     const guardada = await nueva.save();
-    const subcuentaActualizada = await this.aplicarTransaccion(guardada);
-    
+    const result = await this.aplicarTransaccion(guardada);
+
     if (dto.afectaCuenta && dto.cuentaId) {
       await this.historialService.registrarMovimiento({
         userId: dto.userId ?? userId,
@@ -46,7 +46,8 @@ export class TransactionsService {
   
     return {
       transaccion: guardada,
-      subcuenta: subcuentaActualizada,
+      subcuenta: result?.subcuenta ?? null,
+      historial: result?.historial ?? null,
     };
   }
 
@@ -207,7 +208,7 @@ export class TransactionsService {
       );
     }
   
-    await this.historialModel.create({
+    const historial = await this.historialModel.create({
       subcuentaId: t.subCuentaId ?? null,
       userId: t.userId,
       tipo: t.tipo,
@@ -220,7 +221,8 @@ export class TransactionsService {
     });
   
     if (t.subCuentaId) {
-      return await this.subcuentaModel.findOne({ subCuentaId: t.subCuentaId }).lean();
+      const subcuentaActualizada = await this.subcuentaModel.findOne({ subCuentaId: t.subCuentaId }).lean();
+      return { subcuenta: subcuentaActualizada, historial };
     }
   
     return null;
