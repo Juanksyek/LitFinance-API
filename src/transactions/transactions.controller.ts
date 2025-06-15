@@ -34,17 +34,22 @@ import { Controller, Post, Get, Body, Param, Patch, Delete, Query, Req, UseGuard
         return this.transactionsService.listar(req.user.sub, rango);
     }
   
-    @Get('buscar')
-    async buscar(
-      @Req() req,
-      @Query('concepto') concepto?: string,
-      @Query('motivo') motivo?: string,
-      @Query('monto') monto?: number,
+    @Get('subcuenta/:id/historial')
+    async historialSubcuenta(
+      @Param('id') subCuentaId: string,
+      @Query('desde') desde?: string,
+      @Query('hasta') hasta?: string,
+      @Query('limite') limite = 5,
+      @Query('pagina') pagina = 1,
+      @Query('descripcion') descripcion?: string,
     ) {
-      return this.transactionsService.buscar(req.user.sub, {
-        concepto,
-        motivo,
-        monto,
+      return this.transactionsService.obtenerHistorial({
+        subCuentaId,
+        desde,
+        hasta,
+        limite: +limite,
+        pagina: +pagina,
+        descripcion,
       });
     }
   }
