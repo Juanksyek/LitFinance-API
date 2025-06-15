@@ -11,7 +11,6 @@ export class SubcuentaController {
 
   @Post()
   async crear(@Req() req, @Body() dto: CreateSubcuentaDto) {
-    console.log('🧾 req.user.sub:', req.user?.sub);
     return this.subcuentaService.crear(dto, req.user.sub);
   }
 
