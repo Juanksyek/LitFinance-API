@@ -164,22 +164,31 @@ export class TransactionsService {
     return this.transactionModel.find(query).sort({ createdAt: -1 });
   }
 
-  async buscar(userId: string, filtros: { concepto?: string; motivo?: string; monto?: number }) {
-    const query: any = { userId };
-
-    if (filtros.concepto) {
-      query.concepto = { $regex: filtros.concepto, $options: 'i' };
+  async obtenerHistorial({ subCuentaId, desde, hasta, limite, pagina, descripcion }) {
+    const filtros: any = { subcuentaId: subCuentaId };
+  
+    if (descripcion) {
+      filtros.descripcion = { $regex: descripcion, $options: 'i' };
     }
-
-    if (filtros.motivo) {
-      query.motivo = { $regex: filtros.motivo, $options: 'i' };
+  
+    if (desde || hasta) {
+      filtros.createdAt = {};
+      if (desde) filtros.createdAt.$gte = new Date(desde);
+      if (hasta) filtros.createdAt.$lte = new Date(hasta);
     }
-
-    if (filtros.monto !== undefined) {
-      query.monto = filtros.monto;
-    }
-
-    return this.transactionModel.find(query).sort({ createdAt: -1 });
+  
+    const [resultados, total] = await Promise.all([
+      this.historialModel.find(filtros)
+        .sort({ createdAt: -1 })
+        .skip((pagina - 1) * limite)
+        .limit(limite),
+      this.historialModel.countDocuments(filtros),
+    ]);
+  
+    return {
+      resultados,
+      totalPaginas: Math.ceil(total / limite),
+    };
   }
 
   private async aplicarTransaccion(t: Transaction) {
