@@ -21,8 +21,18 @@ export class SubcuentaController {
     @Query('search') search?: string,
     @Query('page') page = 1,
     @Query('limit') limit = 4,
+    @Query('soloActivas') soloActivas?: string,
   ) {
-    return this.subcuentaService.listar(userId, subCuentaId, search, +page, +limit);
+    const incluirInactivas = soloActivas === 'true' ? false : true;
+  
+    return this.subcuentaService.listar(
+      userId,
+      subCuentaId,
+      search,
+      +page,
+      +limit,
+      incluirInactivas,
+    );
   }
 
   @Get('buscar/:subCuentaId')
