@@ -92,10 +92,16 @@ export class SubcuentaService {
     };
   }
 
-  async listar(userId: string, subCuentaId?: string, search = '', page = 1, limit = 10) {
-    const query: any = { userId, activa: true };
+  async listar( userId: string, subCuentaId?: string, search = '', page = 1, limit = 10, incluirInactivas = true ) {
+    const query: any = { userId };
+  
+    if (!incluirInactivas) {
+      query.activa = true;
+    }
+  
     if (subCuentaId) query.subCuentaId = subCuentaId;
     if (search) query.nombre = { $regex: search, $options: 'i' };
+  
     return this.subcuentaModel
       .find(query)
       .skip((page - 1) * limit)
