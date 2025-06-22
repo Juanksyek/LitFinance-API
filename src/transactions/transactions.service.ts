@@ -202,7 +202,7 @@ export class TransactionsService {
         throw new NotFoundException('Subcuenta no encontrada');
       }
   
-      const updateResult = await this.subcuentaModel.updateOne(
+      await this.subcuentaModel.updateOne(
         { subCuentaId: t.subCuentaId },
         { $inc: { cantidad: montoAjustado } }
       );
@@ -229,7 +229,18 @@ export class TransactionsService {
       const subcuentaActualizada = await this.subcuentaModel.findOne({ subCuentaId: t.subCuentaId }).lean();
       return { subcuenta: subcuentaActualizada, historial };
     }
-  
+    
+    if (!t.subCuentaId && t.afectaCuenta && t.cuentaId) {
+      const cuenta = await this.cuentaModel.findOne({ id: t.cuentaId, userId: t.userId });
+      if (!cuenta) {
+        throw new NotFoundException('Cuenta principal no encontrada');
+      }
+    
+      await this.cuentaModel.updateOne(
+        { id: t.cuentaId, userId: t.userId },
+        { $inc: { cantidad: montoAjustado } }
+      );
+    }
     return null;
   }
 }
