@@ -105,11 +105,14 @@ export class AuthService {
         user.lastActivityAt = new Date();
         await user.save();
 
+        const cuentaPrincipal = await this.cuentaModel.findOne({ userId: user.id, isPrincipal: true });
+
         const payload = {
-            sub: user.id,
-            email: user.email,
-            nombre: user.nombreCompleto,
-            rol: user.rol,
+          sub: user.id,
+          email: user.email,
+          nombre: user.nombreCompleto,
+          rol: user.rol,
+          cuentaId: cuentaPrincipal?.id || null,
         };
 
         const accessToken = await this.jwtService.signAsync(payload);
