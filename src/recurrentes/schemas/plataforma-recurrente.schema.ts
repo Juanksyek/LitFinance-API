@@ -8,11 +8,14 @@ export class PlataformaRecurrente {
   @Prop({ required: true, unique: true })
   nombre: string;
 
+  @Prop({ required: true, unique: true })
+  plataformaId: string;
+
   @Prop()
   categoria?: string;
 
   @Prop()
-  logoUrl?: string;
+  color?: string;
 }
 
 export const PlataformaRecurrenteSchema = SchemaFactory.createForClass(PlataformaRecurrente);
