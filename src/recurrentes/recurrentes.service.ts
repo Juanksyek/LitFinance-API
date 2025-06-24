@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Recurrente, RecurrenteDocument } from './schemas/recurrente.schema';
@@ -7,6 +7,8 @@ import { EditarRecurrenteDto } from './dto/editar-recurrente.dto';
 import { HistorialRecurrente, HistorialRecurrenteDocument } from './schemas/historial-recurrente.schema';
 import { generateUniqueId } from 'src/utils/generate-id';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
+import { PlataformaRecurrente } from './schemas/plataforma-recurrente.schema';
+
 @Injectable()
 export class RecurrentesService {
   constructor(
@@ -79,6 +81,17 @@ export class RecurrentesService {
   calcularProximaFecha(fecha: Date, dias: number): Date {
     const nueva = new Date(fecha);
     nueva.setDate(nueva.getDate() + dias);
+
+    const dia = nueva.getDate();
+    const mes = nueva.getMonth();
+    const anio = nueva.getFullYear();
+
+    const ultimoDiaMes = new Date(anio, mes + 1, 0).getDate();
+
+    if (dia > ultimoDiaMes) {
+      nueva.setDate(ultimoDiaMes);
+    }
+
     return nueva;
   }
 
@@ -136,5 +149,32 @@ export class RecurrentesService {
     }
 
     return recurrentes.length;
+  }
+
+  // Insertar plataformas recurrentes
+  async insertarPlataformasRecurrentes(plataformas: any[], user: any, plataformaModel: Model<PlataformaRecurrente>) {
+    if (user.rol !== 'admin') {
+      throw new ForbiddenException('Solo los administradores pueden insertar plataformas');
+    }
+
+    for (const plataforma of plataformas) {
+      if (!plataforma.nombre) continue;
+    
+      const existente = await plataformaModel.findOne({ nombre: plataforma.nombre });
+    
+      if (!existente) {
+        const plataformaId = await generateUniqueId(plataformaModel, 'plataformaId');
+        await plataformaModel.create({ ...plataforma, plataformaId });
+      } else {
+        await plataformaModel.updateOne(
+          { nombre: plataforma.nombre },
+          plataforma
+        );
+      }
+    }
+
+    return {
+      mensaje: `${plataformas.length} plataforma(s) procesadas correctamente.`,
+    };
   }
 }
