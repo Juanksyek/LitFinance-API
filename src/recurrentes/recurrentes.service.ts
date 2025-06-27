@@ -7,7 +7,6 @@ import { EditarRecurrenteDto } from './dto/editar-recurrente.dto';
 import { HistorialRecurrente, HistorialRecurrenteDocument } from './schemas/historial-recurrente.schema';
 import { generateUniqueId } from 'src/utils/generate-id';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
-import { PlataformaRecurrente } from './schemas/plataforma-recurrente.schema';
 
 @Injectable()
 export class RecurrentesService {
@@ -149,32 +148,5 @@ export class RecurrentesService {
     }
 
     return recurrentes.length;
-  }
-
-  // Insertar plataformas recurrentes
-  async insertarPlataformasRecurrentes(plataformas: any[], user: any, plataformaModel: Model<PlataformaRecurrente>) {
-    if (user.rol !== 'admin') {
-      throw new ForbiddenException('Solo los administradores pueden insertar plataformas');
-    }
-
-    for (const plataforma of plataformas) {
-      if (!plataforma.nombre) continue;
-    
-      const existente = await plataformaModel.findOne({ nombre: plataforma.nombre });
-    
-      if (!existente) {
-        const plataformaId = await generateUniqueId(plataformaModel, 'plataformaId');
-        await plataformaModel.create({ ...plataforma, plataformaId });
-      } else {
-        await plataformaModel.updateOne(
-          { nombre: plataforma.nombre },
-          plataforma
-        );
-      }
-    }
-
-    return {
-      mensaje: `${plataformas.length} plataforma(s) procesadas correctamente.`,
-    };
   }
 }

@@ -3,17 +3,12 @@ import { RecurrentesService } from './recurrentes.service';
 import { CrearRecurrenteDto } from './dto/crear-recurrente.dto';
 import { EditarRecurrenteDto } from './dto/editar-recurrente.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { PlataformaRecurrente } from './schemas/plataforma-recurrente.schema';
 
 @UseGuards(JwtAuthGuard)
 @Controller('recurrentes')
 export class RecurrentesController {
   constructor(
     private readonly recurrentesService: RecurrentesService,
-    @InjectModel(PlataformaRecurrente.name)
-    private readonly plataformaModel: Model<PlataformaRecurrente>,
   ) {}
 
   // Crear un nuevo recurrente
@@ -53,13 +48,5 @@ export class RecurrentesController {
   async ejecutarHoy() {
     const cantidad = await this.recurrentesService.ejecutarRecurrentesDelDia();
     return { ejecutados: cantidad };
-  }
-
-  // Endpoint para insertar plataformas recurrentes
-  @Post('plataformas')
-  async insertarPlataformas(@Req() req, @Body() body: any) {
-    const user = req.user;
-    const plataformas = Array.isArray(body?.plataformas) ? body.plataformas : [];
-    return this.recurrentesService.insertarPlataformasRecurrentes(plataformas, user, this.plataformaModel);
   }
 }

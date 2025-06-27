@@ -5,7 +5,7 @@ import { RecurrentesController } from './recurrentes.controller';
 
 import { Recurrente, RecurrenteSchema } from './schemas/recurrente.schema';
 import { HistorialRecurrente, HistorialRecurrenteSchema } from './schemas/historial-recurrente.schema';
-import { PlataformaRecurrente, PlataformaRecurrenteSchema } from './schemas/plataforma-recurrente.schema';
+import { PlataformaRecurrente, PlataformaRecurrenteSchema } from '../plataformas-recurrentes/schemas/plataforma-recurrente.schema';
 import { NotificacionesModule } from '../notificaciones/notificaciones.module';
 import { RecurrentesCronService } from './recurrentes-cron/recurrentes-cron.service';
 
