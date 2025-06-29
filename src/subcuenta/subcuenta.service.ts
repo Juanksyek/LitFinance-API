@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Subcuenta, SubcuentaDocument } from './schemas/subcuenta.schema/subcuenta.schema';
@@ -168,37 +168,45 @@ export class SubcuentaService {
   }
 
   async eliminar(id: string, userId: string) {
-    const sub = await this.subcuentaModel.findOne({ subCuentaId: id });
-    if (!sub || sub.userId !== userId) throw new NotFoundException('Subcuenta no encontrada');
+    try {
   
-    if (sub.afectaCuenta && sub.cuentaId) {
-      const cuenta = await this.cuentaModel.findOne({ _id: sub.cuentaId, userId });
-      if (cuenta) {
-        let cantidadAjustada = sub.cantidad;
-    
-        if (sub.moneda && cuenta.moneda && sub.moneda !== cuenta.moneda) {
-          const conversion = await this.monedaService.obtenerTasaCambio(sub.moneda, cuenta.moneda);
-          cantidadAjustada = sub.cantidad * conversion.tasa;
-        }
-    
-        await this.cuentaModel.findOneAndUpdate(
-          { _id: sub.cuentaId, userId },
-          { $inc: { cantidad: -cantidadAjustada } },
-        );
+      const sub = await this.subcuentaModel.findOne({ subCuentaId: id });
+      if (!sub || sub.userId !== userId) {
+        throw new NotFoundException('Subcuenta no encontrada');
       }
+  
+      if (sub.afectaCuenta && sub.cuentaId) {
+        const cuenta = await this.cuentaModel.findOne({ cuentaId: sub.cuentaId, userId });
+        if (cuenta) {
+          let cantidadAjustada = sub.cantidad;
+  
+          if (sub.moneda && cuenta.moneda && sub.moneda !== cuenta.moneda) {
+            const conversion = await this.monedaService.obtenerTasaCambio(sub.moneda, cuenta.moneda);
+            cantidadAjustada = sub.cantidad * conversion.tasa;
+          }
+  
+          await this.cuentaModel.findOneAndUpdate(
+            { _id: sub.cuentaId, userId },
+            { $inc: { cantidad: -cantidadAjustada } },
+          );
+        }
+      }
+  
+      await sub.deleteOne();
+  
+      await this.historialModel.create({
+        subcuentaId: sub.subCuentaId,
+        userId,
+        tipo: 'eliminacion',
+        descripcion: 'Subcuenta eliminada exitosamente',
+        datos: { id },
+      });
+  
+      return { message: 'Subcuenta eliminada' };
+  
+    } catch (err) {
+      throw new InternalServerErrorException('Error interno al eliminar subcuenta');
     }
-  
-    await sub.deleteOne();
-  
-    await this.historialModel.create({
-      subcuentaId: sub.subCuentaId,
-      userId,
-      tipo: 'eliminacion',
-      descripcion: 'Subcuenta eliminada exitosamente',
-      datos: { id },
-    });
-  
-    return { message: 'Subcuenta eliminada' };
   }
 
   async obtenerHistorial(
