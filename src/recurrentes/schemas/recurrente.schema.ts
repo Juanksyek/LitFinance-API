@@ -11,9 +11,22 @@ export class Recurrente {
   @Prop({ required: true })
   nombre: string;
 
-  @Prop({ required: true })
-  plataforma: string;
-
+  @Prop({
+    required: true,
+    type: {
+      plataformaId: String,
+      nombre: String,
+      color: String,
+      categoria: String,
+    },
+  })
+  plataforma: {
+    plataformaId: string;
+    nombre: string;
+    color: string;
+    categoria: string;
+  };
+  
   @Prop({ required: true })
   frecuenciaDias: number;
 
