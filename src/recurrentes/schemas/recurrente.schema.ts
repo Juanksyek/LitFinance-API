@@ -12,13 +12,13 @@ export class Recurrente {
   nombre: string;
 
   @Prop({
-    required: true,
     type: {
-      plataformaId: String,
-      nombre: String,
-      color: String,
-      categoria: String,
+      plataformaId: { type: String, required: true },
+      nombre: { type: String, required: true },
+      color: { type: String, required: true },
+      categoria: { type: String, required: true },
     },
+    required: true,
   })
   plataforma: {
     plataformaId: string;
@@ -26,7 +26,7 @@ export class Recurrente {
     color: string;
     categoria: string;
   };
-  
+
   @Prop({ required: true })
   frecuenciaDias: number;
 
@@ -54,5 +54,4 @@ export class Recurrente {
   @Prop({ type: [Number], default: [] })
   recordatorios: number[];
 }
-
 export const RecurrenteSchema = SchemaFactory.createForClass(Recurrente);
