@@ -23,6 +23,9 @@ export class CuentaHistorial {
   @Prop({ required: true })
   descripcion: string;
 
+  @Prop()
+  motivo?: string;
+
   @Prop({ required: true })
   fecha: Date;
 
