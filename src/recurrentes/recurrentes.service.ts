@@ -31,25 +31,30 @@ export class RecurrentesService {
   }
 
   // Listar todos los recurrentes de un usuario
-  async listar(userId: string, search?: string, page = 1, limit = 6): Promise<Recurrente[]> {
+  async listar(userId: string, page = 1, limit = 10, search = '') {
     const skip = (page - 1) * limit;
-    const filtroBase = { userId };
-    const filtroBusqueda = search
-      ? {
-          ...filtroBase,
-          $or: [
-            { nombre: { $regex: search, $options: 'i' } },
-            { 'plataforma.nombre': { $regex: search, $options: 'i' } },
-          ],
-        }
-      : filtroBase;
   
-    return this.recurrenteModel
-      .find(filtroBusqueda)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .exec();
+    const filtroBase: any = {
+      userId,
+      ...(search && { nombre: { $regex: search, $options: 'i' } }),
+    };
+  
+    const [items, total] = await Promise.all([
+      this.recurrenteModel
+        .find(filtroBase)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      this.recurrenteModel.countDocuments(filtroBase),
+    ]);
+  
+    return {
+      items,
+      total,
+      page,
+      hasNextPage: page * limit < total,
+    };
   }
 
   // Obtener uno por ID
