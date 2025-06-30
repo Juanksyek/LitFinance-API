@@ -22,11 +22,11 @@ export class RecurrentesController {
   @Get()
   async listar(
     @Req() req,
-    @Query('search') search?: string,
     @Query('page') page = 1,
-    @Query('limit') limit = 6,
+    @Query('limit') limit = 10,
+    @Query('search') search = '',
   ) {
-    return this.recurrentesService.listar(req.user.sub, search, +page, +limit);
+    return this.recurrentesService.listar(req.user.sub, Number(page), Number(limit), search);
   }
 
   // Obtener un recurrente específico por su ID
