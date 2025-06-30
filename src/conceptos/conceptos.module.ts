@@ -12,5 +12,8 @@ import { ConceptoPersonalizado, ConceptoPersonalizadoSchema } from './schemas/co
   ],
   controllers: [ConceptosController],
   providers: [ConceptosService],
+  exports: [
+    MongooseModule,
+  ],
 })
 export class ConceptosModule {}
