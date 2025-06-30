@@ -17,6 +17,10 @@ export class CreateCuentaHistorialDto {
   @IsString()
   descripcion: string;
 
+  @IsOptional()
+  @IsString()
+  motivo?: string;
+
   @IsDateString()
   fecha: string;
 
