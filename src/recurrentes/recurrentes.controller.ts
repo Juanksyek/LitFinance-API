@@ -20,8 +20,13 @@ export class RecurrentesController {
 
   // Listar todos los recurrentes del usuario (pasar userId como query por ahora)
   @Get()
-  async listar(@Req() req) {
-    return this.recurrentesService.listar(req.user.sub);
+  async listar(
+    @Req() req,
+    @Query('search') search?: string,
+    @Query('page') page = 1,
+    @Query('limit') limit = 6,
+  ) {
+    return this.recurrentesService.listar(req.user.sub, search, +page, +limit);
   }
 
   // Obtener un recurrente específico por su ID
