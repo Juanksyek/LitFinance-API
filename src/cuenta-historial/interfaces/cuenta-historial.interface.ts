@@ -7,4 +7,5 @@ export interface CuentaHistorial {
   fecha: Date;
   subcuentaId?: string;
   conceptoId?: string;
+  motivo?: string;
 }

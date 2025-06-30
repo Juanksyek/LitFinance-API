@@ -55,13 +55,14 @@ export class CuentaHistorialService {
     }
 
     const enriched = data.map((item) => ({
-      ...item,
-      detalles: {
-        origen: item.subcuentaId ? 'Desde subcuenta' : 'Movimiento directo',
-        etiqueta: item.tipo === 'ajuste_subcuenta' ? 'Ajuste' : 'Manual',
-        resumen: `${item.descripcion} (${item.monto})`,
-        conceptoNombre: item.conceptoId ? conceptosMap.get(item.conceptoId) : undefined,
-      },
+        ...item,
+        motivo: item.motivo ?? null,
+        detalles: {
+          origen: item.subcuentaId ? 'Desde subcuenta' : 'Movimiento directo',
+          etiqueta: item.tipo === 'ajuste_subcuenta' ? 'Ajuste' : 'Manual',
+          resumen: `${item.descripcion} (${item.monto})`,
+          conceptoNombre: item.conceptoId ? conceptosMap.get(item.conceptoId) : undefined,
+        },
     }));
 
     return { total, page, limit, data: enriched };
