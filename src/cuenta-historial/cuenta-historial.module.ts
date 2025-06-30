@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { CuentaHistorialController } from './cuenta-historial.controller';
 import { CuentaHistorialService } from './cuenta-historial.service';
 import { CuentaHistorialSchema } from './schemas/cuenta-historial.schema';
+import { ConceptosModule } from '../conceptos/conceptos.module';
 
 @Module({
   imports: [
@@ -12,9 +13,10 @@ import { CuentaHistorialSchema } from './schemas/cuenta-historial.schema';
         schema: CuentaHistorialSchema,
       },
     ]),
+    ConceptosModule,
   ],
   controllers: [CuentaHistorialController],
   providers: [CuentaHistorialService],
   exports: [CuentaHistorialService],
 })
-export class CuentaHistorialModule { }
+export class CuentaHistorialModule {}
