@@ -27,8 +27,15 @@ export class Recurrente {
     categoria: string;
   };
 
+  // NUEVOS CAMPOS DE FRECUENCIA
+  @Prop({ required: true, enum: ['dia_semana', 'dia_mes', 'dia_anio'] })
+  frecuenciaTipo: 'dia_semana' | 'dia_mes' | 'dia_anio';
+
   @Prop({ required: true })
-  frecuenciaDias: number;
+  frecuenciaValor: string;
+
+  @Prop({ required: true })
+  moneda: string;
 
   @Prop({ required: true })
   monto: number;
@@ -54,4 +61,5 @@ export class Recurrente {
   @Prop({ type: [Number], default: [] })
   recordatorios: number[];
 }
+
 export const RecurrenteSchema = SchemaFactory.createForClass(Recurrente);
