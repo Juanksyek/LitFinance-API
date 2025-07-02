@@ -8,6 +8,9 @@ import { HistorialRecurrente, HistorialRecurrenteSchema } from './schemas/histor
 import { PlataformaRecurrente, PlataformaRecurrenteSchema } from '../plataformas-recurrentes/schemas/plataforma-recurrente.schema';
 import { NotificacionesModule } from '../notificaciones/notificaciones.module';
 import { RecurrentesCronService } from './recurrentes-cron/recurrentes-cron.service';
+import { CuentaModule } from 'src/cuenta/cuenta.module';
+import { MonedaModule } from 'src/moneda/moneda.module';
+import { CuentaHistorialModule } from 'src/cuenta-historial/cuenta-historial.module';
 
 @Module({
   imports: [
@@ -17,6 +20,9 @@ import { RecurrentesCronService } from './recurrentes-cron/recurrentes-cron.serv
       { name: PlataformaRecurrente.name, schema: PlataformaRecurrenteSchema },
     ]),
     NotificacionesModule,
+    CuentaModule,
+    MonedaModule,
+    CuentaHistorialModule
   ],
   controllers: [RecurrentesController],
   providers: [RecurrentesService, RecurrentesCronService],
