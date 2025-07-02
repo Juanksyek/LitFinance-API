@@ -11,8 +11,8 @@ export class CreateCuentaHistorialDto {
   monto: number;
 
   @IsString()
-  @IsIn(['ingreso', 'egreso', 'ajuste_subcuenta', 'recurrente', 'cambio_moneda'])
-  tipo: 'ingreso' | 'egreso' | 'ajuste_subcuenta' | 'recurrente' | 'cambio_moneda';
+  @IsIn([ 'ingreso', 'egreso', 'ajuste_subcuenta', 'recurrente', 'cambio_moneda', 'recurrente_pago_inicial'])
+  tipo: | 'ingreso' | 'egreso' | 'ajuste_subcuenta' | 'recurrente' | 'cambio_moneda' | 'recurrente_pago_inicial';
 
   @IsString()
   descripcion: string;

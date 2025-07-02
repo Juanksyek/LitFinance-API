@@ -5,6 +5,7 @@ import { Cuenta } from './schemas/cuenta.schema/cuenta.schema';
 import { UpdateCuentaDto } from './dto/update-cuenta.dto/update-cuenta.dto';
 import { MonedaService } from '../moneda/moneda.service';
 import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.service';
+import { CuentaDocument } from './schemas/cuenta.schema/cuenta.schema';
 
 @Injectable()
 export class CuentaService {
@@ -14,7 +15,7 @@ export class CuentaService {
     private readonly cuentaHistorialService: CuentaHistorialService,
   ) { }
 
-  async obtenerCuentaPrincipal(userId: string): Promise<Cuenta> {
+  async obtenerCuentaPrincipal(userId: string): Promise<CuentaDocument> {
     const cuenta = await this.cuentaModel.findOne({ userId, isPrincipal: true });
     if (!cuenta) {
       throw new NotFoundException('Cuenta principal no encontrada');
