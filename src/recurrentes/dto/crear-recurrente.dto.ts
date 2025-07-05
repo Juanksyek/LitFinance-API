@@ -1,4 +1,4 @@
-import { IsBoolean, IsNumber, IsOptional, IsString, ValidateNested, IsNotEmpty, ValidateIf, IsIn } from 'class-validator';
+import { IsBoolean, IsNumber, IsOptional, IsString, ValidateNested, IsNotEmpty, IsIn} from 'class-validator';
 import { Type } from 'class-transformer';
 
 class PlataformaDto {
@@ -8,12 +8,12 @@ class PlataformaDto {
   @IsString()
   nombre: string;
 
-  @IsString()
   @IsOptional()
+  @IsString()
   categoria?: string;
 
-  @IsString()
   @IsOptional()
+  @IsString()
   color?: string;
 }
 
@@ -41,30 +41,20 @@ export class CrearRecurrenteDto {
   @IsOptional()
   @IsString()
   cuentaId?: string;
-  
-  @IsString()
-  userId: string;
 
   @IsOptional()
   @IsString()
   subcuentaId?: string;
 
+  @IsString()
+  userId: string;
+
   @IsOptional()
   recordatorios?: number[];
 
-  // Nuevos campos para frecuencia personalizada:
-  @ValidateIf((o) => !o.diaMes && !o.fechaAnual)
-  @IsOptional()
-  @IsIn([0, 1, 2, 3, 4, 5, 6])
-  diaSemana?: number; // 0 = domingo, 6 = sábado
+  @IsIn(['dia_semana', 'dia_mes', 'fecha_anual'])
+  frecuenciaTipo: 'dia_semana' | 'dia_mes' | 'fecha_anual';
 
-  @ValidateIf((o) => !o.diaSemana && !o.fechaAnual)
-  @IsOptional()
-  @IsIn([...Array(31).keys()].map(i => i + 1)) // 1 a 31
-  diaMes?: number;
-
-  @ValidateIf((o) => !o.diaSemana && !o.diaMes)
-  @IsOptional()
-  @IsString() // formato MM-DD (ej. "11-20" para 20 de noviembre)
-  fechaAnual?: string;
+  @IsString()
+  frecuenciaValor: string;
 }
