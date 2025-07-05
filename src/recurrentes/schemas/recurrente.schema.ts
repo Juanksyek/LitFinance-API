@@ -27,9 +27,8 @@ export class Recurrente {
     categoria: string;
   };
 
-  // NUEVOS CAMPOS DE FRECUENCIA
-  @Prop({ required: true, enum: ['dia_semana', 'dia_mes', 'dia_anio'] })
-  frecuenciaTipo: 'dia_semana' | 'dia_mes' | 'dia_anio';
+  @Prop({ required: true, enum: ['dia_semana', 'dia_mes', 'fecha_anual'] })
+  frecuenciaTipo: 'dia_semana' | 'dia_mes' | 'fecha_anual';
 
   @Prop({ required: true })
   frecuenciaValor: string;
