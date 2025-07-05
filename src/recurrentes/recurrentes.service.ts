@@ -97,8 +97,8 @@ export class RecurrentesService {
         return hoy;
       } else {
         const siguienteMes = new Date(anio, mes + 1, 1);
-        const ultimoDia = new Date(anio, mes + 2, 0).getDate();
-        siguienteMes.setDate(Math.min(diaObjetivo, ultimoDia));
+        const ultimoDiaDelMes = new Date(anio, mes + 2, 0).getDate();
+        siguienteMes.setDate(Math.min(diaObjetivo, ultimoDiaDelMes));
         return siguienteMes;
       }
     }
