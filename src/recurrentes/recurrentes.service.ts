@@ -60,28 +60,37 @@ export class RecurrentesService {
       ...dto,
       recurrenteId,
       userId,
-      proximaEjecucion: this.calcularProximaFechaPersonalizada(new Date(), dto),
+      proximaEjecucion: this.calcularProximaFechaPersonalizada(
+        new Date(),
+        dto.frecuenciaTipo,
+        dto.frecuenciaValor
+      ),
     });
 
     return await nuevo.save();
   }
 
-  calcularProximaFechaPersonalizada(fechaBase: Date, dto: CrearRecurrenteDto): Date {
+  calcularProximaFechaPersonalizada(
+    fechaBase: Date,
+    frecuenciaTipo: string,
+    frecuenciaValor: string,
+  ): Date {
     const hoy = new Date(fechaBase);
     hoy.setHours(0, 0, 0, 0);
 
-    if (dto.diaSemana !== undefined) {
+    if (frecuenciaTipo === 'dia_semana') {
+      const diaSemana = parseInt(frecuenciaValor);
       const diaActual = hoy.getDay();
-      const diasHasta = (dto.diaSemana + 7 - diaActual) % 7 || 7;
+      const diasHasta = (diaSemana + 7 - diaActual) % 7 || 7;
       hoy.setDate(hoy.getDate() + diasHasta);
       return hoy;
     }
 
-    if (dto.diaMes !== undefined) {
+    if (frecuenciaTipo === 'dia_mes') {
+      const diaObjetivo = parseInt(frecuenciaValor);
       const diaHoy = hoy.getDate();
       const mes = hoy.getMonth();
       const anio = hoy.getFullYear();
-      const diaObjetivo = dto.diaMes;
 
       if (diaHoy < diaObjetivo) {
         hoy.setDate(diaObjetivo);
@@ -94,8 +103,8 @@ export class RecurrentesService {
       }
     }
 
-    if (dto.fechaAnual) {
-      const [mesStr, diaStr] = dto.fechaAnual.split('-');
+    if (frecuenciaTipo === 'fecha_anual') {
+      const [mesStr, diaStr] = frecuenciaValor.split('-');
       const dia = parseInt(diaStr);
       const mes = parseInt(mesStr) - 1;
       const anio = hoy.getFullYear();
@@ -143,11 +152,19 @@ export class RecurrentesService {
   }
 
   async editar(recurrenteId: string, dto: EditarRecurrenteDto): Promise<Recurrente> {
+    if (!dto.frecuenciaTipo || typeof dto.frecuenciaValor !== 'string') {
+      throw new ForbiddenException('frecuenciaTipo y frecuenciaValor son requeridos para actualizar la próxima ejecución');
+    }
+    
     const actualizado = await this.recurrenteModel.findOneAndUpdate(
       { recurrenteId },
       {
         ...dto,
-        proximaEjecucion: this.calcularProximaFechaPersonalizada(new Date(), dto as CrearRecurrenteDto),
+        proximaEjecucion: this.calcularProximaFechaPersonalizada(
+          new Date(),
+          dto.frecuenciaTipo,
+          dto.frecuenciaValor,
+        ),
       },
       { new: true },
     );
@@ -220,7 +237,10 @@ export class RecurrentesService {
         userId: r.userId,
       });
 
-      r.proximaEjecucion = this.calcularProximaFechaPersonalizada(new Date(), r);
+      if (r.frecuenciaTipo && r.frecuenciaValor) {
+        r.proximaEjecucion = this.calcularProximaFechaPersonalizada(new Date(), r.frecuenciaTipo, r.frecuenciaValor);
+        await r.save();
+      }
       await r.save();
     }
 
