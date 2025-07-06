@@ -246,4 +246,52 @@ export class RecurrentesService {
 
     return recurrentes.length;
   }
+
+  async pausarRecurrente(recurrenteId: string, userId: string) {
+    const recurrente = await this.recurrenteModel.findOne({ recurrenteId });
+    if (!recurrente) throw new NotFoundException('Recurrente no encontrado');
+  
+    if (recurrente.userId !== userId)
+      throw new ForbiddenException('No tienes permisos para pausar este recurrente');
+  
+    recurrente.pausado = true;
+    await recurrente.save();
+  
+    await this.historialModel.create({
+      recurrenteId: recurrente.recurrenteId,
+      monto: 0,
+      cuentaId: recurrente.cuentaId,
+      subcuentaId: recurrente.subcuentaId,
+      afectaCuentaPrincipal: recurrente.afectaCuentaPrincipal,
+      fecha: new Date(),
+      userId: recurrente.userId,
+      observacion: '⏸ Recurrente pausado por el usuario',
+    });
+  
+    return { mensaje: `Recurrente "${recurrente.nombre}" pausado correctamente.` };
+  }
+
+  async reanudarRecurrente(recurrenteId: string, userId: string) {
+    const recurrente = await this.recurrenteModel.findOne({ recurrenteId });
+    if (!recurrente) throw new NotFoundException('Recurrente no encontrado');
+  
+    if (recurrente.userId !== userId)
+      throw new ForbiddenException('No tienes permisos para reanudar este recurrente');
+  
+    recurrente.pausado = false;
+    await recurrente.save();
+  
+    await this.historialModel.create({
+      recurrenteId: recurrente.recurrenteId,
+      monto: 0,
+      cuentaId: recurrente.cuentaId,
+      subcuentaId: recurrente.subcuentaId,
+      afectaCuentaPrincipal: recurrente.afectaCuentaPrincipal,
+      fecha: new Date(),
+      userId: recurrente.userId,
+      observacion: '▶️ Recurrente reanudado por el usuario',
+    });
+  
+    return { mensaje: `Recurrente \"${recurrente.nombre}\" reanudado correctamente.` };
+  }
 }

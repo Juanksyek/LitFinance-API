@@ -7,9 +7,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 @UseGuards(JwtAuthGuard)
 @Controller('recurrentes')
 export class RecurrentesController {
-  constructor(
-    private readonly recurrentesService: RecurrentesService,
-  ) {}
+  constructor(private readonly recurrentesService: RecurrentesService) {}
 
   // Crear un nuevo recurrente
   @Post()
@@ -53,5 +51,17 @@ export class RecurrentesController {
   async ejecutarHoy() {
     const cantidad = await this.recurrentesService.ejecutarRecurrentesDelDia();
     return { ejecutados: cantidad };
+  }
+
+  // Endpoint para pausar un recurrente
+  @Put(':recurrenteId/pausar')
+  async pausar(@Param('recurrenteId') recurrenteId: string, @Req() req) {
+    return this.recurrentesService.pausarRecurrente(recurrenteId, req.user.sub);
+  }
+
+  // Endpoint para reanudar un recurrente
+  @Put(':recurrenteId/reanudar')
+  async reanudar(@Param('recurrenteId') recurrenteId: string, @Req() req) {
+    return this.recurrentesService.reanudarRecurrente(recurrenteId, req.user.sub);
   }
 }
