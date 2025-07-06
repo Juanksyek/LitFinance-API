@@ -30,7 +30,7 @@ import { PlataformasRecurrentesModule } from './plataformas-recurrentes/platafor
       throttlers: [
         {
           ttl: seconds(60),
-          limit: 10,
+          limit: 30,
         },
       ],
     }),
