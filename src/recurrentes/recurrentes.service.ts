@@ -120,13 +120,14 @@ export class RecurrentesService {
     return hoy;
   }
 
-  async listar(userId: string, page = 1, limit = 10, search = '') {
+  async listar(userId: string, page = 1, limit = 10, search = '', subcuentaId?: string) {
     const skip = (page - 1) * limit;
     const filtroBase: any = {
       userId,
       ...(search && { nombre: { $regex: search, $options: 'i' } }),
+      ...(subcuentaId && { subcuentaId }),
     };
-
+  
     const [items, total] = await Promise.all([
       this.recurrenteModel
         .find(filtroBase)
@@ -136,7 +137,7 @@ export class RecurrentesService {
         .exec(),
       this.recurrenteModel.countDocuments(filtroBase),
     ]);
-
+  
     return {
       items,
       total,
