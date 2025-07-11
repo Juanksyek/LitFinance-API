@@ -23,8 +23,15 @@ export class RecurrentesController {
     @Query('page') page = 1,
     @Query('limit') limit = 10,
     @Query('search') search = '',
+    @Query('subcuentaId') subcuentaId = '',
   ) {
-    return this.recurrentesService.listar(req.user.sub, Number(page), Number(limit), search);
+    return this.recurrentesService.listar(
+      req.user.sub,
+      Number(page),
+      Number(limit),
+      search,
+      subcuentaId || undefined,
+    );
   }
 
   // Obtener un recurrente específico por su ID
