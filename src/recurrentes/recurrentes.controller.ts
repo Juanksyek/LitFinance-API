@@ -1,4 +1,17 @@
-import { Controller, Get, Req, Post, Body, Param, Put, Delete, Query, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Req,
+  Post,
+  Body,
+  Param,
+  Put,
+  Delete,
+  Query,
+  HttpCode,
+  HttpStatus,
+  UseGuards,
+} from '@nestjs/common';
 import { RecurrentesService } from './recurrentes.service';
 import { CrearRecurrenteDto } from './dto/crear-recurrente.dto';
 import { EditarRecurrenteDto } from './dto/editar-recurrente.dto';
@@ -21,7 +34,7 @@ export class RecurrentesController {
   async listar(
     @Req() req,
     @Query('page') page = 1,
-    @Query('limit') limit = 10,
+    @Query('limit') limit = 4,
     @Query('search') search = '',
     @Query('subcuentaId') subcuentaId = '',
   ) {
