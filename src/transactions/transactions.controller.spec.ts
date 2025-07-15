@@ -4,16 +4,15 @@ import { TransactionsService } from './transactions.service';
 
 describe('TransactionsController', () => {
   let controller: TransactionsController;
-
-  const mockService = {
-    crear: jest.fn(),
-    editar: jest.fn(),
-    eliminar: jest.fn(),
-    listar: jest.fn(),
-    buscar: jest.fn(),
-  };
+  let mockService: any;
 
   beforeEach(async () => {
+    mockService = {
+      eliminar: jest.fn(),
+      listar: jest.fn(),
+      obtenerHistorial: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [TransactionsController],
       providers: [
@@ -28,20 +27,56 @@ describe('TransactionsController', () => {
     expect(controller).toBeDefined();
   });
 
-  it('listar() debe invocar al servicio con userId', async () => {
+  it('listar() debe invocar al servicio con userId y rango', async () => {
     const mockReq = { user: { sub: 'usuario123' } };
+    const rango = '2023-01-01_2023-01-31';
     mockService.listar.mockResolvedValue(['mock']);
 
-    const result = await controller.listar(mockReq);
+    const result = await controller.listar(mockReq, rango);
     expect(result).toEqual(['mock']);
-    expect(mockService.listar).toHaveBeenCalledWith('usuario123');
+    expect(mockService.listar).toHaveBeenCalledWith('usuario123', rango);
   });
 
-  it('buscar() debe pasar los filtros correctamente', async () => {
+  it('eliminar() debe invocar al servicio con id y userId', async () => {
     const mockReq = { user: { sub: 'usuario123' } };
-    const filtros = { concepto: 'Netflix', motivo: 'entretenimiento', monto: 150 };
+    const id = 'transaccion123';
+    mockService.eliminar.mockResolvedValue({ message: 'Transacción eliminada' });
 
-    await controller.buscar(mockReq, filtros.concepto, filtros.motivo, filtros.monto);
-    expect(mockService.buscar).toHaveBeenCalledWith('usuario123', filtros);
+    const result = await controller.eliminar(id, mockReq);
+    expect(result).toEqual({ message: 'Transacción eliminada' });
+    expect(mockService.eliminar).toHaveBeenCalledWith(id, 'usuario123');
+  });
+
+  it('historialSubcuenta() debe invocar al servicio con los parámetros correctos', async () => {
+    const subCuentaId = 'subcuenta123';
+    const mockReq = { user: { sub: 'usuario123' } };
+    const queryParams = {
+      desde: '2023-01-01',
+      hasta: '2023-01-31',
+      limite: 10,
+      pagina: 2,
+      descripcion: 'test',
+    };
+
+    mockService.obtenerHistorial.mockResolvedValue(['mockHistorial']);
+
+    const result = await controller.historialSubcuenta(
+      subCuentaId,
+      queryParams.desde,
+      queryParams.hasta,
+      queryParams.limite,
+      queryParams.pagina,
+      queryParams.descripcion,
+    );
+
+    expect(result).toEqual(['mockHistorial']);
+    expect(mockService.obtenerHistorial).toHaveBeenCalledWith({
+      subCuentaId,
+      desde: queryParams.desde,
+      hasta: queryParams.hasta,
+      limite: queryParams.limite,
+      pagina: queryParams.pagina,
+      descripcion: queryParams.descripcion,
+    });
   });
 });
