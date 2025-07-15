@@ -172,11 +172,11 @@ export class SubcuentaService {
   
       const sub = await this.subcuentaModel.findOne({ subCuentaId: id });
       if (!sub || sub.userId !== userId) {
-        throw new NotFoundException('Subcuenta no encontrada');
-      }
-  
+        throw new NotFoundException('Subcuenta no encontrada o no pertenece al usuario');
+      }      
       if (sub.afectaCuenta && sub.cuentaId) {
-        const cuenta = await this.cuentaModel.findOne({ cuentaId: sub.cuentaId, userId });
+        const cuenta = await this.cuentaModel.findOne({ id: sub.cuentaId, userId });
+  
         if (cuenta) {
           let cantidadAjustada = sub.cantidad;
   
@@ -185,10 +185,30 @@ export class SubcuentaService {
             cantidadAjustada = sub.cantidad * conversion.tasa;
           }
   
-          await this.cuentaModel.findOneAndUpdate(
-            { _id: sub.cuentaId, userId },
+          const resultado = await this.cuentaModel.findOneAndUpdate(
+            { id: sub.cuentaId, userId },
             { $inc: { cantidad: -cantidadAjustada } },
           );
+    
+          await this.cuentaHistorialService.registrarMovimiento({
+            userId,
+            cuentaId: sub.cuentaId,
+            monto: -cantidadAjustada,
+            tipo: 'ajuste_subcuenta',
+            descripcion: `Ajuste por eliminación de subcuenta: ${sub.nombre}`,
+            fecha: new Date().toISOString(),
+            subcuentaId: sub.subCuentaId,
+          });
+        } else {  
+          await this.cuentaHistorialService.registrarMovimiento({
+            userId,
+            cuentaId: sub.cuentaId,
+            monto: 0,
+            tipo: 'ajuste_subcuenta',
+            descripcion: `Eliminación de subcuenta: ${sub.nombre}`,
+            fecha: new Date().toISOString(),
+            subcuentaId: sub.subCuentaId,
+          });
         }
       }
   
