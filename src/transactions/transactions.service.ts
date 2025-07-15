@@ -30,7 +30,7 @@ export class TransactionsService {
     });
   
     const guardada = await nueva.save();
-    const result = await this.aplicarTransaccion(guardada);
+    const result: { subcuenta?: any; historial?: any } = await this.aplicarTransaccion(guardada);
 
     if (dto.afectaCuenta && dto.cuentaId) {
       await this.historialService.registrarMovimiento({
@@ -165,7 +165,11 @@ export class TransactionsService {
   }
 
   async obtenerHistorial({ subCuentaId, desde, hasta, limite, pagina, descripcion }) {
-    const filtros: any = { subcuentaId: subCuentaId };
+    const filtros: any = {};
+  
+    if (subCuentaId) {
+      filtros.subcuentaId = subCuentaId;
+    }
   
     if (descripcion) {
       filtros.descripcion = { $regex: descripcion, $options: 'i' };
@@ -180,67 +184,70 @@ export class TransactionsService {
     const [resultados, total] = await Promise.all([
       this.historialModel.find(filtros)
         .sort({ createdAt: -1 })
-        .skip((pagina - 1) * limite)
-        .limit(limite),
+        .skip(Math.max(0, (pagina - 1) * limite)) // Ensure skip is non-negative
+        .limit(Math.max(1, limite)), // Ensure limit is at least 1
       this.historialModel.countDocuments(filtros),
     ]);
   
     return {
       resultados,
-      totalPaginas: Math.ceil(total / limite),
+      totalPaginas: total > 0 ? Math.ceil(total / Math.max(1, limite)) : 0, // Ensure totalPaginas is non-negative
     };
   }
 
-  private async aplicarTransaccion(t: Transaction) {
+  private async aplicarTransaccion(t: Transaction): Promise<{ subcuenta?: any; historial?: any }> {
     const factor = t.tipo === 'ingreso' ? 1 : -1;
     const montoAjustado = t.monto * factor;
+    let subcuentaResult = null;
+    let historialResult: { cuentaId?: string } | null = null;
   
     if (t.subCuentaId) {
       const subcuenta = await this.subcuentaModel.findOne({ subCuentaId: t.subCuentaId });
-  
-      if (!subcuenta) {
-        throw new NotFoundException('Subcuenta no encontrada');
-      }
+      if (!subcuenta) throw new NotFoundException('Subcuenta no encontrada');
   
       await this.subcuentaModel.updateOne(
         { subCuentaId: t.subCuentaId },
         { $inc: { cantidad: montoAjustado } }
       );
-    
+      subcuentaResult = subcuenta;
+  
       if (t.afectaCuenta && subcuenta.cuentaId) {
         await this.cuentaModel.updateOne(
           { id: subcuenta.cuentaId, userId: t.userId },
           { $inc: { cantidad: montoAjustado } }
         );
+  
+        await this.historialService.registrarMovimiento({
+          userId: t.userId,
+          cuentaId: subcuenta.cuentaId,
+          monto: montoAjustado,
+          tipo: t.tipo,
+          descripcion: `Transacción de tipo ${t.tipo} aplicada`,
+          fecha: new Date().toISOString(),
+          subcuentaId: t.subCuentaId,
+        });
+        historialResult = { cuentaId: subcuenta.cuentaId };
       }
-  
-      const historial = await this.historialModel.create({
-        subcuentaId: t.subCuentaId,
-        userId: t.userId,
-        tipo: t.tipo,
-        descripcion: `Transacción de tipo ${t.tipo} aplicada`,
-        datos: {
-          concepto: t.concepto,
-          monto: t.monto,
-          afectaCuenta: t.afectaCuenta,
-        },
-      });
-  
-      const subcuentaActualizada = await this.subcuentaModel.findOne({ subCuentaId: t.subCuentaId }).lean();
-      return { subcuenta: subcuentaActualizada, historial };
-    }
-    
-    if (!t.subCuentaId && t.afectaCuenta && t.cuentaId) {
+    } else if (t.afectaCuenta && t.cuentaId) {
       const cuenta = await this.cuentaModel.findOne({ id: t.cuentaId, userId: t.userId });
-      if (!cuenta) {
-        throw new NotFoundException('Cuenta principal no encontrada');
-      }
-    
+      if (!cuenta) throw new NotFoundException('Cuenta principal no encontrada');
+  
       await this.cuentaModel.updateOne(
         { id: t.cuentaId, userId: t.userId },
         { $inc: { cantidad: montoAjustado } }
       );
+  
+      await this.historialService.registrarMovimiento({
+        userId: t.userId,
+        cuentaId: t.cuentaId,
+        monto: montoAjustado,
+        tipo: t.tipo,
+        descripcion: `Transacción de tipo ${t.tipo} aplicada`,
+        fecha: new Date().toISOString(),
+      });
+      historialResult = { cuentaId: t.cuentaId };
     }
-    return null;
+  
+    return { subcuenta: subcuentaResult, historial: historialResult };
   }
 }
