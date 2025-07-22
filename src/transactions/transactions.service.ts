@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Transaction, TransactionDocument } from './schemas/transaction.schema/transaction.schema';
@@ -195,23 +195,39 @@ export class TransactionsService {
     };
   }
 
-  private async aplicarTransaccion(t: Transaction): Promise<{ subcuenta?: any; historial?: any }> {
-    const factor = t.tipo === 'ingreso' ? 1 : -1;
-    const montoAjustado = t.monto * factor;
-    let subcuentaResult = null;
-    let historialResult: { cuentaId?: string } | null = null;
+  async aplicarTransaccion(t: Transaction): Promise<any> {
+    let subcuentaResult: { subCuentaId: string } | null = null;
+    let historialResult: { cuentaId: string } | null = null;
+  
+    const montoAjustado = t.tipo === 'ingreso' ? t.monto : -t.monto;
   
     if (t.subCuentaId) {
-      const subcuenta = await this.subcuentaModel.findOne({ subCuentaId: t.subCuentaId });
+      const subcuenta = await this.subcuentaModel.findOne({ subCuentaId: t.subCuentaId, userId: t.userId });
       if (!subcuenta) throw new NotFoundException('Subcuenta no encontrada');
   
+      if (t.tipo === 'egreso' && subcuenta.cantidad + montoAjustado < 0) {
+        throw new BadRequestException(
+          `No puede retirar más de ${subcuenta.cantidad} desde la subcuenta "${subcuenta.nombre}".`
+        );
+      }
+  
       await this.subcuentaModel.updateOne(
-        { subCuentaId: t.subCuentaId },
+        { subCuentaId: t.subCuentaId, userId: t.userId },
         { $inc: { cantidad: montoAjustado } }
       );
-      subcuentaResult = subcuenta;
+  
+      subcuentaResult = { subCuentaId: t.subCuentaId };
   
       if (t.afectaCuenta && subcuenta.cuentaId) {
+        const cuenta = await this.cuentaModel.findOne({ id: subcuenta.cuentaId, userId: t.userId });
+        if (!cuenta) throw new NotFoundException('Cuenta principal no encontrada');
+  
+        if (t.tipo === 'egreso' && cuenta.cantidad + montoAjustado < 0) {
+          throw new BadRequestException(
+            `No puede retirar más de ${cuenta.cantidad} desde la cuenta principal, ya que parte del saldo está reservado en subcuentas.`
+          );
+        }
+  
         await this.cuentaModel.updateOne(
           { id: subcuenta.cuentaId, userId: t.userId },
           { $inc: { cantidad: montoAjustado } }
@@ -222,7 +238,7 @@ export class TransactionsService {
           cuentaId: subcuenta.cuentaId,
           monto: montoAjustado,
           tipo: t.tipo,
-          descripcion: `Transacción de tipo ${t.tipo} aplicada`,
+          descripcion: `Transacción de tipo ${t.tipo} aplicada desde la subcuenta "${subcuenta.nombre}"`,
           fecha: new Date().toISOString(),
           subcuentaId: t.subCuentaId,
         });
@@ -231,6 +247,12 @@ export class TransactionsService {
     } else if (t.afectaCuenta && t.cuentaId) {
       const cuenta = await this.cuentaModel.findOne({ id: t.cuentaId, userId: t.userId });
       if (!cuenta) throw new NotFoundException('Cuenta principal no encontrada');
+  
+      if (t.tipo === 'egreso' && cuenta.cantidad + montoAjustado < 0) {
+        throw new BadRequestException(
+          `No puede retirar más de ${cuenta.cantidad} desde la cuenta principal.`
+        );
+      }
   
       await this.cuentaModel.updateOne(
         { id: t.cuentaId, userId: t.userId },

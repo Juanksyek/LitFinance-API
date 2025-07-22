@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RecurrentesController } from './recurrentes.controller';
 import { RecurrentesService } from './recurrentes.service';
-import { CrearRecurrenteDto } from './dto/crear-recurrente.dto';
+import { CrearRecurrenteDto, PlataformaDto } from './dto/crear-recurrente.dto';
 
 describe('RecurrentesController', () => {
   let controller: RecurrentesController;
@@ -41,7 +41,7 @@ describe('RecurrentesController', () => {
       afectaSubcuenta: false,
       userId: 'user123',
       recordatorios: [1, 3],
-      plataforma: 'Spotify',
+      plataforma: { nombre: 'Spotify' } as PlataformaDto,
     };
 
     await controller.crear({ user: { sub: 'user123' } } as any, dto);
