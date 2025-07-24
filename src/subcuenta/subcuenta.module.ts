@@ -22,5 +22,6 @@ import { CuentaHistorialModule } from '../cuenta-historial/cuenta-historial.modu
   ],
   controllers: [SubcuentaController],
   providers: [SubcuentaService],
+  exports: [MongooseModule],
 })
 export class SubcuentaModule {}
