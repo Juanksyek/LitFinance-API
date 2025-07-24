@@ -6,12 +6,16 @@ import { User, UserSchema } from './schemas/user.schema/user.schema';
 import { CleanupService } from './services/cleanup.service';
 import { CuentaModule } from '../cuenta/cuenta.module';
 import { SubcuentaModule } from 'src/subcuenta/subcuenta.module';
+import { TransactionsModule } from 'src/transactions/transactions.module';
+import { CuentaHistorialModule } from '../cuenta-historial/cuenta-historial.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
     CuentaModule,
     SubcuentaModule,
+    TransactionsModule,
+    CuentaHistorialModule
   ],
   controllers: [UserController],
   providers: [UserService, CleanupService],
