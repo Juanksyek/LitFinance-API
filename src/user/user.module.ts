@@ -4,10 +4,12 @@ import { UserController } from './user.controller';
 import { UserService } from './user.service';
 import { User, UserSchema } from './schemas/user.schema/user.schema';
 import { CleanupService } from './services/cleanup.service';
+import { CuentaModule } from '../cuenta/cuenta.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+    CuentaModule,
   ],
   controllers: [UserController],
   providers: [UserService, CleanupService],
