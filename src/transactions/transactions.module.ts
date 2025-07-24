@@ -20,6 +20,9 @@ import { CuentaHistorialModule } from '../cuenta-historial/cuenta-historial.modu
   ],
   controllers: [TransactionsController],
   providers: [TransactionsService],
-  exports: [TransactionsService],
+  exports: [
+    TransactionsService,
+    MongooseModule,
+  ],
 })
 export class TransactionsModule {}
