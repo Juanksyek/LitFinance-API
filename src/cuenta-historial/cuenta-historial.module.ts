@@ -2,14 +2,14 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { CuentaHistorialController } from './cuenta-historial.controller';
 import { CuentaHistorialService } from './cuenta-historial.service';
-import { CuentaHistorialSchema } from './schemas/cuenta-historial.schema';
+import { CuentaHistorial, CuentaHistorialSchema } from './schemas/cuenta-historial.schema';
 import { ConceptosModule } from '../conceptos/conceptos.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       {
-        name: 'CuentaHistorial',
+        name: CuentaHistorial.name,
         schema: CuentaHistorialSchema,
       },
     ]),
@@ -17,6 +17,9 @@ import { ConceptosModule } from '../conceptos/conceptos.module';
   ],
   controllers: [CuentaHistorialController],
   providers: [CuentaHistorialService],
-  exports: [CuentaHistorialService],
+  exports: [
+    CuentaHistorialService,
+    MongooseModule,
+  ],
 })
 export class CuentaHistorialModule {}
