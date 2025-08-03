@@ -68,17 +68,21 @@ export class AuthService {
             activationToken,
             tokenExpires,
             isPremium: dto.isPremium || false,
+            monedaPreferencia: dto.monedaPreferencia || 'USD', // Default si no se proporciona
         });
 
         await user.save();
         await this.emailService.sendConfirmationEmail(user.email, activationToken, user.nombreCompleto);
-        const monedaSeleccionada = await this.getMonedaInfo(dto.monedaPreferencia);
+        
+        // Obtener información de la moneda seleccionada (usar USD por defecto)
+        const codigoMoneda = dto.monedaPreferencia || 'USD';
+        const monedaSeleccionada = await this.getMonedaInfo(codigoMoneda);
 
         const cuentaPrincipal = new this.cuentaModel({
             id: await this.generateUniqueId(),
             userId: user.id,
             nombre: 'Cuenta Principal',
-            moneda: dto.monedaPreferencia,
+            moneda: codigoMoneda, // Usar la variable que ya tiene el default
             cantidad: 0,
             simbolo: monedaSeleccionada.simbolo,
             color: '#EF6C00',
