@@ -50,7 +50,7 @@ export class User {
   @Prop({ default: false })
   isPremium: boolean;
 
-  @Prop({ required: true })
+  @Prop({ required: false, default: 'USD' })  // Cambiado a optional con default
   monedaPreferencia: string;
 
   @Prop({ required: false })
