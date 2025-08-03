@@ -8,6 +8,7 @@ import { CuentaModule } from '../cuenta/cuenta.module';
 import { SubcuentaModule } from 'src/subcuenta/subcuenta.module';
 import { TransactionsModule } from 'src/transactions/transactions.module';
 import { CuentaHistorialModule } from '../cuenta-historial/cuenta-historial.module';
+import { MonedaModule } from '../moneda/moneda.module';
 
 @Module({
   imports: [
@@ -15,7 +16,8 @@ import { CuentaHistorialModule } from '../cuenta-historial/cuenta-historial.modu
     CuentaModule,
     SubcuentaModule,
     TransactionsModule,
-    CuentaHistorialModule
+    CuentaHistorialModule,
+    MonedaModule
   ],
   controllers: [UserController],
   providers: [UserService, CleanupService],

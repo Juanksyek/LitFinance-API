@@ -7,12 +7,14 @@ import { UserModule } from '../user/user.module';
 import { EmailModule } from '../email/email.module';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { CuentaModule } from '../cuenta/cuenta.module';
+import { MonedaModule } from '../moneda/moneda.module';
 
 @Module({
   imports: [
     UserModule,
     EmailModule,
     CuentaModule,
+    MonedaModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({

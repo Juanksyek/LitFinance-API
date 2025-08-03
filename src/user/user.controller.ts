@@ -4,6 +4,7 @@ import { UserService } from './user.service';
 import { CleanupService } from './services/cleanup.service';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 @Controller('user')
 export class UserController {
@@ -20,7 +21,7 @@ export class UserController {
 
     @Patch('update')
     @UseGuards(JwtAuthGuard)
-    async updateProfile(@Req() req, @Body() updateData: any) {
+    async updateProfile(@Req() req, @Body() updateData: UpdateProfileDto) {
         const userId = req.user.sub;
         return this.userService.updateProfile(userId, updateData);
     }
