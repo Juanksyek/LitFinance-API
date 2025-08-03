@@ -13,6 +13,7 @@ import { ChangePasswordDto } from './dto/change-password.dto/change-password.dto
 
 import { User, UserDocument } from '../user/schemas/user.schema/user.schema';
 import { Cuenta, CuentaDocument } from '../cuenta/schemas/cuenta.schema/cuenta.schema';
+import { Moneda, MonedaDocument } from '../moneda/schema/moneda.schema';
 import { EmailService } from '../email/email.service';
 
 @Injectable()
@@ -20,6 +21,7 @@ export class AuthService {
     constructor(
         @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
         @InjectModel(Cuenta.name) private readonly cuentaModel: Model<CuentaDocument>,
+        @InjectModel(Moneda.name) private readonly monedaModel: Model<MonedaDocument>,
         private readonly jwtService: JwtService,
         private readonly emailService: EmailService,
     ) { }
@@ -65,19 +67,21 @@ export class AuthService {
             isActive: false,
             activationToken,
             tokenExpires,
+            isPremium: dto.isPremium || false,
         });
 
         await user.save();
         await this.emailService.sendConfirmationEmail(user.email, activationToken, user.nombreCompleto);
+        const monedaSeleccionada = await this.getMonedaInfo(dto.monedaPreferencia);
 
         const cuentaPrincipal = new this.cuentaModel({
             id: await this.generateUniqueId(),
             userId: user.id,
             nombre: 'Cuenta Principal',
-            moneda: 'MXN',
+            moneda: dto.monedaPreferencia,
             cantidad: 0,
-            simbolo: '$',
-            color: '#1A2C23',
+            simbolo: monedaSeleccionada.simbolo,
+            color: '#EF6C00',
             isPrincipal: true,
         });
 
@@ -206,5 +210,13 @@ export class AuthService {
         await user.save();
 
         return { message: 'Contraseña actualizada correctamente.' };
+    }
+
+    private async getMonedaInfo(codigo: string) {
+        const moneda = await this.monedaModel.findOne({ codigo });
+        if (!moneda) {
+            throw new BadRequestException(`La moneda ${codigo} no existe`);
+        }
+        return moneda;
     }
 }
