@@ -46,6 +46,27 @@ export class User {
 
   @Prop({ default: 'usuario' })
   rol: string;
+
+  @Prop({ default: false })
+  isPremium: boolean;
+
+  @Prop({ required: true })
+  monedaPreferencia: string;
+
+  @Prop({ required: false })
+  telefono?: string;
+
+  @Prop({ required: false })
+  pais?: string;
+
+  @Prop({ required: false })
+  estado?: string;
+
+  @Prop({ required: false })
+  ciudad?: string;
+
+  @Prop({ required: false })
+  bio?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
