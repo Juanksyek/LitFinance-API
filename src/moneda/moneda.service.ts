@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Moneda, MonedaDocument } from './schema/moneda.schema';
 import { CreateMonedaDto } from './dto/create.moneda.dto';
+import { CatalogoMonedaDto } from './dto/catalogo-moneda.dto';
 import axios from 'axios';
 import { randomBytes } from 'crypto';
 
@@ -73,5 +74,24 @@ export class MonedaService {
     }
   
     return resultados;
+  }
+
+  async obtenerCatalogoPublico(): Promise<CatalogoMonedaDto[]> {
+    try {
+      const monedas = await this.monedaModel
+        .find({}, { _id: 0, codigo: 1, nombre: 1, simbolo: 1 })
+        .sort({ nombre: 1 })
+        .limit(100)
+        .lean()
+        .exec();
+
+      return monedas.map(moneda => ({
+        codigo: String(moneda.codigo).trim(),
+        nombre: String(moneda.nombre).trim(),
+        simbolo: String(moneda.simbolo).trim()
+      }));
+    } catch (error) {
+      throw new Error('Error interno del servidor');
+    }
   }
 }
