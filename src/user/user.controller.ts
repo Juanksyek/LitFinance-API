@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Body, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Body, Req, UseGuards, Delete, Param, Post } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UserService } from './user.service';
 import { CleanupService } from './services/cleanup.service';
@@ -31,5 +31,19 @@ export class UserController {
     @Get('cleanup')
     async cleanupInactiveUsers() {
       return this.cleanupService.deleteInactiveUsers();
+    }
+
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin')
+    @Delete('delete-completely/:userId')
+    async deleteUserCompletely(@Param('userId') userId: string) {
+        return this.cleanupService.deleteUserCompletely(userId);
+    }
+
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin')
+    @Post('format-account/:userId')
+    async formatUserAccount(@Param('userId') userId: string) {
+        return this.cleanupService.formatUserAccount(userId);
     }
 }
