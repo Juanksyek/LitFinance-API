@@ -20,6 +20,7 @@ import { NotificacionesModule } from './notificaciones/notificaciones.module';
 import { ConceptosModule } from './conceptos/conceptos.module';
 import { CuentaHistorialModule } from './cuenta-historial/cuenta-historial.module';
 import { PlataformasRecurrentesModule } from './plataformas-recurrentes/plataformas-recurrentes.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { PlataformasRecurrentesModule } from './plataformas-recurrentes/platafor
     ConceptosModule,
     CuentaHistorialModule,
     PlataformasRecurrentesModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [
