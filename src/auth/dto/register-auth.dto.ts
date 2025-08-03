@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, MinLength, MaxLength, IsInt, Min, Max, IsString } from 'class-validator';
+import { IsEmail, IsNotEmpty, MinLength, MaxLength, IsInt, Min, Max, IsString, IsOptional, IsBoolean } from 'class-validator';
 
 export class RegisterAuthDto {
   @IsNotEmpty()
@@ -23,4 +23,12 @@ export class RegisterAuthDto {
   @MinLength(6)
   @MaxLength(32)
   confirmPassword: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isPremium?: boolean;
+
+  @IsNotEmpty()
+  @IsString()
+  monedaPreferencia: string;
 }
