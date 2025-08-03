@@ -10,6 +10,9 @@ import { Moneda, MonedaSchema } from './schema/moneda.schema';
   ],
   controllers: [MonedaController],
   providers: [MonedaService],
-  exports: [MonedaService],
+  exports: [
+    MonedaService,
+    MongooseModule
+  ],
 })
 export class MonedaModule {}
