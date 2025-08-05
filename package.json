@@ -10,6 +10,7 @@
   },
   "scripts": {
     "build": "nest build",
+    "build:prod": "nest build --webpack",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nodemon",
@@ -20,7 +21,15 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "docker:build": "powershell -ExecutionPolicy Bypass -File scripts/build-optimized.bat",
+    "docker:build:prod": "docker-compose -f docker-compose.prod.yml build",
+    "docker:up": "docker-compose up -d",
+    "docker:up:prod": "docker-compose -f docker-compose.prod.yml up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f app",
+    "docker:clean": "docker system prune -f && docker volume prune -f",
+    "health": "curl -f http://localhost:3000/health || exit 1"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.787.0",
