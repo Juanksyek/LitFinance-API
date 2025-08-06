@@ -1,4 +1,4 @@
-import { Controller, Get, Body, Patch, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Body, Patch, UseGuards, Req, Query } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CuentaService } from './cuenta.service';
 import { UpdateCuentaDto } from './dto/update-cuenta.dto/update-cuenta.dto';
@@ -11,6 +11,15 @@ export class CuentaController {
   @Get('principal')
   async getCuentaPrincipal(@Req() req) {
     return this.cuentaService.obtenerCuentaPrincipal(req.user.sub);
+  }
+
+  /**
+   * Vista previa del cambio de moneda antes de ejecutarlo
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('preview-currency-change')
+  async previewCurrencyChange(@Req() req, @Query('nuevaMoneda') nuevaMoneda: string) {
+    return this.cuentaService.obtenerVistaPrevia(req.user.sub, nuevaMoneda);
   }
 
   @UseGuards(JwtAuthGuard)
