@@ -13,7 +13,8 @@ import { ConceptoPersonalizado, ConceptoPersonalizadoSchema } from '../conceptos
 
 // Importar módulos y servicios necesarios
 import { MonedaModule } from '../moneda/moneda.module';
-import { MoneyValidationService } from '../utils/validators/money-validation.service';
+import { UserModule } from '../user/user.module';
+import { UtilsModule } from '../utils/utils.module';
 
 @Module({
   imports: [
@@ -26,9 +27,11 @@ import { MoneyValidationService } from '../utils/validators/money-validation.ser
       { name: ConceptoPersonalizado.name, schema: ConceptoPersonalizadoSchema },
     ]),
     MonedaModule, // Para conversiones de moneda
+    UserModule, // Para el servicio de conversión de moneda
+    UtilsModule, // Para validaciones de moneda
   ],
   controllers: [AnalyticsController],
-  providers: [AnalyticsService, MoneyValidationService],
+  providers: [AnalyticsService],
   exports: [
     AnalyticsService,
     MongooseModule,
