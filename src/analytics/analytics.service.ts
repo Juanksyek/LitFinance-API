@@ -9,6 +9,7 @@ import { CuentaHistorial, CuentaHistorialDocument } from '../cuenta-historial/sc
 import { ConceptoPersonalizado, ConceptoPersonalizadoDocument } from '../conceptos/schemas/concepto-personalizado.schema';
 import { MonedaService } from '../moneda/moneda.service';
 import { MoneyValidationService } from '../utils/validators/money-validation.service';
+import { CurrencyConversionService } from '../user/services/currency-conversion.service';
 import { AnalyticsFiltersDto, MovimientosFiltersDto } from './dto/analytics-filters.dto';
 import {
   ResumenFinanciero,
@@ -35,6 +36,7 @@ export class AnalyticsService {
     @InjectModel(ConceptoPersonalizado.name) private readonly conceptoModel: Model<ConceptoPersonalizadoDocument>,
     private readonly monedaService: MonedaService,
     private readonly moneyValidationService: MoneyValidationService,
+    private readonly currencyConversionService: CurrencyConversionService,
   ) {}
 
   /**
