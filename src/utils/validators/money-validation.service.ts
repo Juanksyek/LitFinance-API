@@ -48,7 +48,7 @@ export class MoneyValidationService {
     }
 
     // Verificar montos negativos (excepto para contextos específicos)
-    if (amount < 0 && !['adjustment', 'correction'].includes(context)) {
+    if (amount < 0 && !['adjustment', 'correction', 'currency_conversion', 'balance_conversion'].includes(context)) {
       return {
         isValid: false,
         error: 'El monto no puede ser negativo'
@@ -205,8 +205,7 @@ export class MoneyValidationService {
   private isValidNumber(value: number): boolean {
     return typeof value === 'number' && 
            !isNaN(value) && 
-           isFinite(value) && 
-           value >= 0;
+           isFinite(value);
   }
 
   private hasValidDecimals(amount: number): boolean {

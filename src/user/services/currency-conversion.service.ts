@@ -53,6 +53,13 @@ export class CurrencyConversionService {
 
     // 2. Obtener tasa de cambio
     const tasaCambio = await this.monedaService.obtenerTasaCambio(monedaActual, nuevaMoneda);
+    
+    // Validar tasa de cambio
+    if (!tasaCambio || !tasaCambio.tasa || !Number.isFinite(tasaCambio.tasa) || tasaCambio.tasa <= 0) {
+      this.logger.error(`Tasa de cambio inválida: ${JSON.stringify(tasaCambio)}`);
+      throw new BadRequestException(`No se pudo obtener una tasa de cambio válida de ${monedaActual} a ${nuevaMoneda}`);
+    }
+    
     this.logger.log(`Tasa de cambio obtenida: 1 ${monedaActual} = ${tasaCambio.tasa} ${nuevaMoneda}`);
 
     const conversiones: ConversionResult['conversiones'] = [];
@@ -203,9 +210,13 @@ export class CurrencyConversionService {
       const montoOriginal = cuentaPrincipal.cantidad;
       const montoConvertido = this.moneyValidationService.sanitizeAmount(montoOriginal * tasaCambio);
 
+      // Debug logging para conversión de cuenta principal
+      this.logger.debug(`Conversión cuenta principal: ${montoOriginal} ${monedaOrigen} -> ${montoConvertido} ${monedaDestino} (tasa: ${tasaCambio})`);
+
       // Validar el monto convertido
       const validacion = this.moneyValidationService.validateAmount(montoConvertido, 'currency_conversion');
       if (!validacion.isValid) {
+        this.logger.error(`Error validación monto convertido: ${validacion.error}. Valores: original=${montoOriginal}, convertido=${montoConvertido}, tasa=${tasaCambio}`);
         throw new Error(`Monto convertido inválido para cuenta principal: ${validacion.error}`);
       }
 
@@ -291,10 +302,13 @@ export class CurrencyConversionService {
         const montoOriginal = transaccion.monto;
         const montoConvertido = this.moneyValidationService.sanitizeAmount(montoOriginal * tasaCambio);
 
+        // Debug logging para transacciones
+        this.logger.debug(`Conversión transacción ${transaccion.transaccionId}: ${montoOriginal} -> ${montoConvertido} (tasa: ${tasaCambio})`);
+
         // Validar el monto convertido
         const validacion = this.moneyValidationService.validateAmount(montoConvertido, 'currency_conversion');
         if (!validacion.isValid) {
-          this.logger.warn(`Transacción ${transaccion.transaccionId} tiene monto inválido después de conversión: ${validacion.error}`);
+          this.logger.warn(`Transacción ${transaccion.transaccionId} tiene monto inválido después de conversión: ${validacion.error}. Valores: original=${montoOriginal}, convertido=${montoConvertido}, tasa=${tasaCambio}`);
           continue;
         }
 
