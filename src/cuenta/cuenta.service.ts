@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Cuenta } from './schemas/cuenta.schema/cuenta.schema';
@@ -7,11 +7,15 @@ import { MonedaService } from '../moneda/moneda.service';
 import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.service';
 import { CuentaDocument } from './schemas/cuenta.schema/cuenta.schema';
 import { CurrencyConversionService } from '../user/services/currency-conversion.service';
+import { User, UserDocument } from '../user/schemas/user.schema/user.schema';
 
 @Injectable()
 export class CuentaService {
+  private readonly logger = new Logger(CuentaService.name);
+
   constructor(
     @InjectModel(Cuenta.name) private cuentaModel: Model<Cuenta>,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
     private readonly monedaService: MonedaService,
     private readonly cuentaHistorialService: CuentaHistorialService,
     @Inject(forwardRef(() => CurrencyConversionService))
@@ -31,6 +35,31 @@ export class CuentaService {
    */
   async obtenerVistaPrevia(userId: string, nuevaMoneda: string) {
     return this.currencyConversionService.obtenerResumenCambioMoneda(userId, nuevaMoneda);
+  }
+
+  /**
+   * Verifica y corrige la sincronización entre monedaPreferencia del usuario y moneda de cuenta principal
+   */
+  async verificarSincronizacionMoneda(userId: string): Promise<void> {
+    const usuario = await this.userModel.findOne({ id: userId });
+    const cuenta = await this.cuentaModel.findOne({ userId, isPrincipal: true });
+
+    if (usuario && cuenta && usuario.monedaPreferencia !== cuenta.moneda) {
+      this.logger.warn(`Inconsistencia detectada: Usuario ${userId} tiene monedaPreferencia=${usuario.monedaPreferencia} pero cuenta principal tiene moneda=${cuenta.moneda}`);
+      
+      // Sincronizar: la cuenta principal es la fuente de verdad
+      await this.userModel.findOneAndUpdate(
+        { id: userId },
+        { 
+          $set: { 
+            monedaPreferencia: cuenta.moneda,
+            updatedAt: new Date()
+          }
+        }
+      );
+      
+      this.logger.log(`Sincronización completada: Usuario ${userId} monedaPreferencia actualizada a ${cuenta.moneda}`);
+    }
   }
 
   async editarCuentaPrincipal(userId: string, updateData: UpdateCuentaDto): Promise<any> {
@@ -53,8 +82,25 @@ export class CuentaService {
       // Usar el servicio de conversión completa que maneja todo el historial
       const resultado = await this.currencyConversionService.cambiarMonedaBaseUsuario(userId, updateData.moneda);
       
-      // Obtener la cuenta actualizada después de la conversión
+      // Aplicar cualquier otro cambio adicional si los hay (nombre, color, etc.)
+      const otrosUpdateData = { ...updateData };
+      delete otrosUpdateData.moneda; // Ya se manejó la moneda
+      delete otrosUpdateData.simbolo; // Se actualiza automáticamente con la moneda
+      delete otrosUpdateData.cantidad; // Se convierte automáticamente
+      
+      if (Object.keys(otrosUpdateData).length > 0) {
+        await this.cuentaModel.findOneAndUpdate(
+          { userId, isPrincipal: true },
+          { $set: otrosUpdateData },
+          { new: true }
+        );
+      }
+      
+      // Obtener la cuenta actualizada final
       const cuentaActualizada = await this.cuentaModel.findOne({ userId, isPrincipal: true });
+      
+      // Verificar sincronización entre usuario y cuenta
+      await this.verificarSincronizacionMoneda(userId);
       
       return {
         message: resultado.message,
