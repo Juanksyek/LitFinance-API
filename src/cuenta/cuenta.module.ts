@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { CuentaService } from './cuenta.service';
 import { CuentaController } from './cuenta.controller';
 import { Cuenta, CuentaSchema } from './schemas/cuenta.schema/cuenta.schema';
+import { User, UserSchema } from '../user/schemas/user.schema/user.schema';
 import { MonedaModule } from '../moneda/moneda.module';
 import { CuentaHistorialModule } from '../cuenta-historial/cuenta-historial.module';
 import { UserModule } from '../user/user.module';
@@ -14,6 +15,7 @@ import { UserModule } from '../user/user.module';
     forwardRef(() => UserModule), // Evitar dependencia circular
     MongooseModule.forFeature([
       { name: Cuenta.name, schema: CuentaSchema },
+      { name: User.name, schema: UserSchema },
     ]),
   ],
   controllers: [CuentaController],
