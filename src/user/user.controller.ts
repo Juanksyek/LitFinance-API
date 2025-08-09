@@ -5,6 +5,7 @@ import { CleanupService } from './services/cleanup.service';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ToggleFavoritaMonedaDto } from '../moneda/dto/toggle-favorita-moneda.dto';
 
 @Controller('user')
 export class UserController {
@@ -45,5 +46,19 @@ export class UserController {
     @Post('format-account/:userId')
     async formatUserAccount(@Param('userId') userId: string) {
         return this.cleanupService.formatUserAccount(userId);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Post('monedas/toggle-favorita')
+    async toggleMonedaFavorita(@Req() req: any, @Body() dto: ToggleFavoritaMonedaDto) {
+        const userId = req.user.sub;
+        return this.userService.toggleMonedaFavorita(userId, dto.codigoMoneda);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Get('monedas/favoritas')
+    async getMonedasFavoritas(@Req() req: any) {
+        const userId = req.user.sub;
+        return this.userService.getMonedasFavoritas(userId);
     }
 }
