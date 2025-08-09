@@ -53,6 +53,9 @@ export class User {
   @Prop({ required: false, default: 'USD' })  // Cambiado a optional con default
   monedaPreferencia: string;
 
+  @Prop({ type: [String], default: [] })
+  monedasFavoritas: string[];
+
   @Prop({ required: false })
   telefono?: string;
 
