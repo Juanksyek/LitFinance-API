@@ -1,7 +1,8 @@
-import { UseGuards,Controller, Get, Query, Post, Body } from '@nestjs/common';
+import { UseGuards,Controller, Get, Query, Post, Body, Req, Patch } from '@nestjs/common';
 import { MonedaService } from './moneda.service';
 import { CreateMonedaDto } from './dto/create.moneda.dto';
 import { CatalogoMonedaDto } from './dto/catalogo-moneda.dto';
+import { ToggleFavoritaMonedaDto } from './dto/toggle-favorita-moneda.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('monedas')
@@ -15,8 +16,20 @@ export class MonedaController {
 
   @UseGuards(JwtAuthGuard)
   @Get()
-  async listar() {
-    return this.monedaService.listarMonedas();
+  async listar(@Req() req: any) {
+    const userId = req.user?.userId;
+    return this.monedaService.listarMonedasConFavoritas(userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('favoritas')
+  async obtenerFavoritas(@Req() req: any) {
+    const userId = req.user?.userId;
+    const resultado = await this.monedaService.listarMonedasConFavoritas(userId);
+    return {
+      favoritas: resultado.favoritas,
+      totalFavoritas: resultado.totalFavoritas
+    };
   }
 
   @UseGuards(JwtAuthGuard)
