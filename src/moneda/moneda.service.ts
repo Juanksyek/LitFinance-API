@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { Moneda, MonedaDocument } from './schema/moneda.schema';
 import { CreateMonedaDto } from './dto/create.moneda.dto';
 import { CatalogoMonedaDto } from './dto/catalogo-moneda.dto';
+import { User, UserDocument } from '../user/schemas/user.schema/user.schema';
 import axios from 'axios';
 import { randomBytes } from 'crypto';
 
@@ -11,10 +12,45 @@ import { randomBytes } from 'crypto';
 export class MonedaService {
   constructor(
     @InjectModel(Moneda.name) private monedaModel: Model<MonedaDocument>,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
   ) {}
 
   async listarMonedas(): Promise<Moneda[]> {
     return this.monedaModel.find();
+  }
+
+  async listarMonedasConFavoritas(userId?: string): Promise<any> {
+    const todasLasMonedas = await this.monedaModel.find().sort({ nombre: 1 });
+    
+    if (!userId) {
+      return {
+        favoritas: [],
+        otras: todasLasMonedas,
+        total: todasLasMonedas.length
+      };
+    }
+
+    const user = await this.userModel.findOne({ id: userId }).select('monedasFavoritas');
+    const monedasFavoritas = user?.monedasFavoritas || [];
+
+    // Separar monedas favoritas y no favoritas
+    const favoritas: any[] = [];
+    const otras: any[] = [];
+
+    for (const moneda of todasLasMonedas) {
+      if (monedasFavoritas.includes(moneda.codigo)) {
+        favoritas.push({ ...moneda.toObject(), esFavorita: true });
+      } else {
+        otras.push({ ...moneda.toObject(), esFavorita: false });
+      }
+    }
+
+    return {
+      favoritas,
+      otras,
+      total: todasLasMonedas.length,
+      totalFavoritas: favoritas.length
+    };
   }
 
   async crearMoneda(dto: CreateMonedaDto): Promise<Moneda> {

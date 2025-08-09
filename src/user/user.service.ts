@@ -51,5 +51,67 @@ export class UserService {
       message: 'Perfil actualizado correctamente',
       user,
     };
+  }
+
+  async toggleMonedaFavorita(userId: string, codigoMoneda: string) {
+    // Verificar que la moneda existe
+    const monedaExists = await this.monedaModel.findOne({ codigo: codigoMoneda });
+    if (!monedaExists) {
+      throw new BadRequestException(`La moneda ${codigoMoneda} no existe`);
+    }
+
+    const user = await this.userModel.findOne({ id: userId });
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    const monedasFavoritas = user.monedasFavoritas || [];
+    const yaEsFavorita = monedasFavoritas.includes(codigoMoneda);
+
+    let updateOperation;
+    let mensaje;
+
+    if (yaEsFavorita) {
+      // Remover de favoritas
+      updateOperation = { $pull: { monedasFavoritas: codigoMoneda } };
+      mensaje = `Moneda ${codigoMoneda} removida de favoritas`;
+    } else {
+      // Añadir a favoritas
+      updateOperation = { $push: { monedasFavoritas: codigoMoneda } };
+      mensaje = `Moneda ${codigoMoneda} añadida a favoritas`;
+    }
+
+    const updatedUser = await this.userModel.findOneAndUpdate(
+      { id: userId },
+      updateOperation,
+      { new: true }
+    ).select('-password -activationToken -resetCode');
+
+    if (!updatedUser) {
+      throw new NotFoundException('Usuario no encontrado al actualizar');
+    }
+
+    return {
+      message: mensaje,
+      esFavorita: !yaEsFavorita,
+      monedasFavoritas: updatedUser.monedasFavoritas,
+    };
+  }
+
+  async getMonedasFavoritas(userId: string) {
+    const user = await this.userModel.findOne({ id: userId }).select('monedasFavoritas');
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    // Obtener detalles completos de las monedas favoritas
+    const monedasDetalladas = await this.monedaModel.find({ 
+      codigo: { $in: user.monedasFavoritas || [] } 
+    }).sort({ codigo: 1 });
+
+    return {
+      monedasFavoritas: user.monedasFavoritas || [],
+      detalles: monedasDetalladas,
+    };
   }  
 }
