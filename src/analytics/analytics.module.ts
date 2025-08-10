@@ -3,7 +3,6 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AnalyticsController } from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
 
-// Importar todos los schemas necesarios
 import { User, UserSchema } from '../user/schemas/user.schema/user.schema';
 import { Cuenta, CuentaSchema } from '../cuenta/schemas/cuenta.schema/cuenta.schema';
 import { Subcuenta, SubcuentaSchema } from '../subcuenta/schemas/subcuenta.schema/subcuenta.schema';
@@ -26,9 +25,9 @@ import { UtilsModule } from '../utils/utils.module';
       { name: CuentaHistorial.name, schema: CuentaHistorialSchema },
       { name: ConceptoPersonalizado.name, schema: ConceptoPersonalizadoSchema },
     ]),
-    MonedaModule, // Para conversiones de moneda
-    UserModule, // Para el servicio de conversión de moneda
-    UtilsModule, // Para validaciones de moneda
+    MonedaModule,
+    UserModule,
+    UtilsModule,
   ],
   controllers: [AnalyticsController],
   providers: [AnalyticsService],
