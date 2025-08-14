@@ -23,3 +23,4 @@ export class AppController {
     };
   }
 }
+// Exportar el controlador
