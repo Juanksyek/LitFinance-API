@@ -59,4 +59,3 @@ import { AnalyticsModule } from './analytics/analytics.module';
   ],
 })
 export class AppModule {}
-// Exportar el módulo 
