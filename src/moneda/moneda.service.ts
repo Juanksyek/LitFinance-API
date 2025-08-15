@@ -33,7 +33,6 @@ export class MonedaService {
     const user = await this.userModel.findOne({ id: userId }).select('monedasFavoritas');
     const monedasFavoritas = user?.monedasFavoritas || [];
 
-    // Separar monedas favoritas y no favoritas
     const favoritas: any[] = [];
     const otras: any[] = [];
 

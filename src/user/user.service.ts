@@ -54,7 +54,6 @@ export class UserService {
   }
 
   async toggleMonedaFavorita(userId: string, codigoMoneda: string) {
-    // Verificar que la moneda existe
     const monedaExists = await this.monedaModel.findOne({ codigo: codigoMoneda });
     if (!monedaExists) {
       throw new BadRequestException(`La moneda ${codigoMoneda} no existe`);
