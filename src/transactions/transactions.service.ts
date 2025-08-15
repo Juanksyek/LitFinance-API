@@ -185,14 +185,14 @@ export class TransactionsService {
     const [resultados, total] = await Promise.all([
       this.historialModel.find(filtros)
         .sort({ createdAt: -1 })
-        .skip(Math.max(0, (pagina - 1) * limite)) // Ensure skip is non-negative
-        .limit(Math.max(1, limite)), // Ensure limit is at least 1
+        .skip(Math.max(0, (pagina - 1) * limite))
+        .limit(Math.max(1, limite)),
       this.historialModel.countDocuments(filtros),
     ]);
   
     return {
       resultados,
-      totalPaginas: total > 0 ? Math.ceil(total / Math.max(1, limite)) : 0, // Ensure totalPaginas is non-negative
+      totalPaginas: total > 0 ? Math.ceil(total / Math.max(1, limite)) : 0,
     };
   }
 
