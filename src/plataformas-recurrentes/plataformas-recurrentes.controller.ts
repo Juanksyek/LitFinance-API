@@ -16,7 +16,7 @@ export class PlataformasRecurrentesController {
 
   @Get()
   async listar(@Query('search') search?: string) {
-    return this.servicio.listar(search); // aquí estaba mal escrito
+    return this.servicio.listar(search);
   }
 
   @Patch(':plataformaId')
