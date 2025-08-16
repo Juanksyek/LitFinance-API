@@ -118,22 +118,16 @@ export class CurrencyConversionService {
         totalElementosConvertidos += historialConvertido.length;
       }
 
-      // 6. Convertir recurrentes (usando modelo dinámico)
-      const recurrentesConvertidos = await this.convertirRecurrentes(
-        userId, 
-        monedaActual, 
-        nuevaMoneda, 
-        tasaCambio.tasa
-      );
+      // 6. NOTA: Los recurrentes se excluyen del cambio de moneda para mantener su moneda original
+      // Los pagos recurrentes mantienen su configuración original independientemente del cambio de moneda del usuario
+      this.logger.log('Los pagos recurrentes se mantienen en su moneda original y no se convierten');
       
-      if (recurrentesConvertidos.length > 0) {
-        conversiones.push({
-          tipo: 'Pagos Recurrentes',
-          elementosAfectados: recurrentesConvertidos.length,
-          detalles: recurrentesConvertidos
-        });
-        totalElementosConvertidos += recurrentesConvertidos.length;
-      }
+      // Crear entrada en conversiones para informar que se excluyeron los recurrentes
+      conversiones.push({
+        tipo: 'Pagos Recurrentes (Excluidos)',
+        elementosAfectados: 0,
+        detalles: [{ mensaje: 'Los pagos recurrentes mantienen su moneda original por diseño' }]
+      });
 
       // 7. Actualizar la moneda preferencia del usuario
       await this.userModel.findOneAndUpdate(
@@ -166,7 +160,7 @@ export class CurrencyConversionService {
           elementosConvertidos: {
             transacciones: transaccionesConvertidas.length,
             historialCuenta: historialConvertido.length,
-            recurrentes: recurrentesConvertidos.length,
+            recurrentes: 0, // Los recurrentes se excluyen del cambio de moneda
             cuentaPrincipal: cuentaPrincipalConvertida.convertida
           },
           totalElementos: totalElementosConvertidos
@@ -426,110 +420,6 @@ export class CurrencyConversionService {
   }
 
   /**
-   * Convierte los pagos recurrentes usando modelo dinámico
-   */
-  private async convertirRecurrentes(
-    userId: string, 
-    monedaOrigen: string, 
-    monedaDestino: string, 
-    tasaCambio: number
-  ): Promise<any[]> {
-    try {
-      // Usar modelo dinámico para acceder a la colección de recurrentes
-      const RecurrenteModel = this.userModel.db.model('Recurrente');
-      
-      const recurrentes = await RecurrenteModel.find({
-        userId,
-        $or: [
-          { moneda: monedaOrigen },
-          { moneda: { $exists: false } },
-          { moneda: null },
-          { moneda: '' }
-        ]
-      });
-
-      if (recurrentes.length === 0) {
-        return [];
-      }
-
-      const recurrentesConvertidos: any[] = [];
-
-      for (const recurrente of recurrentes) {
-        const montoOriginal = recurrente.monto;
-        const montoConvertido = this.moneyValidationService.sanitizeAmount(montoOriginal * tasaCambio);
-
-        // Validar el monto convertido
-        const validacion = this.moneyValidationService.validateAmount(montoConvertido, 'currency_conversion');
-        if (!validacion.isValid) {
-          this.logger.warn(`Recurrente ${recurrente.recurrenteId} tiene monto inválido después de conversión: ${validacion.error}`);
-          continue;
-        }
-
-        await RecurrenteModel.findOneAndUpdate(
-          { recurrenteId: recurrente.recurrenteId },
-          {
-            $set: {
-              monto: montoConvertido,
-              moneda: monedaDestino,
-              updatedAt: new Date(),
-              // Agregar metadata de conversión
-              conversionMetadata: {
-                montoOriginal,
-                monedaOriginal: monedaOrigen,
-                tasaCambioUsada: tasaCambio,
-                fechaConversion: new Date()
-              }
-            }
-          }
-        );
-
-        // También convertir el historial de recurrentes si existe
-        try {
-          const HistorialRecurrenteModel = this.userModel.db.model('HistorialRecurrente');
-          await HistorialRecurrenteModel.updateMany(
-            { 
-              recurrenteId: recurrente.recurrenteId,
-              $or: [
-                { moneda: monedaOrigen },
-                { moneda: { $exists: false } },
-                { moneda: null },
-                { moneda: '' }
-              ]
-            },
-            {
-              $set: {
-                moneda: monedaDestino,
-                updatedAt: new Date()
-              },
-              $mul: {
-                monto: tasaCambio
-              }
-            }
-          );
-        } catch (historialError) {
-          this.logger.warn(`No se pudo convertir historial de recurrente ${recurrente.recurrenteId}:`, historialError);
-        }
-
-        recurrentesConvertidos.push({
-          id: recurrente.recurrenteId,
-          nombre: recurrente.nombre,
-          plataforma: recurrente.plataforma?.nombre || 'N/A',
-          montoAnterior: montoOriginal,
-          montoNuevo: montoConvertido,
-          frecuencia: `${recurrente.frecuenciaTipo}: ${recurrente.frecuenciaValor}`
-        });
-      }
-
-      return recurrentesConvertidos;
-
-    } catch (error) {
-      this.logger.error('Error al convertir recurrentes:', error);
-      // No lanzar error aquí ya que los recurrentes son opcionales
-      return [];
-    }
-  }
-
-  /**
    * Registra el cambio de moneda en el historial general
    */
   private async registrarCambioMonedaEnHistorial(
@@ -615,7 +505,7 @@ export class CurrencyConversionService {
       })
     ]);
 
-    // Contar recurrentes
+    // Contar recurrentes (para información, pero no se convertirán)
     let recurrentes = 0;
     try {
       const RecurrenteModel = this.userModel.db.model('Recurrente');
@@ -643,10 +533,10 @@ export class CurrencyConversionService {
         cuentaPrincipal: cuentaPrincipal > 0,
         transacciones,
         historialCuenta: historial,
-        recurrentes,
-        total: cuentaPrincipal + transacciones + historial + recurrentes
+        recurrentes: 0, // Los recurrentes se excluyen del cambio de moneda
+        total: cuentaPrincipal + transacciones + historial // Sin incluir recurrentes
       },
-      advertencia: 'Esta operación convertirá todas las cifras históricas. Las subcuentas mantendrán sus monedas individuales.',
+      advertencia: 'Esta operación convertirá todas las cifras históricas excepto los pagos recurrentes. Las subcuentas y recurrentes mantendrán sus monedas individuales.',
       reversible: false
     };
   }
