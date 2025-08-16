@@ -1,17 +1,4 @@
-import {
-  Controller,
-  Get,
-  Req,
-  Post,
-  Body,
-  Param,
-  Put,
-  Delete,
-  Query,
-  HttpCode,
-  HttpStatus,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Req, Post, Body, Param, Put, Delete, Query, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import { RecurrentesService } from './recurrentes.service';
 import { CrearRecurrenteDto } from './dto/crear-recurrente.dto';
 import { EditarRecurrenteDto } from './dto/editar-recurrente.dto';
