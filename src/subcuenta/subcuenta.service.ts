@@ -46,7 +46,6 @@ export class SubcuentaService {
   
     const creada = await subcuenta.save();
   
-    // Afectar cuenta principal solo si aplica
     if (dto.afectaCuenta && cuentaPrincipalId) {
       const cuenta = await this.cuentaModel.findOne({ id: cuentaPrincipalId, userId });
       if (!cuenta) throw new NotFoundException('Cuenta principal no encontrada');
