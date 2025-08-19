@@ -47,7 +47,6 @@ export class CuentaService {
     if (usuario && cuenta && usuario.monedaPreferencia !== cuenta.moneda) {
       this.logger.warn(`Inconsistencia detectada: Usuario ${userId} tiene monedaPreferencia=${usuario.monedaPreferencia} pero cuenta principal tiene moneda=${cuenta.moneda}`);
       
-      // Sincronizar: la cuenta principal es la fuente de verdad
       await this.userModel.findOneAndUpdate(
         { id: userId },
         { 
