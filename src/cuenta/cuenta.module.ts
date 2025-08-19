@@ -12,7 +12,7 @@ import { UserModule } from '../user/user.module';
   imports: [
     MonedaModule,
     CuentaHistorialModule,
-    forwardRef(() => UserModule), // Evitar dependencia circular
+    forwardRef(() => UserModule),
     MongooseModule.forFeature([
       { name: Cuenta.name, schema: CuentaSchema },
       { name: User.name, schema: UserSchema },
