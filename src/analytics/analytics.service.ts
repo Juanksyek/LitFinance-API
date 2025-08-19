@@ -841,7 +841,6 @@ export class AnalyticsService {
       });
     }
 
-    // Log de subcuentas sospechosas
     if (subcuentasSospechosas.length > 0) {
       this.logger.warn(`Se detectaron ${subcuentasSospechosas.length} subcuentas con montos sospechosos para usuario ${userId}`);
     }

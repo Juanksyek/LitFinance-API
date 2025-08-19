@@ -1,13 +1,4 @@
-import { 
-  Controller, 
-  Get, 
-  Query, 
-  Req, 
-  UseGuards, 
-  ValidationPipe,
-  UsePipes,
-  Logger
-} from '@nestjs/common';
+import { Controller, Get, Query, Req, UseGuards, ValidationPipe, UsePipes, Logger } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AnalyticsService } from './analytics.service';
 import { AnalyticsFiltersDto, MovimientosFiltersDto } from './dto/analytics-filters.dto';

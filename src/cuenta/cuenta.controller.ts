@@ -13,9 +13,6 @@ export class CuentaController {
     return this.cuentaService.obtenerCuentaPrincipal(req.user.sub);
   }
 
-  /**
-   * Vista previa del cambio de moneda antes de ejecutarlo
-   */
   @UseGuards(JwtAuthGuard)
   @Get('preview-currency-change')
   async previewCurrencyChange(@Req() req, @Query('nuevaMoneda') nuevaMoneda: string) {

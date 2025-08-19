@@ -28,7 +28,7 @@ export class RegisterAuthDto {
   @IsBoolean()
   isPremium?: boolean;
 
-  @IsOptional()  // Cambiado a opcional
+  @IsOptional()
   @IsString()
   monedaPreferencia?: string;
 }
