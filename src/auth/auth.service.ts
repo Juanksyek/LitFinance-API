@@ -159,8 +159,8 @@ export class AuthService {
             throw new BadRequestException('No existe una cuenta con ese correo.');
         }
 
-        const code = randomInt(1000, 9999).toString(); // código de 4 dígitos
-        const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
+        const code = randomInt(1000, 9999).toString();
+        const expires = new Date(Date.now() + 10 * 60 * 1000);
 
         user.resetCode = code;
         user.resetExpires = expires;
