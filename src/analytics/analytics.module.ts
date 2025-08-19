@@ -10,7 +10,6 @@ import { Transaction, TransactionSchema } from '../transactions/schemas/transact
 import { CuentaHistorial, CuentaHistorialSchema } from '../cuenta-historial/schemas/cuenta-historial.schema';
 import { ConceptoPersonalizado, ConceptoPersonalizadoSchema } from '../conceptos/schemas/concepto-personalizado.schema';
 
-// Importar módulos y servicios necesarios
 import { MonedaModule } from '../moneda/moneda.module';
 import { UserModule } from '../user/user.module';
 import { UtilsModule } from '../utils/utils.module';
