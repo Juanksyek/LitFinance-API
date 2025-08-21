@@ -813,7 +813,6 @@ export class AnalyticsService {
     for (const sub of subcuentas) {
       const montoSanitizado = this.moneyValidationService.sanitizeAmount(sub.cantidad);
       
-      // Validar el monto de la subcuenta
       const validacion = this.moneyValidationService.validateAmount(montoSanitizado, 'subcuenta');
       
       if (!validacion.isValid) {
