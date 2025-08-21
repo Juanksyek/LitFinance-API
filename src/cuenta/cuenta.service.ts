@@ -30,9 +30,6 @@ export class CuentaService {
     return cuenta;
   }
 
-  /**
-   * Obtiene una vista previa de lo que se afectará con el cambio de moneda
-   */
   async obtenerVistaPrevia(userId: string, nuevaMoneda: string) {
     return this.currencyConversionService.obtenerResumenCambioMoneda(userId, nuevaMoneda);
   }
