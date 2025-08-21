@@ -19,9 +19,6 @@ export class CuentaController {
     return this.cuentaService.obtenerVistaPrevia(req.user.sub, nuevaMoneda);
   }
 
-  /**
-   * Sincroniza la monedaPreferencia del usuario con la moneda de la cuenta principal
-   */
   @UseGuards(JwtAuthGuard)
   @Post('sync-currency')
   async syncCurrency(@Req() req) {
