@@ -219,7 +219,6 @@ export class AnalyticsController {
     const userId = req.user.sub;
     this.logger.log(`Obteniendo subcuentas activas para usuario: ${userId}`);
     
-    // Forzar incluir solo subcuentas activas
     const filtrosActivas = { ...filtros, incluirSubcuentasInactivas: false };
     const estadisticas = await this.analyticsService.obtenerEstadisticasPorSubcuenta(userId, filtrosActivas);
     
