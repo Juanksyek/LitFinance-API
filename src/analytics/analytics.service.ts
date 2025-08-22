@@ -873,7 +873,6 @@ export class AnalyticsService {
   }
 
   private async calcularCrecimientoMensual(subcuentaId: string, userId: string): Promise<number> {
-    // Implementación simplificada - se puede mejorar
     const ahora = new Date();
     const mesAnterior = new Date(ahora);
     mesAnterior.setMonth(ahora.getMonth() - 1);

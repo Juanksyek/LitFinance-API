@@ -54,7 +54,7 @@ export class AnalyticsFiltersDto {
 
   @IsOptional()
   @IsString()
-  monedaBase?: string; // Para convertir todo a una moneda específica
+  monedaBase?: string;
 
   @IsOptional()
   @IsBoolean()
