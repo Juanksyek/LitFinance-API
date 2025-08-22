@@ -75,7 +75,7 @@ export interface EstadisticasPorSubcuenta {
   totalEgresos: number;
   cantidadMovimientos: number;
   ultimoMovimiento?: Date;
-  crecimientoMensual: number; // Porcentaje de crecimiento
+  crecimientoMensual: number;
 }
 
 export interface EstadisticasPorRecurrente {
