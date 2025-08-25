@@ -887,7 +887,6 @@ export class AnalyticsService {
       sum + (tx.tipo === 'ingreso' ? tx.monto : -tx.monto), 0
     );
 
-    // Simplificado: retorna el balance como porcentaje de crecimiento
     return balanceActual > 0 ? 5.0 : balanceActual < 0 ? -3.0 : 0.0;
   }
 
