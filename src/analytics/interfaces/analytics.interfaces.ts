@@ -98,7 +98,7 @@ export interface EstadisticasPorRecurrente {
 }
 
 export interface AnalisisTemporalData {
-  fecha: string; // ISO string
+  fecha: string;
   ingresos: number;
   gastos: number;
   balance: number;
