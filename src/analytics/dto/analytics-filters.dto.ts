@@ -65,7 +65,7 @@ export class AnalyticsFiltersDto {
   @IsNumber()
   @Type(() => Number)
   @Min(0)
-  @Max(999999999999) // Límite: 999,999,999,999 (999 mil millones)
+  @Max(999999999999)
   montoMinimo?: number;
 
   @IsOptional()
