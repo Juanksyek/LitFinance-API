@@ -67,7 +67,6 @@ export class CuentaService {
 
     // Si se cambia la moneda, utilizamos el servicio completo de conversión
     if (updateData.moneda && updateData.moneda !== cuenta.moneda) {
-      // Validar que la nueva moneda existe
       const todas = await this.monedaService.listarMonedas();
       const nuevaMoneda = todas.find((m) => m.codigo === updateData.moneda);
 

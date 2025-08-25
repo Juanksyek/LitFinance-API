@@ -82,7 +82,7 @@ export class AuthService {
             id: await this.generateUniqueId(),
             userId: user.id,
             nombre: 'Cuenta Principal',
-            moneda: codigoMoneda, // Usar la variable que ya tiene el default
+            moneda: codigoMoneda,
             cantidad: 0,
             simbolo: monedaSeleccionada.simbolo,
             color: '#EF6C00',
