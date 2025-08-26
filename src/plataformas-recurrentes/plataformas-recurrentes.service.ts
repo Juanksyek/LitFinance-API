@@ -1,4 +1,3 @@
-// commnt
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { PlataformaRecurrente } from './schemas/plataforma-recurrente.schema';

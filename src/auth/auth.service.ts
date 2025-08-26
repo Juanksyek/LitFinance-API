@@ -68,7 +68,7 @@ export class AuthService {
             activationToken,
             tokenExpires,
             isPremium: dto.isPremium || false,
-            monedaPreferencia: dto.monedaPreferencia || 'USD', // Default si no se proporciona
+            monedaPreferencia: dto.monedaPreferencia || 'USD',
         });
 
         await user.save();
