@@ -65,7 +65,6 @@ export class CuentaService {
       throw new NotFoundException('Cuenta principal no encontrada');
     }
 
-    // Si se cambia la moneda, utilizamos el servicio completo de conversión
     if (updateData.moneda && updateData.moneda !== cuenta.moneda) {
       const todas = await this.monedaService.listarMonedas();
       const nuevaMoneda = todas.find((m) => m.codigo === updateData.moneda);
