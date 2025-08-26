@@ -41,7 +41,6 @@ describe('CuentaHistorialService', () => {
     service = module.get<CuentaHistorialService>(CuentaHistorialService);
     historialModel = module.get(getModelToken('CuentaHistorial'));
 
-    // Simular métodos estáticos directamente sobre historialModel
     historialModel.countDocuments = jest.fn().mockResolvedValue(1);
     historialModel.find = jest.fn().mockReturnValue({
       sort: jest.fn().mockReturnThis(),
