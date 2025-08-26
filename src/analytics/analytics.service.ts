@@ -903,7 +903,6 @@ export class AnalyticsService {
   }
 
   private procesarDatosTemporal(resultados: any[], fechaInicio: Date, fechaFin: Date, periodo: string): AnalisisTemporalData[] {
-    // Implementación simplificada
     return resultados.map(resultado => ({
       fecha: resultado._id,
       ingresos: resultado.ingresos || 0,
