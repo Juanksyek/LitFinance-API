@@ -73,7 +73,6 @@ export class CuentaService {
         throw new BadRequestException('La moneda seleccionada no es válida');
       }
 
-      // Usar el servicio de conversión completa que maneja todo el historial
       const resultado = await this.currencyConversionService.cambiarMonedaBaseUsuario(userId, updateData.moneda);
       
       // Aplicar cualquier otro cambio adicional si los hay (nombre, color, etc.)
