@@ -686,7 +686,6 @@ export class AnalyticsService {
     return query;
   }
 
-  // ... Continuaré con el resto de métodos privados en la siguiente parte
   private async procesarIngresosGastos(transacciones: any[], historial: any[], monedaBase: string): Promise<{ totalIngresado: any; totalGastado: any }> {
     // Implementación mejorada con validación y sanitización
     let totalIngresado = 0;

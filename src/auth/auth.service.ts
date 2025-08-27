@@ -74,7 +74,6 @@ export class AuthService {
         await user.save();
         await this.emailService.sendConfirmationEmail(user.email, activationToken, user.nombreCompleto);
         
-        // Obtener información de la moneda seleccionada (usar USD por defecto)
         const codigoMoneda = dto.monedaPreferencia || 'USD';
         const monedaSeleccionada = await this.getMonedaInfo(codigoMoneda);
 

@@ -99,5 +99,5 @@ export class MovimientosFiltersDto extends AnalyticsFiltersDto {
 
   @IsOptional()
   @IsString()
-  busqueda?: string; // Búsqueda por descripción o concepto
+  busqueda?: string;
 }
