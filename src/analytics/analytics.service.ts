@@ -687,7 +687,6 @@ export class AnalyticsService {
   }
 
   private async procesarIngresosGastos(transacciones: any[], historial: any[], monedaBase: string): Promise<{ totalIngresado: any; totalGastado: any }> {
-    // Implementación mejorada con validación y sanitización
     let totalIngresado = 0;
     let totalGastado = 0;
     const desglosePorMonedaIngresos = new Map();
