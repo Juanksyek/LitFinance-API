@@ -103,7 +103,6 @@ export class UserService {
       throw new NotFoundException('Usuario no encontrado');
     }
 
-    // Obtener detalles completos de las monedas favoritas
     const monedasDetalladas = await this.monedaModel.find({ 
       codigo: { $in: user.monedasFavoritas || [] } 
     }).sort({ codigo: 1 });

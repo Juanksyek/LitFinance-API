@@ -12,7 +12,6 @@ import { CuentaHistorialModule } from '../cuenta-historial/cuenta-historial.modu
 import { MonedaModule } from '../moneda/moneda.module';
 import { UtilsModule } from '../utils/utils.module';
 
-// Importar schemas necesarios para CurrencyConversionService
 import { Cuenta, CuentaSchema } from '../cuenta/schemas/cuenta.schema/cuenta.schema';
 import { Transaction, TransactionSchema } from '../transactions/schemas/transaction.schema/transaction.schema';
 import { CuentaHistorial, CuentaHistorialSchema } from '../cuenta-historial/schemas/cuenta-historial.schema';

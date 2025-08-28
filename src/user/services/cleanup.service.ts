@@ -265,7 +265,6 @@ export class CleanupService {
                 { 
                     $set: { 
                         cantidad: 0,
-                        // Mantener: nombre, moneda, simbolo, color, isPrincipal
                     }
                 }
             );
