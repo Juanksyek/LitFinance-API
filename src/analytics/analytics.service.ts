@@ -692,7 +692,6 @@ export class AnalyticsService {
     const desglosePorMonedaIngresos = new Map();
     const desglosePorMonedaGastos = new Map();
 
-    // Lista para detectar transacciones extremas
     const transaccionesExtremas: Array<{ tipo: string; monto: number; fuente: string }> = [];
 
     // Procesar transacciones con validación
