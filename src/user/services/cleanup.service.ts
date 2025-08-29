@@ -179,7 +179,6 @@ export class CleanupService {
     async formatUserAccount(userId: string) {
         this.logger.log(`Iniciando formateo de cuenta del usuario: ${userId}`);
 
-        // Verificar que el usuario existe
         const user = await this.userModel.findOne({ id: userId });
         if (!user) {
             throw new NotFoundException('Usuario no encontrado');

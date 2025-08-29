@@ -89,7 +89,6 @@ export class CuentaService {
         );
       }
       
-      // Obtener la cuenta actualizada final
       const cuentaActualizada = await this.cuentaModel.findOne({ userId, isPrincipal: true });
       
       await this.verificarSincronizacionMoneda(userId);
