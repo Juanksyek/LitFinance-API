@@ -75,7 +75,6 @@ export class UserService {
       updateOperation = { $pull: { monedasFavoritas: codigoMoneda } };
       mensaje = `Moneda ${codigoMoneda} removida de favoritas`;
     } else {
-      // Añadir a favoritas
       updateOperation = { $push: { monedasFavoritas: codigoMoneda } };
       mensaje = `Moneda ${codigoMoneda} añadida a favoritas`;
     }
