@@ -184,7 +184,6 @@ export class CleanupService {
             throw new NotFoundException('Usuario no encontrado');
         }
 
-        // Verificar que tiene cuenta principal
         const cuentaPrincipal = await this.cuentaModel.findOne({ userId, isPrincipal: true });
         if (!cuentaPrincipal) {
             throw new NotFoundException('Cuenta principal no encontrada');
