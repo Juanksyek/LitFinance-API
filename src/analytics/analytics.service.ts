@@ -694,7 +694,6 @@ export class AnalyticsService {
 
     const transaccionesExtremas: Array<{ tipo: string; monto: number; fuente: string }> = [];
 
-    // Procesar transacciones con validación
     for (const tx of transacciones) {
       const montoSanitizado = this.moneyValidationService.sanitizeAmount(tx.monto);
       
