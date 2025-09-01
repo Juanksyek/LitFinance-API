@@ -71,7 +71,6 @@ export class UserService {
     let mensaje;
 
     if (yaEsFavorita) {
-      // Remover de favoritas
       updateOperation = { $pull: { monedasFavoritas: codigoMoneda } };
       mensaje = `Moneda ${codigoMoneda} removida de favoritas`;
     } else {

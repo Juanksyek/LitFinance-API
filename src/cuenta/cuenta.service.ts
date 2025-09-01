@@ -75,7 +75,6 @@ export class CuentaService {
 
       const resultado = await this.currencyConversionService.cambiarMonedaBaseUsuario(userId, updateData.moneda);
       
-      // Aplicar cualquier otro cambio adicional si los hay (nombre, color, etc.)
       const otrosUpdateData = { ...updateData };
       delete otrosUpdateData.moneda; // Ya se manejó la moneda
       delete otrosUpdateData.simbolo; // Se actualiza automáticamente con la moneda
