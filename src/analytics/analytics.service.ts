@@ -697,7 +697,6 @@ export class AnalyticsService {
     for (const tx of transacciones) {
       const montoSanitizado = this.moneyValidationService.sanitizeAmount(tx.monto);
       
-      // Validar el monto
       const validacion = this.moneyValidationService.validateAmount(montoSanitizado, 'analytics');
       if (!validacion.isValid) {
         this.logger.warn(`Transacción inválida ignorada: ${validacion.error} - Monto: ${tx.monto}`);
