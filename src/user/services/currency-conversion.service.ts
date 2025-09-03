@@ -121,7 +121,6 @@ export class CurrencyConversionService {
       // 6. NOTA: Los recurrentes se excluyen del cambio de moneda para mantener su moneda original
       this.logger.log('Los pagos recurrentes se mantienen en su moneda original y no se convierten');
       
-      // Crear entrada en conversiones para informar que se excluyeron los recurrentes
       conversiones.push({
         tipo: 'Pagos Recurrentes (Excluidos)',
         elementosAfectados: 0,
