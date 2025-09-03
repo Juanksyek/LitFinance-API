@@ -73,7 +73,6 @@ export class CleanupService {
     async deleteUserCompletely(userId: string) {
         this.logger.log(`Iniciando eliminación completa del usuario: ${userId}`);
 
-        // Verificar que el usuario existe
         const user = await this.userModel.findOne({ id: userId });
         if (!user) {
             throw new NotFoundException('Usuario no encontrado');
