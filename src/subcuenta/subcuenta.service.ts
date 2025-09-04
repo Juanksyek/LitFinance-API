@@ -77,7 +77,6 @@ export class SubcuentaService {
     }
 
 
-    // Historial de subcuenta
     await this.historialModel.create({
       subcuentaId: creada._id,
       userId,
