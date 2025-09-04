@@ -54,7 +54,6 @@ export class CurrencyConversionService {
     // 2. Obtener tasa de cambio
     const tasaCambio = await this.monedaService.obtenerTasaCambio(monedaActual, nuevaMoneda);
     
-    // Validar tasa de cambio
     if (!tasaCambio || !tasaCambio.tasa || !Number.isFinite(tasaCambio.tasa) || tasaCambio.tasa <= 0) {
       this.logger.error(`Tasa de cambio inválida: ${JSON.stringify(tasaCambio)}`);
       throw new BadRequestException(`No se pudo obtener una tasa de cambio válida de ${monedaActual} a ${nuevaMoneda}`);
