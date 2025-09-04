@@ -9,7 +9,6 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 export class RecurrentesController {
   constructor(private readonly recurrentesService: RecurrentesService) {}
 
-  // Crear un nuevo recurrente
   @Post()
   async crear(@Req() req, @Body() dto: CrearRecurrenteDto) {
     const userId = req.user.sub;
