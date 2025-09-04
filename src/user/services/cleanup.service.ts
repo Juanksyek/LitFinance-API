@@ -19,7 +19,6 @@ export class CleanupService {
         @InjectModel(CuentaHistorial.name) private readonly historialModel: Model<CuentaHistorialDocument>,
     ) { }
 
-    // Método existente: No se modifica
     async deleteInactiveUsers() {
         const twelveMonthsAgo = new Date();
         twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
