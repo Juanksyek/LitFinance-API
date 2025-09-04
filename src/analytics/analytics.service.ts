@@ -725,7 +725,6 @@ export class AnalyticsService {
       }
     }
 
-    // Procesar historial con validación
     for (const hist of historial) {
       const montoSanitizado = this.moneyValidationService.sanitizeAmount(Math.abs(hist.monto));
       
