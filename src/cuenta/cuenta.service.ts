@@ -78,7 +78,7 @@ export class CuentaService {
       const otrosUpdateData = { ...updateData };
       delete otrosUpdateData.moneda;
       delete otrosUpdateData.simbolo;
-      delete otrosUpdateData.cantidad; // Se convierte automáticamente
+      delete otrosUpdateData.cantidad;
       
       if (Object.keys(otrosUpdateData).length > 0) {
         await this.cuentaModel.findOneAndUpdate(
