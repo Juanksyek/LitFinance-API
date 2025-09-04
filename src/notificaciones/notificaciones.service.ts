@@ -1,4 +1,3 @@
-// commnt
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { DispositivoUsuario, DispositivoUsuarioDocument } from './schemas/dispositivo-usuario.schema';
