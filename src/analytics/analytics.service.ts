@@ -713,7 +713,6 @@ export class AnalyticsService {
 
       if (tx.tipo === 'ingreso') {
         totalIngresado += montoSanitizado;
-        // Agregar al desglose por moneda
         const moneda = tx.moneda || monedaBase;
         const actualIngreso = desglosePorMonedaIngresos.get(moneda) || 0;
         desglosePorMonedaIngresos.set(moneda, actualIngreso + montoSanitizado);
