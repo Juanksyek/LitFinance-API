@@ -77,7 +77,7 @@ export class CuentaService {
       
       const otrosUpdateData = { ...updateData };
       delete otrosUpdateData.moneda;
-      delete otrosUpdateData.simbolo; // Se actualiza automáticamente con la moneda
+      delete otrosUpdateData.simbolo;
       delete otrosUpdateData.cantidad; // Se convierte automáticamente
       
       if (Object.keys(otrosUpdateData).length > 0) {
