@@ -15,7 +15,6 @@ export class RecurrentesController {
     return this.recurrentesService.crear(dto, userId);
   }
 
-  // Listar todos los recurrentes del usuario (pasar userId como query por ahora)
   @Get()
   async listar(
     @Req() req,
@@ -65,7 +64,6 @@ export class RecurrentesController {
     return this.recurrentesService.pausarRecurrente(recurrenteId, req.user.sub);
   }
 
-  // Endpoint para reanudar un recurrente
   @Put(':recurrenteId/reanudar')
   async reanudar(@Param('recurrenteId') recurrenteId: string, @Req() req) {
     return this.recurrentesService.reanudarRecurrente(recurrenteId, req.user.sub);

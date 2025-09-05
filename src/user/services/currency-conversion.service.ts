@@ -157,7 +157,7 @@ export class CurrencyConversionService {
           elementosConvertidos: {
             transacciones: transaccionesConvertidas.length,
             historialCuenta: historialConvertido.length,
-            recurrentes: 0, // Los recurrentes se excluyen del cambio de moneda
+            recurrentes: 0,
             cuentaPrincipal: cuentaPrincipalConvertida.convertida
           },
           totalElementos: totalElementosConvertidos

@@ -99,7 +99,6 @@ export class CuentaService {
       };
     }
 
-    // Si no se cambia la moneda, actualización normal
     const cuentaActualizada = await this.cuentaModel.findOneAndUpdate(
       { userId, isPrincipal: true },
       { $set: updateData },
