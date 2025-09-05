@@ -718,7 +718,6 @@ export class AnalyticsService {
         desglosePorMonedaIngresos.set(moneda, actualIngreso + montoSanitizado);
       } else {
         totalGastado += montoSanitizado;
-        // Agregar al desglose por moneda
         const moneda = tx.moneda || monedaBase;
         const actualGasto = desglosePorMonedaGastos.get(moneda) || 0;
         desglosePorMonedaGastos.set(moneda, actualGasto + montoSanitizado);
