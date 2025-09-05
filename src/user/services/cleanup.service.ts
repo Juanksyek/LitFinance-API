@@ -31,7 +31,6 @@ export class CleanupService {
         return { deletedUsers: result.deletedCount };
     }
 
-    // Nuevo método: Limpieza de cuentas relacionadas con un usuario
     async cleanupAccount(userId: string, cuentaId: string) {
         // Verificar si la cuenta existe
         const cuenta = await this.cuentaModel.findOne({ _id: cuentaId, userId });
