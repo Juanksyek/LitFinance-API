@@ -45,7 +45,6 @@ export class AnalyticsService {
   async obtenerResumenFinanciero(userId: string, filtros: AnalyticsFiltersDto): Promise<ResumenFinanciero> {
     this.logger.log(`Generando resumen financiero para usuario: ${userId}`);
 
-    // Validar filtros de montos si están presentes
     if (filtros.montoMinimo !== undefined || filtros.montoMaximo !== undefined) {
       this.validarFiltrosMontos(filtros);
     }
