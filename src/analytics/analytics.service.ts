@@ -49,7 +49,6 @@ export class AnalyticsService {
       this.validarFiltrosMontos(filtros);
     }
 
-    // Verificar que el usuario existe
     const usuario = await this.userModel.findOne({ id: userId });
     if (!usuario) {
       throw new NotFoundException('Usuario no encontrado');
