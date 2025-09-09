@@ -192,7 +192,6 @@ export class CurrencyConversionService {
         return { convertida: false };
       }
 
-      // Solo convertir si la cuenta está en la moneda anterior
       if (cuentaPrincipal.moneda !== monedaOrigen) {
         this.logger.log(`Cuenta principal ya está en moneda diferente (${cuentaPrincipal.moneda}), omitiendo conversión`);
         return { convertida: false };
