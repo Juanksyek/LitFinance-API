@@ -640,7 +640,6 @@ export class AnalyticsService {
     }
 
     if (filtros.soloTransaccionesManuales) {
-      // Excluir transacciones generadas por recurrentes
       query.esRecurrente = { $ne: true };
     }
 
