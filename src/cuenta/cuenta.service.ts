@@ -92,7 +92,8 @@ export class CuentaService {
       return {
         message: resultado.message,
         cuenta: cuentaActualizada,
-        conversion: resultado
+        conversion: resultado,
+        intentosRestantes: resultado.intentosRestantes,
       };
     }
 
