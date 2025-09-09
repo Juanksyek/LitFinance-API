@@ -19,28 +19,42 @@ export class MonedaService {
     return this.monedaModel.find();
   }
 
-  async listarMonedasConFavoritas(userId?: string): Promise<any> {
-    const todasLasMonedas = await this.monedaModel.find().sort({ nombre: 1 });
-    
+  async listarMonedasConFavoritas(userId?: string): Promise<{
+    favoritas: any[];
+    otras: any[];
+    total: number;
+    totalFavoritas: number;
+  }> {
+    // Trae todas las monedas ordenadas por nombre
+    const todasLasMonedas = await this.monedaModel
+      .find()
+      .sort({ nombre: 1 })
+      .lean()
+      .exec();
+
+    // Si no hay usuario, devolver todas en "otras" con esFavorita=false
     if (!userId) {
+      const otras = todasLasMonedas.map((m) => ({ ...m, esFavorita: false }));
       return {
         favoritas: [],
-        otras: todasLasMonedas,
-        total: todasLasMonedas.length
+        otras,
+        total: otras.length,
+        totalFavoritas: 0,
       };
     }
 
-    const user = await this.userModel.findOne({ id: userId }).select('monedasFavoritas');
-    const monedasFavoritas = user?.monedasFavoritas || [];
+    // 🛠️ FIX: usar _id (findById) para encontrar al usuario
+    const user = await this.userModel.findById(userId).select('monedasFavoritas').lean().exec();
+    const monedasFavoritas: string[] = user?.monedasFavoritas || [];
 
     const favoritas: any[] = [];
     const otras: any[] = [];
 
     for (const moneda of todasLasMonedas) {
       if (monedasFavoritas.includes(moneda.codigo)) {
-        favoritas.push({ ...moneda.toObject(), esFavorita: true });
+        favoritas.push({ ...moneda, esFavorita: true });
       } else {
-        otras.push({ ...moneda.toObject(), esFavorita: false });
+        otras.push({ ...moneda, esFavorita: false });
       }
     }
 
@@ -48,7 +62,7 @@ export class MonedaService {
       favoritas,
       otras,
       total: todasLasMonedas.length,
-      totalFavoritas: favoritas.length
+      totalFavoritas: favoritas.length,
     };
   }
 
@@ -128,5 +142,48 @@ export class MonedaService {
     } catch (error) {
       throw new Error('Error interno del servidor');
     }
+  }
+
+  // === NUEVO: Toggle de moneda favorita, persistente en el usuario ===
+  async toggleFavorita(userId: string, codigoMoneda: string): Promise<{
+    esFavorita: boolean;
+    monedasFavoritas: string[];
+    message: string;
+  }> {
+    // (Opcional) valida que exista la moneda
+    const existe = await this.monedaModel.exists({ codigo: codigoMoneda });
+    if (!existe) {
+      throw new Error(`Moneda ${codigoMoneda} no existe`);
+    }
+
+    const user = await this.userModel.findById(userId).select('monedasFavoritas').exec();
+    if (!user) {
+      throw new Error('Usuario no encontrado');
+    }
+
+    const yaEsFav = (user.monedasFavoritas || []).includes(codigoMoneda);
+
+    if (yaEsFav) {
+      await this.userModel.updateOne(
+        { _id: userId },
+        { $pull: { monedasFavoritas: codigoMoneda } }
+      );
+    } else {
+      await this.userModel.updateOne(
+        { _id: userId },
+        { $addToSet: { monedasFavoritas: codigoMoneda } }
+      );
+    }
+
+    const updated = await this.userModel.findById(userId).select('monedasFavoritas').lean().exec();
+    const esFavorita = !yaEsFav;
+
+    return {
+      esFavorita,
+      monedasFavoritas: updated?.monedasFavoritas ?? [],
+      message: esFavorita
+        ? `Moneda ${codigoMoneda} añadida a favoritas`
+        : `Moneda ${codigoMoneda} removida de favoritas`,
+    };
   }
 }
