@@ -1,4 +1,4 @@
-import { UseGuards,Controller, Get, Query, Post, Body, Req, Patch } from '@nestjs/common';
+import { UseGuards, Controller, Get, Query, Post, Body, Req, Patch } from '@nestjs/common';
 import { MonedaService } from './moneda.service';
 import { CreateMonedaDto } from './dto/create.moneda.dto';
 import { CatalogoMonedaDto } from './dto/catalogo-moneda.dto';
@@ -17,14 +17,14 @@ export class MonedaController {
   @UseGuards(JwtAuthGuard)
   @Get()
   async listar(@Req() req: any) {
-    const userId = req.user?.userId;
+    const userId = req.user?.userId || req.user?.sub; // por si tu guard usa 'sub'
     return this.monedaService.listarMonedasConFavoritas(userId);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get('favoritas')
   async obtenerFavoritas(@Req() req: any) {
-    const userId = req.user?.userId;
+    const userId = req.user?.userId || req.user?.sub;
     const resultado = await this.monedaService.listarMonedasConFavoritas(userId);
     return {
       favoritas: resultado.favoritas,
@@ -58,5 +58,13 @@ export class MonedaController {
   @Post('poblar')
   async poblar(@Body() divisas: CreateMonedaDto[]) {
     return this.monedaService.poblarCatalogoDivisas(divisas);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('toggle-favorita')
+  async toggleFavorita(@Req() req: any, @Body() dto: ToggleFavoritaMonedaDto) {
+    const userId = req.user?.userId || req.user?.sub;
+    const { codigoMoneda } = dto;
+    return this.monedaService.toggleFavorita(userId, codigoMoneda);
   }
 }
