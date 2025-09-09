@@ -34,8 +34,10 @@ export class CuentaController {
   async updateCuentaPrincipal(@Req() req, @Body() dto: UpdateCuentaDto) {
     const result = await this.cuentaService.editarCuentaPrincipal(req.user.sub, dto);
     return {
-      ...result,
-      intentosRestantes: result.intentosRestantes,
+      message: result.message,
+      cuenta: result.cuenta,
+      conversion: result.conversion,
+      intentosRestantes: result.intentosRestantes, // Aseguramos que los intentos restantes se incluyan en la respuesta
     };
   }
 }
