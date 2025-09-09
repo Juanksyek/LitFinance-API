@@ -1,4 +1,4 @@
-import { UseGuards, Controller, Get, Query, Post, Body, Req, Patch } from '@nestjs/common';
+import { UseGuards, Controller, Get, Query, Post, Body, Req } from '@nestjs/common';
 import { MonedaService } from './moneda.service';
 import { CreateMonedaDto } from './dto/create.moneda.dto';
 import { CatalogoMonedaDto } from './dto/catalogo-moneda.dto';
@@ -17,7 +17,7 @@ export class MonedaController {
   @UseGuards(JwtAuthGuard)
   @Get()
   async listar(@Req() req: any) {
-    const userId = req.user?.userId || req.user?.sub; // por si tu guard usa 'sub'
+    const userId = req.user?.userId || req.user?.sub;
     return this.monedaService.listarMonedasConFavoritas(userId);
   }
 
@@ -28,7 +28,7 @@ export class MonedaController {
     const resultado = await this.monedaService.listarMonedasConFavoritas(userId);
     return {
       favoritas: resultado.favoritas,
-      totalFavoritas: resultado.totalFavoritas
+      totalFavoritas: resultado.totalFavoritas,
     };
   }
 
