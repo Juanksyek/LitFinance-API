@@ -32,6 +32,10 @@ export class CuentaController {
   @UseGuards(JwtAuthGuard)
   @Patch('editar-principal')
   async updateCuentaPrincipal(@Req() req, @Body() dto: UpdateCuentaDto) {
-    return this.cuentaService.editarCuentaPrincipal(req.user.sub, dto);
+    const result = await this.cuentaService.editarCuentaPrincipal(req.user.sub, dto);
+    return {
+      ...result,
+      intentosRestantes: result.intentosRestantes,
+    };
   }
 }
