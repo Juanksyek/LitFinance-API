@@ -32,7 +32,6 @@ export class CleanupService {
     }
 
     async cleanupAccount(userId: string, cuentaId: string) {
-        // Verificar si la cuenta existe
         const cuenta = await this.cuentaModel.findOne({ _id: cuentaId, userId });
         if (!cuenta) {
             throw new NotFoundException('Cuenta no encontrada');
