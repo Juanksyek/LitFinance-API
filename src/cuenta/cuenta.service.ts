@@ -33,10 +33,7 @@ export class CuentaService {
   async obtenerVistaPrevia(userId: string, nuevaMoneda: string) {
     return this.currencyConversionService.obtenerResumenCambioMoneda(userId, nuevaMoneda);
   }
-
-  /**
-   * Verifica y corrige la sincronización entre monedaPreferencia del usuario y moneda de cuenta principal
-   */
+  
   async verificarSincronizacionMoneda(userId: string): Promise<void> {
     const usuario = await this.userModel.findOne({ id: userId });
     const cuenta = await this.cuentaModel.findOne({ userId, isPrincipal: true });
