@@ -70,6 +70,12 @@ export class User {
 
   @Prop({ required: false })
   bio?: string;
+
+  @Prop({ type: Date, default: null })
+  ultimoReinicioIntentos: Date | null;
+
+  @Prop({ type: Number, default: 3 }) // Campo para almacenar los intentos restantes
+  intentosRestantes: number;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

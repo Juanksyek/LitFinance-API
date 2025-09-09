@@ -19,7 +19,8 @@ export class CurrencyConversionService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(Cuenta.name) private readonly cuentaModel: Model<CuentaDocument>,
     @InjectModel(Transaction.name) private readonly transactionModel: Model<TransactionDocument>,
-    @InjectModel(CuentaHistorial.name) private readonly historialModel: Model<CuentaHistorialDocument>,
+    @InjectModel(CuentaHistorial.name)
+    private readonly historialModel: Model<CuentaHistorialDocument>,
     @InjectModel(Moneda.name) private readonly monedaModel: Model<MonedaDocument>,
     private readonly monedaService: MonedaService,
     private readonly cuentaHistorialService: CuentaHistorialService,
@@ -32,7 +33,7 @@ export class CurrencyConversionService {
    * @param nuevaMoneda Código de la nueva moneda
    * @returns Resultado de la conversión con estadísticas
    */
-  async cambiarMonedaBaseUsuario(userId: string, nuevaMoneda: string): Promise<ConversionResult> {
+  async cambiarMonedaBaseUsuario(userId: string, nuevaMoneda: string): Promise<ConversionResult & { intentosRestantes: number }> {
     this.logger.log(`Iniciando cambio de moneda base para usuario ${userId} a ${nuevaMoneda}`);
 
     // 1. Validaciones iniciales
@@ -41,9 +42,35 @@ export class CurrencyConversionService {
       throw new NotFoundException('Usuario no encontrado');
     }
 
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Verificar si es un nuevo mes y reiniciar intentos
+    if (!usuario.ultimoReinicioIntentos || usuario.ultimoReinicioIntentos < startOfMonth) {
+      this.logger.log(`Reiniciando intentos de cambio de moneda para usuario ${userId}`);
+      usuario.ultimoReinicioIntentos = now;
+      await this.userModel.findOneAndUpdate(
+        { id: userId },
+        { $set: { ultimoReinicioIntentos: now } },
+      );
+    }
+
     const monedaDestino = await this.monedaModel.findOne({ codigo: nuevaMoneda });
     if (!monedaDestino) {
       throw new BadRequestException(`La moneda ${nuevaMoneda} no existe en el catálogo`);
+    }
+
+    // Verificar límite de cambios de moneda
+    const cambiosEsteMes = await this.historialModel.countDocuments({
+      userId,
+      tipo: 'cambio_moneda',
+      fecha: { $gte: startOfMonth },
+    });
+
+    this.logger.debug(`Cambios realizados este mes para usuario ${userId}: ${cambiosEsteMes}`);
+
+    if (cambiosEsteMes >= 3) {
+      throw new BadRequestException('Límite de 3 cambios de moneda por mes alcanzado');
     }
 
     const monedaActual = usuario.monedaPreferencia || 'USD';
@@ -53,13 +80,22 @@ export class CurrencyConversionService {
 
     // 2. Obtener tasa de cambio
     const tasaCambio = await this.monedaService.obtenerTasaCambio(monedaActual, nuevaMoneda);
-    
-    if (!tasaCambio || !tasaCambio.tasa || !Number.isFinite(tasaCambio.tasa) || tasaCambio.tasa <= 0) {
+
+    if (
+      !tasaCambio ||
+      !tasaCambio.tasa ||
+      !Number.isFinite(tasaCambio.tasa) ||
+      tasaCambio.tasa <= 0
+    ) {
       this.logger.error(`Tasa de cambio inválida: ${JSON.stringify(tasaCambio)}`);
-      throw new BadRequestException(`No se pudo obtener una tasa de cambio válida de ${monedaActual} a ${nuevaMoneda}`);
+      throw new BadRequestException(
+        `No se pudo obtener una tasa de cambio válida de ${monedaActual} a ${nuevaMoneda}`,
+      );
     }
-    
-    this.logger.log(`Tasa de cambio obtenida: 1 ${monedaActual} = ${tasaCambio.tasa} ${nuevaMoneda}`);
+
+    this.logger.log(
+      `Tasa de cambio obtenida: 1 ${monedaActual} = ${tasaCambio.tasa} ${nuevaMoneda}`,
+    );
 
     const conversiones: ConversionResult['conversiones'] = [];
     let totalElementosConvertidos = 0;
@@ -67,86 +103,92 @@ export class CurrencyConversionService {
     try {
       // 3. Convertir cuenta principal (solo si existe y no es subcuenta)
       const cuentaPrincipalConvertida = await this.convertirCuentaPrincipal(
-        userId, 
-        monedaActual, 
-        nuevaMoneda, 
+        userId,
+        monedaActual,
+        nuevaMoneda,
         tasaCambio.tasa,
-        monedaDestino.simbolo
+        monedaDestino.simbolo,
       );
-      
+
       if (cuentaPrincipalConvertida.convertida) {
         conversiones.push({
           tipo: 'Cuenta Principal',
           elementosAfectados: 1,
-          detalles: [cuentaPrincipalConvertida.detalles]
+          detalles: [cuentaPrincipalConvertida.detalles],
         });
         totalElementosConvertidos += 1;
       }
 
       // 4. Convertir todas las transacciones históricas
       const transaccionesConvertidas = await this.convertirTransacciones(
-        userId, 
-        monedaActual, 
-        nuevaMoneda, 
-        tasaCambio.tasa
+        userId,
+        monedaActual,
+        nuevaMoneda,
+        tasaCambio.tasa,
       );
-      
+
       if (transaccionesConvertidas.length > 0) {
         conversiones.push({
           tipo: 'Transacciones',
           elementosAfectados: transaccionesConvertidas.length,
-          detalles: transaccionesConvertidas
+          detalles: transaccionesConvertidas,
         });
         totalElementosConvertidos += transaccionesConvertidas.length;
       }
 
       // 5. Convertir historial de cuenta
       const historialConvertido = await this.convertirHistorialCuenta(
-        userId, 
-        monedaActual, 
-        nuevaMoneda, 
-        tasaCambio.tasa
+        userId,
+        monedaActual,
+        nuevaMoneda,
+        tasaCambio.tasa,
       );
-      
+
       if (historialConvertido.length > 0) {
         conversiones.push({
           tipo: 'Historial de Cuenta',
           elementosAfectados: historialConvertido.length,
-          detalles: historialConvertido
+          detalles: historialConvertido,
         });
         totalElementosConvertidos += historialConvertido.length;
       }
 
       // 6. NOTA: Los recurrentes se excluyen del cambio de moneda para mantener su moneda original
-      this.logger.log('Los pagos recurrentes se mantienen en su moneda original y no se convierten');
-      
+      this.logger.log(
+        'Los pagos recurrentes se mantienen en su moneda original y no se convierten',
+      );
+
       conversiones.push({
         tipo: 'Pagos Recurrentes (Excluidos)',
         elementosAfectados: 0,
-        detalles: [{ mensaje: 'Los pagos recurrentes mantienen su moneda original por diseño' }]
+        detalles: [{ mensaje: 'Los pagos recurrentes mantienen su moneda original por diseño' }],
       });
 
       // 7. Actualizar la moneda preferencia del usuario
       await this.userModel.findOneAndUpdate(
         { id: userId },
-        { 
-          $set: { 
+        {
+          $set: {
             monedaPreferencia: nuevaMoneda,
-            updatedAt: new Date()
-          }
-        }
+            updatedAt: new Date(),
+          },
+        },
       );
 
       // 8. Registrar el cambio en el historial
       await this.registrarCambioMonedaEnHistorial(
-        userId, 
-        monedaActual, 
-        nuevaMoneda, 
+        userId,
+        monedaActual,
+        nuevaMoneda,
         tasaCambio.tasa,
-        totalElementosConvertidos
+        totalElementosConvertidos,
       );
 
-      this.logger.log(`Cambio de moneda completado exitosamente. Total elementos convertidos: ${totalElementosConvertidos}`);
+      // Calcular intentos restantes después de registrar el cambio
+      const cambiosRestantes = 3 - (cambiosEsteMes + 1); // Incluye el cambio recién registrado
+      this.logger.log(
+        `Usuario ${userId} tiene ${cambiosRestantes} cambios de moneda restantes este mes`,
+      );
 
       return {
         message: `Moneda base cambiada exitosamente de ${monedaActual} a ${nuevaMoneda}`,
@@ -158,13 +200,13 @@ export class CurrencyConversionService {
             transacciones: transaccionesConvertidas.length,
             historialCuenta: historialConvertido.length,
             recurrentes: 0,
-            cuentaPrincipal: cuentaPrincipalConvertida.convertida
+            cuentaPrincipal: cuentaPrincipalConvertida.convertida,
           },
-          totalElementos: totalElementosConvertidos
+          totalElementos: totalElementosConvertidos,
         },
-        conversiones
+        conversiones,
+        intentosRestantes: cambiosRestantes, // Agregamos los intentos restantes
       };
-
     } catch (error) {
       this.logger.error(`Error durante el cambio de moneda para usuario ${userId}:`, error);
       throw new BadRequestException(`Error al cambiar la moneda: ${error.message}`);
@@ -175,16 +217,16 @@ export class CurrencyConversionService {
    * Convierte la cuenta principal del usuario
    */
   private async convertirCuentaPrincipal(
-    userId: string, 
-    monedaOrigen: string, 
-    monedaDestino: string, 
+    userId: string,
+    monedaOrigen: string,
+    monedaDestino: string,
     tasaCambio: number,
-    simboloNuevo: string
+    simboloNuevo: string,
   ): Promise<{ convertida: boolean; detalles?: any }> {
     try {
-      const cuentaPrincipal = await this.cuentaModel.findOne({ 
-        userId, 
-        isPrincipal: true 
+      const cuentaPrincipal = await this.cuentaModel.findOne({
+        userId,
+        isPrincipal: true,
       });
 
       if (!cuentaPrincipal) {
@@ -193,20 +235,31 @@ export class CurrencyConversionService {
       }
 
       if (cuentaPrincipal.moneda !== monedaOrigen) {
-        this.logger.log(`Cuenta principal ya está en moneda diferente (${cuentaPrincipal.moneda}), omitiendo conversión`);
+        this.logger.log(
+          `Cuenta principal ya está en moneda diferente (${cuentaPrincipal.moneda}), omitiendo conversión`,
+        );
         return { convertida: false };
       }
 
       const montoOriginal = cuentaPrincipal.cantidad;
-      const montoConvertido = this.moneyValidationService.sanitizeAmount(montoOriginal * tasaCambio);
+      const montoConvertido = this.moneyValidationService.sanitizeAmount(
+        montoOriginal * tasaCambio,
+      );
 
       // Debug logging para conversión de cuenta principal
-      this.logger.debug(`Conversión cuenta principal: ${montoOriginal} ${monedaOrigen} -> ${montoConvertido} ${monedaDestino} (tasa: ${tasaCambio})`);
+      this.logger.debug(
+        `Conversión cuenta principal: ${montoOriginal} ${monedaOrigen} -> ${montoConvertido} ${monedaDestino} (tasa: ${tasaCambio})`,
+      );
 
       // Validar el monto convertido
-      const validacion = this.moneyValidationService.validateAmount(montoConvertido, 'currency_conversion');
+      const validacion = this.moneyValidationService.validateAmount(
+        montoConvertido,
+        'currency_conversion',
+      );
       if (!validacion.isValid) {
-        this.logger.error(`Error validación monto convertido: ${validacion.error}. Valores: original=${montoOriginal}, convertido=${montoConvertido}, tasa=${tasaCambio}`);
+        this.logger.error(
+          `Error validación monto convertido: ${validacion.error}. Valores: original=${montoOriginal}, convertido=${montoConvertido}, tasa=${tasaCambio}`,
+        );
         throw new Error(`Monto convertido inválido para cuenta principal: ${validacion.error}`);
       }
 
@@ -217,9 +270,9 @@ export class CurrencyConversionService {
             cantidad: montoConvertido,
             moneda: monedaDestino,
             simbolo: simboloNuevo,
-            updatedAt: new Date()
-          }
-        }
+            updatedAt: new Date(),
+          },
+        },
       );
 
       // Registrar en historial de cuenta
@@ -239,8 +292,8 @@ export class CurrencyConversionService {
           montoAnterior: montoOriginal,
           montoNuevo: montoConvertido,
           tasaCambio,
-          simboloNuevo
-        }
+          simboloNuevo,
+        },
       });
 
       return {
@@ -251,10 +304,9 @@ export class CurrencyConversionService {
           montoAnterior: montoOriginal,
           montoNuevo: montoConvertido,
           monedaAnterior: monedaOrigen,
-          monedaNueva: monedaDestino
-        }
+          monedaNueva: monedaDestino,
+        },
       };
-
     } catch (error) {
       this.logger.error('Error al convertir cuenta principal:', error);
       throw error;
@@ -265,10 +317,10 @@ export class CurrencyConversionService {
    * Convierte todas las transacciones del usuario
    */
   private async convertirTransacciones(
-    userId: string, 
-    monedaOrigen: string, 
-    monedaDestino: string, 
-    tasaCambio: number
+    userId: string,
+    monedaOrigen: string,
+    monedaDestino: string,
+    tasaCambio: number,
   ): Promise<any[]> {
     try {
       // Buscar transacciones que no tengan campo moneda o que estén en la moneda anterior
@@ -278,8 +330,8 @@ export class CurrencyConversionService {
           { moneda: { $exists: false } }, // Transacciones sin campo moneda (asumimos moneda anterior)
           { moneda: monedaOrigen }, // Transacciones en moneda anterior
           { moneda: null }, // Transacciones con moneda null
-          { moneda: '' } // Transacciones con moneda vacía
-        ]
+          { moneda: '' }, // Transacciones con moneda vacía
+        ],
       });
 
       if (transacciones.length === 0) {
@@ -287,18 +339,27 @@ export class CurrencyConversionService {
       }
 
       const transaccionesConvertidas: any[] = [];
-      
+
       for (const transaccion of transacciones) {
         const montoOriginal = transaccion.monto;
-        const montoConvertido = this.moneyValidationService.sanitizeAmount(montoOriginal * tasaCambio);
+        const montoConvertido = this.moneyValidationService.sanitizeAmount(
+          montoOriginal * tasaCambio,
+        );
 
         // Debug logging para transacciones
-        this.logger.debug(`Conversión transacción ${transaccion.transaccionId}: ${montoOriginal} -> ${montoConvertido} (tasa: ${tasaCambio})`);
+        this.logger.debug(
+          `Conversión transacción ${transaccion.transaccionId}: ${montoOriginal} -> ${montoConvertido} (tasa: ${tasaCambio})`,
+        );
 
         // Validar el monto convertido
-        const validacion = this.moneyValidationService.validateAmount(montoConvertido, 'currency_conversion');
+        const validacion = this.moneyValidationService.validateAmount(
+          montoConvertido,
+          'currency_conversion',
+        );
         if (!validacion.isValid) {
-          this.logger.warn(`Transacción ${transaccion.transaccionId} tiene monto inválido después de conversión: ${validacion.error}. Valores: original=${montoOriginal}, convertido=${montoConvertido}, tasa=${tasaCambio}`);
+          this.logger.warn(
+            `Transacción ${transaccion.transaccionId} tiene monto inválido después de conversión: ${validacion.error}. Valores: original=${montoOriginal}, convertido=${montoConvertido}, tasa=${tasaCambio}`,
+          );
           continue;
         }
 
@@ -314,10 +375,10 @@ export class CurrencyConversionService {
                 montoOriginal,
                 monedaOriginal: monedaOrigen,
                 tasaCambioUsada: tasaCambio,
-                fechaConversion: new Date()
-              }
-            }
-          }
+                fechaConversion: new Date(),
+              },
+            },
+          },
         );
 
         transaccionesConvertidas.push({
@@ -326,12 +387,11 @@ export class CurrencyConversionService {
           concepto: transaccion.concepto,
           montoAnterior: montoOriginal,
           montoNuevo: montoConvertido,
-          fecha: (transaccion as any).createdAt || new Date()
+          fecha: (transaccion as any).createdAt || new Date(),
         });
       }
 
       return transaccionesConvertidas;
-
     } catch (error) {
       this.logger.error('Error al convertir transacciones:', error);
       throw error;
@@ -342,10 +402,10 @@ export class CurrencyConversionService {
    * Convierte el historial de cuenta
    */
   private async convertirHistorialCuenta(
-    userId: string, 
-    monedaOrigen: string, 
-    monedaDestino: string, 
-    tasaCambio: number
+    userId: string,
+    monedaOrigen: string,
+    monedaDestino: string,
+    tasaCambio: number,
   ): Promise<any[]> {
     try {
       // Buscar historial que no tenga campo moneda o que esté en la moneda anterior
@@ -355,8 +415,8 @@ export class CurrencyConversionService {
           { moneda: { $exists: false } },
           { moneda: monedaOrigen },
           { moneda: null },
-          { moneda: '' }
-        ]
+          { moneda: '' },
+        ],
       });
 
       if (historial.length === 0) {
@@ -367,12 +427,19 @@ export class CurrencyConversionService {
 
       for (const registro of historial) {
         const montoOriginal = Math.abs(registro.monto); // Usar valor absoluto
-        const montoConvertido = this.moneyValidationService.sanitizeAmount(montoOriginal * tasaCambio);
+        const montoConvertido = this.moneyValidationService.sanitizeAmount(
+          montoOriginal * tasaCambio,
+        );
 
         // Validar el monto convertido
-        const validacion = this.moneyValidationService.validateAmount(montoConvertido, 'currency_conversion');
+        const validacion = this.moneyValidationService.validateAmount(
+          montoConvertido,
+          'currency_conversion',
+        );
         if (!validacion.isValid) {
-          this.logger.warn(`Registro de historial ${registro.id} tiene monto inválido después de conversión: ${validacion.error}`);
+          this.logger.warn(
+            `Registro de historial ${registro.id} tiene monto inválido después de conversión: ${validacion.error}`,
+          );
           continue;
         }
 
@@ -391,10 +458,10 @@ export class CurrencyConversionService {
                 montoOriginal: registro.monto,
                 monedaOriginal: monedaOrigen,
                 tasaCambioUsada: tasaCambio,
-                fechaConversion: new Date()
-              }
-            }
-          }
+                fechaConversion: new Date(),
+              },
+            },
+          },
         );
 
         historialConvertido.push({
@@ -403,12 +470,11 @@ export class CurrencyConversionService {
           descripcion: registro.descripcion,
           montoAnterior: registro.monto,
           montoNuevo: montoFinal,
-          fecha: registro.fecha
+          fecha: registro.fecha,
         });
       }
 
       return historialConvertido;
-
     } catch (error) {
       this.logger.error('Error al convertir historial de cuenta:', error);
       throw error;
@@ -423,17 +489,18 @@ export class CurrencyConversionService {
     monedaAnterior: string,
     monedaNueva: string,
     tasaCambio: number,
-    totalElementos: number
+    totalElementos: number,
   ): Promise<void> {
     try {
-      // Buscar la cuenta principal para el registro
-      const cuentaPrincipal = await this.cuentaModel.findOne({ 
-        userId, 
-        isPrincipal: true 
+      const cuentaPrincipal = await this.cuentaModel.findOne({
+        userId,
+        isPrincipal: true,
       });
 
       if (!cuentaPrincipal) {
-        this.logger.warn(`No se encontró cuenta principal para registrar cambio de moneda del usuario ${userId}`);
+        this.logger.warn(
+          `No se encontró cuenta principal para registrar cambio de moneda del usuario ${userId}`,
+        );
         return;
       }
 
@@ -453,10 +520,9 @@ export class CurrencyConversionService {
           tasaCambio,
           totalElementosConvertidos: totalElementos,
           fechaConversion: new Date(),
-          alcance: 'usuario_completo'
-        }
+          alcance: 'usuario_completo',
+        },
       });
-
     } catch (error) {
       this.logger.error('Error al registrar cambio de moneda en historial:', error);
       // No lanzar error ya que el registro es secundario
@@ -467,7 +533,10 @@ export class CurrencyConversionService {
    * Obtiene un resumen de los elementos que serían afectados por un cambio de moneda
    * (útil para mostrar al usuario antes de confirmar)
    */
-  async obtenerResumenCambioMoneda(userId: string, nuevaMoneda: string): Promise<CurrencyChangePreview> {
+  async obtenerResumenCambioMoneda(
+    userId: string,
+    nuevaMoneda: string,
+  ): Promise<CurrencyChangePreview> {
     const usuario = await this.userModel.findOne({ id: userId });
     if (!usuario) {
       throw new NotFoundException('Usuario no encontrado');
@@ -487,8 +556,8 @@ export class CurrencyConversionService {
           { moneda: { $exists: false } },
           { moneda: monedaActual },
           { moneda: null },
-          { moneda: '' }
-        ]
+          { moneda: '' },
+        ],
       }),
       this.historialModel.countDocuments({
         userId,
@@ -496,9 +565,9 @@ export class CurrencyConversionService {
           { moneda: { $exists: false } },
           { moneda: monedaActual },
           { moneda: null },
-          { moneda: '' }
-        ]
-      })
+          { moneda: '' },
+        ],
+      }),
     ]);
 
     // Contar recurrentes (para información, pero no se convertirán)
@@ -511,8 +580,8 @@ export class CurrencyConversionService {
           { moneda: monedaActual },
           { moneda: { $exists: false } },
           { moneda: null },
-          { moneda: '' }
-        ]
+          { moneda: '' },
+        ],
       });
     } catch (error) {
       this.logger.warn('No se pudo contar recurrentes:', error);
@@ -530,10 +599,12 @@ export class CurrencyConversionService {
         transacciones,
         historialCuenta: historial,
         recurrentes: 0, // Los recurrentes se excluyen del cambio de moneda
-        total: cuentaPrincipal + transacciones + historial // Sin incluir recurrentes
+        total: cuentaPrincipal + transacciones + historial, // Sin incluir recurrentes
       },
-      advertencia: 'Esta operación convertirá todas las cifras históricas excepto los pagos recurrentes. Las subcuentas y recurrentes mantendrán sus monedas individuales.',
-      reversible: false
+      advertencia:
+        'Esta operación convertirá todas las cifras históricas excepto los pagos recurrentes. Las subcuentas y recurrentes mantendrán sus monedas individuales.',
+      reversible: false,
     };
   }
 }
+
