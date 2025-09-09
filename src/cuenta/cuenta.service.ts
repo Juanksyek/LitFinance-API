@@ -93,7 +93,7 @@ export class CuentaService {
         message: resultado.message,
         cuenta: cuentaActualizada,
         conversion: resultado,
-        intentosRestantes: resultado.intentosRestantes,
+        intentosRestantes: resultado.intentosRestantes, // Incluir intentos restantes
       };
     }
 
