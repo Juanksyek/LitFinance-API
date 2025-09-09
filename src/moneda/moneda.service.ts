@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, isValidObjectId } from 'mongoose';
 import { Moneda, MonedaDocument } from './schema/moneda.schema';
 import { CreateMonedaDto } from './dto/create.moneda.dto';
 import { CatalogoMonedaDto } from './dto/catalogo-moneda.dto';
@@ -15,6 +15,15 @@ export class MonedaService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
   ) {}
 
+  // Helper: obtener usuario por _id (ObjectId) o por id (string externo en tu schema)
+  private async findUserByAnyId(userTokenId?: string) {
+    if (!userTokenId) return null;
+    if (isValidObjectId(userTokenId)) {
+      return this.userModel.findById(userTokenId).select('monedasFavoritas').lean().exec();
+    }
+    return this.userModel.findOne({ id: userTokenId }).select('monedasFavoritas').lean().exec();
+  }
+
   async listarMonedas(): Promise<Moneda[]> {
     return this.monedaModel.find();
   }
@@ -25,33 +34,30 @@ export class MonedaService {
     total: number;
     totalFavoritas: number;
   }> {
-    // Trae todas las monedas ordenadas por nombre
     const todasLasMonedas = await this.monedaModel
       .find()
       .sort({ nombre: 1 })
       .lean()
       .exec();
 
-    // Si no hay usuario, devolver todas en "otras" con esFavorita=false
+    // Sin usuario: todo va a "otras"
     if (!userId) {
       const otras = todasLasMonedas.map((m) => ({ ...m, esFavorita: false }));
-      return {
-        favoritas: [],
-        otras,
-        total: otras.length,
-        totalFavoritas: 0,
-      };
+      return { favoritas: [], otras, total: otras.length, totalFavoritas: 0 };
     }
 
-    // 🛠️ FIX: usar _id (findById) para encontrar al usuario
-    const user = await this.userModel.findById(userId).select('monedasFavoritas').lean().exec();
-    const monedasFavoritas: string[] = user?.monedasFavoritas || [];
+    // ✅ Soporta _id (ObjectId) o id (string externo)
+    const user = await this.findUserByAnyId(userId);
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado con el identificador del token');
+    }
 
+    const favSet = new Set<string>(user.monedasFavoritas || []);
     const favoritas: any[] = [];
     const otras: any[] = [];
 
     for (const moneda of todasLasMonedas) {
-      if (monedasFavoritas.includes(moneda.codigo)) {
+      if (favSet.has(moneda.codigo)) {
         favoritas.push({ ...moneda, esFavorita: true });
       } else {
         otras.push({ ...moneda, esFavorita: false });
@@ -114,14 +120,12 @@ export class MonedaService {
 
   async poblarCatalogoDivisas(divisas: CreateMonedaDto[]): Promise<Moneda[]> {
     const resultados: Moneda[] = [];
-  
     for (const dto of divisas) {
       const id = randomBytes(4).toString('hex');
       const moneda = new this.monedaModel({ ...dto, id });
       const guardada = await moneda.save();
       resultados.push(guardada);
     }
-  
     return resultados;
   }
 
@@ -134,53 +138,55 @@ export class MonedaService {
         .lean()
         .exec();
 
-      return monedas.map(moneda => ({
+      return monedas.map((moneda) => ({
         codigo: String(moneda.codigo).trim(),
         nombre: String(moneda.nombre).trim(),
-        simbolo: String(moneda.simbolo).trim()
+        simbolo: String(moneda.simbolo).trim(),
       }));
     } catch (error) {
       throw new Error('Error interno del servidor');
     }
   }
 
-  // === NUEVO: Toggle de moneda favorita, persistente en el usuario ===
+  // === Toggle de moneda favorita: soporta _id y id, y devuelve estado final
   async toggleFavorita(userId: string, codigoMoneda: string): Promise<{
     esFavorita: boolean;
     monedasFavoritas: string[];
     message: string;
   }> {
-    // (Opcional) valida que exista la moneda
+    // Valida que exista la moneda
     const existe = await this.monedaModel.exists({ codigo: codigoMoneda });
     if (!existe) {
-      throw new Error(`Moneda ${codigoMoneda} no existe`);
+      throw new NotFoundException(`Moneda ${codigoMoneda} no existe`);
     }
 
-    const user = await this.userModel.findById(userId).select('monedasFavoritas').exec();
-    if (!user) {
-      throw new Error('Usuario no encontrado');
+    // Busca usuario por _id o por id (string externo)
+    let userDoc: UserDocument | null = null;
+    if (isValidObjectId(userId)) {
+      userDoc = await this.userModel.findById(userId).select('monedasFavoritas').exec();
+    } else {
+      userDoc = await this.userModel.findOne({ id: userId }).select('monedasFavoritas').exec();
+    }
+    if (!userDoc) {
+      throw new NotFoundException('Usuario no encontrado');
     }
 
-    const yaEsFav = (user.monedasFavoritas || []).includes(codigoMoneda);
+    const yaEsFav = (userDoc.monedasFavoritas || []).includes(codigoMoneda);
 
     if (yaEsFav) {
-      await this.userModel.updateOne(
-        { _id: userId },
-        { $pull: { monedasFavoritas: codigoMoneda } }
-      );
+      userDoc.monedasFavoritas = userDoc.monedasFavoritas.filter((c) => c !== codigoMoneda);
     } else {
-      await this.userModel.updateOne(
-        { _id: userId },
-        { $addToSet: { monedasFavoritas: codigoMoneda } }
+      userDoc.monedasFavoritas = Array.from(
+        new Set([...(userDoc.monedasFavoritas || []), codigoMoneda]),
       );
     }
 
-    const updated = await this.userModel.findById(userId).select('monedasFavoritas').lean().exec();
-    const esFavorita = !yaEsFav;
+    await userDoc.save();
 
+    const esFavorita = !yaEsFav;
     return {
       esFavorita,
-      monedasFavoritas: updated?.monedasFavoritas ?? [],
+      monedasFavoritas: userDoc.monedasFavoritas,
       message: esFavorita
         ? `Moneda ${codigoMoneda} añadida a favoritas`
         : `Moneda ${codigoMoneda} removida de favoritas`,
