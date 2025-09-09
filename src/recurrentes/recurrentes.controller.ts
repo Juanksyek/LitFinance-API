@@ -32,7 +32,6 @@ export class RecurrentesController {
     );
   }
 
-  // Obtener un recurrente específico por su ID
   @Get(':recurrenteId')
   async obtener(@Param('recurrenteId') recurrenteId: string) {
     return this.recurrentesService.obtenerPorId(recurrenteId);
