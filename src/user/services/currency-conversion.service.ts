@@ -42,28 +42,36 @@ export class CurrencyConversionService {
       throw new NotFoundException('Usuario no encontrado');
     }
 
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Verificar si es un nuevo mes y reiniciar intentos
+    if (!usuario.ultimoReinicioIntentos || usuario.ultimoReinicioIntentos < startOfMonth) {
+      this.logger.log(`Reiniciando intentos de cambio de moneda para usuario ${userId}`);
+      usuario.ultimoReinicioIntentos = now;
+      await this.userModel.findOneAndUpdate(
+        { id: userId },
+        { $set: { ultimoReinicioIntentos: now } },
+      );
+    }
+
     const monedaDestino = await this.monedaModel.findOne({ codigo: nuevaMoneda });
     if (!monedaDestino) {
       throw new BadRequestException(`La moneda ${nuevaMoneda} no existe en el catálogo`);
     }
 
     // Verificar límite de cambios de moneda
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const cambiosEsteMes = await this.historialModel.countDocuments({
       userId,
       tipo: 'cambio_moneda',
       fecha: { $gte: startOfMonth },
     });
 
+    this.logger.debug(`Cambios realizados este mes para usuario ${userId}: ${cambiosEsteMes}`);
+
     if (cambiosEsteMes >= 3) {
       throw new BadRequestException('Límite de 3 cambios de moneda por mes alcanzado');
     }
-
-    const cambiosRestantes = 3 - cambiosEsteMes;
-    this.logger.log(
-      `Usuario ${userId} tiene ${cambiosRestantes} cambios de moneda restantes este mes`,
-    );
 
     const monedaActual = usuario.monedaPreferencia || 'USD';
     if (monedaActual === nuevaMoneda) {
@@ -176,8 +184,10 @@ export class CurrencyConversionService {
         totalElementosConvertidos,
       );
 
+      // Calcular intentos restantes después de registrar el cambio
+      const cambiosRestantes = 3 - (cambiosEsteMes + 1); // Incluye el cambio recién registrado
       this.logger.log(
-        `Cambio de moneda completado exitosamente. Total elementos convertidos: ${totalElementosConvertidos}`,
+        `Usuario ${userId} tiene ${cambiosRestantes} cambios de moneda restantes este mes`,
       );
 
       return {
@@ -482,7 +492,6 @@ export class CurrencyConversionService {
     totalElementos: number,
   ): Promise<void> {
     try {
-      // Buscar la cuenta principal para el registro
       const cuentaPrincipal = await this.cuentaModel.findOne({
         userId,
         isPrincipal: true,
@@ -598,3 +607,4 @@ export class CurrencyConversionService {
     };
   }
 }
+
