@@ -57,7 +57,6 @@ export class RecurrentesController {
     return { ejecutados: cantidad };
   }
 
-  // Endpoint para pausar un recurrente
   @Put(':recurrenteId/pausar')
   async pausar(@Param('recurrenteId') recurrenteId: string, @Req() req) {
     return this.recurrentesService.pausarRecurrente(recurrenteId, req.user.sub);
