@@ -23,7 +23,7 @@ export class MoneyValidationService {
     suspicious: {
       singleTransactionThreshold: 10_000_000, // 10 millones - transacción sospechosa
       dailyAmountThreshold: 50_000_000, // 50 millones por día
-      monthlyTransactionCount: 10000 // 10k transacciones por mes
+      monthlyTransactionCount: 10000
     }
   };
 
