@@ -160,7 +160,6 @@ export class MonedaService {
       throw new NotFoundException(`Moneda ${codigoMoneda} no existe`);
     }
 
-    // Busca usuario por _id o por id (string externo)
     let userDoc: UserDocument | null = null;
     if (isValidObjectId(userId)) {
       userDoc = await this.userModel.findById(userId).select('monedasFavoritas').exec();
