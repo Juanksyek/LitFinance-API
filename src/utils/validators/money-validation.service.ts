@@ -15,7 +15,6 @@ export interface MoneyValidationConfig {
 export class MoneyValidationService {
   private readonly logger = new Logger(MoneyValidationService.name);
   
-  // Configuración por defecto para validación de montos
   private readonly defaultConfig: MoneyValidationConfig = {
     maxAmount: 999_999_999_999, // 999 mil millones como límite absoluto
     maxDailyTransactions: 1000, // Máximo 1000 transacciones por día

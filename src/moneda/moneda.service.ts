@@ -148,7 +148,6 @@ export class MonedaService {
     }
   }
 
-  // === Toggle de moneda favorita: soporta _id y id, y devuelve estado final
   async toggleFavorita(userId: string, codigoMoneda: string): Promise<{
     esFavorita: boolean;
     monedasFavoritas: string[];
