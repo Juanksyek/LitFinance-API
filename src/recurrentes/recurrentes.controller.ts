@@ -50,7 +50,6 @@ export class RecurrentesController {
     return this.recurrentesService.eliminar(recurrenteId);
   }
 
-  // Endpoint opcional para forzar ejecución del día (útil para pruebas)
   @Post('/ejecutar/hoy')
   async ejecutarHoy() {
     const cantidad = await this.recurrentesService.ejecutarRecurrentesDelDia();
