@@ -27,7 +27,7 @@ export class Cuenta {
   color: string;
 
   @Prop({ default: true })
-  esPrincipal: boolean;
+  isPrincipal: boolean;
 }
 
 export const CuentaSchema = SchemaFactory.createForClass(Cuenta);
