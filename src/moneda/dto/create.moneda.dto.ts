@@ -4,5 +4,5 @@ export class CreateMonedaDto {
   @IsString() codigo: string;
   @IsString() nombre: string;
   @IsString() simbolo: string;
-  @IsOptional() @IsBoolean() esPrincipal?: boolean;
+  @IsOptional() @IsBoolean() isPrincipal?: boolean;
 }
