@@ -42,7 +42,7 @@ export class EmailService {
             <div class="card">
               <div class="header">
                 <div class="logo">
-                  <img src="${process.env.APP_URL || process.env.FRONTEND_URL}/public/images/logo.png" alt="LitFinance" style="height:36px; display:block;" />
+                  <img src="${process.env.APP_URL || process.env.FRONTEND_URL}/public/images/LitFinance.png" alt="LitFinance" style="height:36px; display:block;" />
                 </div>
               </div>
               <div class="content">
@@ -93,7 +93,7 @@ export class EmailService {
         <body>
           <div class="wrap">
               <div class="card">
-              <div class="header"><div class="logo"><img src="${process.env.APP_URL || process.env.FRONTEND_URL}/public/images/logo.png" alt="LitFinance" style="height:32px; display:block;" /></div></div>
+              <div class="header"><div class="logo"><img src="${process.env.APP_URL || process.env.FRONTEND_URL}/public/images/LitFinance.png" alt="LitFinance" style="height:32px; display:block;" /></div></div>
               <div class="body">
                 <h1>Hola ${nombre},</h1>
                 <p>Usa el siguiente código para restablecer tu contraseña. Este código expirará en 10 minutos.</p>
