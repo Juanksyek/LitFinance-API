@@ -8,7 +8,7 @@ export class EmailService {
     async sendConfirmationEmail(to: string, token: string, nombre: string) {
         const confirmUrl = `${process.env.FRONTEND_URL}${token}`;
         await this.resend.emails.send({
-            from: 'LitFinance <onboarding@resend.dev>',
+            from: 'LitFinance <no-reply@thelitfinance.com>',
             to,
             subject: 'Confirma tu cuenta',
             html: `
@@ -23,7 +23,7 @@ export class EmailService {
 
     async sendResetPasswordCode(to: string, code: string, nombre: string) {
         await this.resend.emails.send({
-            from: 'LitFinance <onboarding@resend.dev>',
+            from: 'LitFinance <no-reply@thelitfinance.com>',
             to,
             subject: 'Código para recuperar contraseña',
             html: `
