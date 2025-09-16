@@ -6,7 +6,8 @@ export class EmailService {
   private resend = new Resend(process.env.RESEND_API_KEY);
 
   async sendConfirmationEmail(to: string, token: string, nombre: string) {
-    const confirmUrl = `${process.env.FRONTEND_URL}${token}`;
+    const baseUrl = process.env.APP_URL || process.env.FRONTEND_URL;
+    const confirmUrl = `${baseUrl}/activate/${token}`;
     await this.resend.emails.send({
       from: 'LitFinance <no-reply@thelitfinance.com>',
       to,
@@ -42,7 +43,7 @@ export class EmailService {
             <div class="card">
               <div class="header">
                 <div class="logo">
-                  <img src="${process.env.APP_URL || process.env.FRONTEND_URL}/public/images/LitFinance.png" alt="LitFinance" style="height:36px; display:block;" />
+                  <img src="${baseUrl}/public/images/LitFinance.png" alt="LitFinance" style="height:36px; display:block;" />
                 </div>
               </div>
               <div class="content">
@@ -64,6 +65,7 @@ export class EmailService {
   }
 
   async sendResetPasswordCode(to: string, code: string, nombre: string) {
+    const baseUrl = process.env.APP_URL || process.env.FRONTEND_URL;
     await this.resend.emails.send({
       from: 'LitFinance <no-reply@thelitfinance.com>',
       to,
@@ -93,7 +95,7 @@ export class EmailService {
         <body>
           <div class="wrap">
               <div class="card">
-              <div class="header"><div class="logo"><img src="${process.env.APP_URL || process.env.FRONTEND_URL}/public/images/LitFinance.png" alt="LitFinance" style="height:32px; display:block;" /></div></div>
+              <div class="header"><div class="logo"><img src="${baseUrl}/public/images/LitFinance.png" alt="LitFinance" style="height:32px; display:block;" /></div></div>
               <div class="body">
                 <h1>Hola ${nombre},</h1>
                 <p>Usa el siguiente código para restablecer tu contraseña. Este código expirará en 10 minutos.</p>
