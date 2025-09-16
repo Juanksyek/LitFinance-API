@@ -1,4 +1,3 @@
-// commnt
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -31,7 +30,11 @@ export class TransactionsService {
     });
   
     const guardada = await nueva.save();
-    const result: { subcuenta?: any; historial?: any } = await this.aplicarTransaccion(guardada);
+    const result: { subcuenta?: any; historial?: any } = await this.aplicarTransaccion({
+      ...guardada.toObject(),
+      motivo: dto.motivo,
+      concepto: dto.concepto
+    });
 
     if (dto.afectaCuenta && dto.cuentaId) {
       await this.historialService.registrarMovimiento({
@@ -42,6 +45,7 @@ export class TransactionsService {
         descripcion: `Transacción manual de tipo ${dto.tipo}`,
         fecha: new Date().toISOString(),
         conceptoId: dto.concepto,
+        motivo: dto.motivo,
       });
     }
   
@@ -89,6 +93,7 @@ export class TransactionsService {
         descripcion: `Edición de transacción tipo ${actualizada.tipo}`,
         fecha: new Date().toISOString(),
         conceptoId: actualizada.concepto,
+        motivo: dto.motivo,
       });
     }
   
@@ -242,6 +247,7 @@ export class TransactionsService {
           descripcion: `Transacción de tipo ${t.tipo} aplicada desde la subcuenta "${subcuenta.nombre}"`,
           fecha: new Date().toISOString(),
           subcuentaId: t.subCuentaId,
+          motivo: t.motivo,
         });
         historialResult = { cuentaId: subcuenta.cuentaId };
       }
@@ -267,6 +273,7 @@ export class TransactionsService {
         tipo: t.tipo,
         descripcion: `Transacción de tipo ${t.tipo} aplicada`,
         fecha: new Date().toISOString(),
+        motivo: t.motivo,
       });
       historialResult = { cuentaId: t.cuentaId };
     }
