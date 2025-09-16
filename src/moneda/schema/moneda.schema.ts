@@ -18,7 +18,7 @@ export class Moneda {
   simbolo: string;
 
   @Prop({ default: false })
-  esPrincipal: boolean;
+  isPrincipal: boolean;
 }
 
 export const MonedaSchema = SchemaFactory.createForClass(Moneda);
