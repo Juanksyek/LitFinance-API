@@ -77,8 +77,15 @@ export class AuthService {
         const codigoMoneda = dto.monedaPreferencia || 'USD';
         const monedaSeleccionada = await this.getMonedaInfo(codigoMoneda);
 
+        let cuentaPrincipalId: string;
+        let cuentaExists: CuentaDocument | null;
+        do {
+            cuentaPrincipalId = await this.generateUniqueId();
+            cuentaExists = await this.cuentaModel.findOne({ id: cuentaPrincipalId });
+        } while (cuentaExists);
+
         const cuentaPrincipal = new this.cuentaModel({
-            id: await this.generateUniqueId(),
+            id: cuentaPrincipalId,
             userId: user.id,
             nombre: 'Cuenta Principal',
             moneda: codigoMoneda,
@@ -88,7 +95,12 @@ export class AuthService {
             isPrincipal: true,
         });
 
-        await cuentaPrincipal.save();
+        try {
+            await cuentaPrincipal.save();
+        } catch (error) {
+            await this.userModel.deleteOne({ id: user.id });
+            throw new BadRequestException('No se pudo crear la cuenta principal. Intenta de nuevo.');
+        }
 
         return {
             message: 'Usuario registrado correctamente',
@@ -147,6 +159,11 @@ export class AuthService {
         user.activationToken = undefined;
         user.tokenExpires = undefined;
         await user.save();
+
+        const updatedUser = await this.userModel.findOne({ id: user.id });
+        if (!updatedUser?.isActive) {
+            throw new BadRequestException('No se pudo activar la cuenta. Contacta soporte.');
+        }
 
         return { success: true, message: 'Cuenta activada correctamente' };
     }
