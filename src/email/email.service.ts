@@ -5,6 +5,7 @@ import { Resend } from 'resend';
 export class EmailService {
   private resend = new Resend(process.env.RESEND_API_KEY);
 
+  // Enviar correo de confir
   async sendConfirmationEmail(to: string, token: string, nombre: string) {
     const baseUrl = process.env.APP_URL || process.env.FRONTEND_URL;
     const confirmUrl = `${baseUrl}/activate/${token}`;
@@ -64,6 +65,7 @@ export class EmailService {
     });
   }
 
+  // Enviar código para restablecer la contraseña
   async sendResetPasswordCode(to: string, code: string, nombre: string) {
     const baseUrl = process.env.APP_URL || process.env.FRONTEND_URL;
     await this.resend.emails.send({
