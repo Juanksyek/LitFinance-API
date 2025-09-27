@@ -17,3 +17,4 @@ import { ConceptoPersonalizado, ConceptoPersonalizadoSchema } from './schemas/co
   ],
 })
 export class ConceptosModule {}
+// commit
