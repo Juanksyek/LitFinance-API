@@ -35,3 +35,4 @@ export class ConceptosController {
     return this.conceptosService.eliminar(id, req.user.sub);
   }
 }
+// commit
