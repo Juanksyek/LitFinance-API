@@ -21,6 +21,7 @@ import { ConceptosModule } from './conceptos/conceptos.module';
 import { CuentaHistorialModule } from './cuenta-historial/cuenta-historial.module';
 import { PlataformasRecurrentesModule } from './plataformas-recurrentes/plataformas-recurrentes.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
     CuentaHistorialModule,
     PlataformasRecurrentesModule,
     AnalyticsModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [
