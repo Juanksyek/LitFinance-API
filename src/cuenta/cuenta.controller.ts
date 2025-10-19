@@ -37,7 +37,7 @@ export class CuentaController {
       message: result.message,
       cuenta: result.cuenta,
       conversion: result.conversion,
-      intentosRestantes: result.intentosRestantes, // Aseguramos que los intentos restantes se incluyan en la respuesta
+      intentosRestantes: result.intentosRestantes,
     };
   }
 }
