@@ -39,9 +39,6 @@ export class AnalyticsService {
     private readonly currencyConversionService: CurrencyConversionService,
   ) {}
 
-  /**
-   * Obtiene un resumen financiero completo del usuario
-   */
   async obtenerResumenFinanciero(userId: string, filtros: AnalyticsFiltersDto): Promise<ResumenFinanciero> {
     this.logger.log(`Generando resumen financiero para usuario: ${userId}`);
 

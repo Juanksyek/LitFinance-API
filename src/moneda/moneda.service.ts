@@ -46,7 +46,6 @@ export class MonedaService {
       return { favoritas: [], otras, total: otras.length, totalFavoritas: 0 };
     }
 
-    // ✅ Soporta _id (ObjectId) o id (string externo)
     const user = await this.findUserByAnyId(userId);
     if (!user) {
       throw new NotFoundException('Usuario no encontrado con el identificador del token');

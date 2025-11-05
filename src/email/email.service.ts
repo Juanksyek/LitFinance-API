@@ -5,7 +5,6 @@ import { Resend } from 'resend';
 export class EmailService {
   private resend = new Resend(process.env.RESEND_API_KEY);
 
-  // Enviar correo de confir
   async sendConfirmationEmail(to: string, token: string, nombre: string) {
     const baseUrl = process.env.APP_URL || process.env.FRONTEND_URL;
     const confirmUrl = `${baseUrl}/activate/${token}`;
