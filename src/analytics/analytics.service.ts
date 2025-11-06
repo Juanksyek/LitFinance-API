@@ -54,7 +54,6 @@ export class AnalyticsService {
     const { fechaInicio, fechaFin } = this.calcularRangoFechas(filtros);
     const monedaBase = filtros.monedaBase || usuario.monedaPreferencia || 'USD';
 
-    // Obtener transacciones filtradas
     const query = this.construirQueryTransacciones(userId, filtros, fechaInicio, fechaFin);
     const transacciones = await this.transactionModel.find(query);
 
