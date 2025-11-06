@@ -37,7 +37,6 @@ export class RecurrentesController {
     return this.recurrentesService.obtenerPorId(recurrenteId);
   }
 
-  // Editar un recurrente
   @Put(':recurrenteId')
   async editar(@Param('recurrenteId') recurrenteId: string, @Body() dto: EditarRecurrenteDto) {
     return this.recurrentesService.editar(recurrenteId, dto);

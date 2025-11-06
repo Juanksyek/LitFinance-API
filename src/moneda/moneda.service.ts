@@ -40,7 +40,6 @@ export class MonedaService {
       .lean()
       .exec();
 
-    // Sin usuario: todo va a "otras"
     if (!userId) {
       const otras = todasLasMonedas.map((m) => ({ ...m, esFavorita: false }));
       return { favoritas: [], otras, total: otras.length, totalFavoritas: 0 };
