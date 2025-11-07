@@ -1,21 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Patch,
-  Body,
-  Param,
-  Query,
-  UseGuards,
-  Request,
-  HttpCode,
-  HttpStatus,
-  Logger,
-  Ip,
-  Headers,
-  UseInterceptors,
-  ForbiddenException
-} from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request, HttpCode, HttpStatus, Logger, Ip, Headers, UseInterceptors, ForbiddenException } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { WebReportService } from '../services/web-report.service';
 import { CreateWebReportDto, UpdateWebReportStatusDto, ReportFiltersDto } from '../dto/web-report.dto';
