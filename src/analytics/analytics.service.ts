@@ -57,7 +57,6 @@ export class AnalyticsService {
     const query = this.construirQueryTransacciones(userId, filtros, fechaInicio, fechaFin);
     const transacciones = await this.transactionModel.find(query);
 
-    // Validar si hay transacciones sospechosas
     if (transacciones.length > 0) {
       this.analizarTransaccionesSospechosas(transacciones, userId);
     }

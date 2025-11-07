@@ -42,7 +42,6 @@ export class RecurrentesController {
     return this.recurrentesService.editar(recurrenteId, dto);
   }
 
-  // Eliminar un recurrente
   @Delete(':recurrenteId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async eliminar(@Param('recurrenteId') recurrenteId: string) {
