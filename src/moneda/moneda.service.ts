@@ -151,7 +151,6 @@ export class MonedaService {
     monedasFavoritas: string[];
     message: string;
   }> {
-    // Valida que exista la moneda
     const existe = await this.monedaModel.exists({ codigo: codigoMoneda });
     if (!existe) {
       throw new NotFoundException(`Moneda ${codigoMoneda} no existe`);
