@@ -1,17 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Patch,
-  Body,
-  Param,
-  Query,
-  UseGuards,
-  Request,
-  HttpCode,
-  HttpStatus,
-  Logger
-} from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request, HttpCode, HttpStatus, Logger } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { UserReportService } from '../services/user-report.service';
 import { CreateUserReportDto, UpdateUserReportStatusDto } from '../dto/user-report.dto';
