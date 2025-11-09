@@ -9,10 +9,6 @@ export class WebReportController {
 
   constructor(private readonly webReportService: WebReportService) {}
 
-  /**
-   * Crear un nuevo reporte web público (sin autenticación)
-   * POST /reports/web
-   */
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async crearReporteWeb(

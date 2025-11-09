@@ -15,7 +15,6 @@ export class MonedaService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
   ) {}
 
-  // Helper: obtener usuario por _id (ObjectId) o por id (string externo en tu schema)
   private async findUserByAnyId(userTokenId?: string) {
     if (!userTokenId) return null;
     if (isValidObjectId(userTokenId)) {

@@ -61,7 +61,6 @@ export class AnalyticsService {
       this.analizarTransaccionesSospechosas(transacciones, userId);
     }
 
-    // Obtener historial de cuentas filtrado
     const queryHistorial = this.construirQueryHistorial(userId, filtros, fechaInicio, fechaFin);
     const historial = await this.historialModel.find(queryHistorial);
 
