@@ -11,10 +11,6 @@ export class UserReportController {
 
   constructor(private readonly userReportService: UserReportService) {}
 
-  /**
-   * Crear un nuevo reporte de usuario autenticado
-   * POST /reports/user
-   */
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async crearReporte(
