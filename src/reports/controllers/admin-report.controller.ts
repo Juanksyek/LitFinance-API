@@ -11,9 +11,6 @@ export class AdminReportController {
 
   constructor(private readonly userReportService: UserReportService) {}
 
-  /**
-   * Middleware para verificar permisos de admin
-   */
   private verificarPermisoAdmin(user: any): void {
     if (!user.isAdmin && user.role !== 'admin') {
       throw new ForbiddenException('Se requieren permisos de administrador');
