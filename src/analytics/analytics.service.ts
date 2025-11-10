@@ -64,7 +64,6 @@ export class AnalyticsService {
     const queryHistorial = this.construirQueryHistorial(userId, filtros, fechaInicio, fechaFin);
     const historial = await this.historialModel.find(queryHistorial);
 
-    // Procesar ingresos y gastos con validación
     const { totalIngresado, totalGastado } = await this.procesarIngresosGastos(
       transacciones, 
       historial, 
