@@ -105,7 +105,6 @@ export class UserReportController {
     try {
       const userId = req.user.id;
       
-      // Obtener estadísticas básicas del usuario
       const [
         totalReportes,
         reportesAbiertos,

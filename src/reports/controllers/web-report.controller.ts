@@ -53,7 +53,6 @@ export class WebReportController {
     @Ip() ipAddress: string
   ) {
     try {
-      // Verificar que el ticket existe y obtener información básica
       const reportes = await this.webReportService.obtenerReportesWeb({ limite: '1' });
       const reporte = reportes.reportes.find(r => r.ticketId === ticketId);
       
