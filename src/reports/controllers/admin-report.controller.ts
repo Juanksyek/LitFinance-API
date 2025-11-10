@@ -178,7 +178,6 @@ export class AdminReportController {
       
       const adminId = req.user.id;
       
-      // Actualizar el reporte con el admin asignado
       const updateDto: UpdateUserReportStatusDto = {
         ticketId,
         nuevoEstado: 'en_progreso',
