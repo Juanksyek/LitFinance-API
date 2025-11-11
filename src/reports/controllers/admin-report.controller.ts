@@ -162,10 +162,6 @@ export class AdminReportController {
     }
   }
 
-  /**
-   * Asignar reporte a un admin (solo admins)
-   * PATCH /reports/admin/assign/:ticketId
-   */
   @Patch('assign/:ticketId')
   @HttpCode(HttpStatus.OK)
   async asignarReporte(
