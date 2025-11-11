@@ -70,7 +70,6 @@ export class AnalyticsService {
       monedaBase
     );
 
-    // Obtener total en subcuentas
     const totalEnSubcuentas = await this.calcularTotalSubcuentas(userId, filtros, monedaBase);
 
     // Contar movimientos totales
