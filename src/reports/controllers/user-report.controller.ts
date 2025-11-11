@@ -42,10 +42,6 @@ export class UserReportController {
     }
   }
 
-  /**
-   * Obtener reportes del usuario actual con paginación y filtros
-   * GET /reports/user/mis-reportes
-   */
   @Get('mis-reportes')
   async obtenerMisReportes(
     @Query() filtros: ReportFiltersDto,
