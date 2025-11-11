@@ -63,7 +63,6 @@ export class WebReportController {
         };
       }
       
-      // Solo mostrar información básica por seguridad
       return {
         success: true,
         data: {
