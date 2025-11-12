@@ -68,10 +68,6 @@ export class UserReportController {
     }
   }
 
-  /**
-   * Obtener un reporte específico del usuario
-   * GET /reports/user/ticket/:ticketId
-   */
   @Get('ticket/:ticketId')
   async obtenerReporte(
     @Param('ticketId') ticketId: string,
