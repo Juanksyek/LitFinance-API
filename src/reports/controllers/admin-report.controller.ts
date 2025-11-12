@@ -130,10 +130,6 @@ export class AdminReportController {
     }
   }
 
-  /**
-   * Obtener reportes por prioridad (solo admins)
-   * GET /reports/admin/priority/:prioridad
-   */
   @Get('priority/:prioridad')
   async obtenerReportesPorPrioridad(
     @Param('prioridad') prioridad: string,

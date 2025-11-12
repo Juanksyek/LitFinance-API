@@ -79,8 +79,6 @@ export class WebReportController {
     }
   }
 
-  // =================== ENDPOINTS PARA ADMINISTRADORES ===================
-
   /**
    * Obtener todos los reportes web (solo admins)
    * GET /reports/web/admin
