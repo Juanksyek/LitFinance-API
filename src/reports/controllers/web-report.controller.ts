@@ -43,10 +43,6 @@ export class WebReportController {
     }
   }
 
-  /**
-   * Obtener estado de un reporte web por ticket ID (sin autenticación)
-   * GET /reports/web/status/:ticketId
-   */
   @Get('status/:ticketId')
   async obtenerEstadoReporte(
     @Param('ticketId') ticketId: string,
