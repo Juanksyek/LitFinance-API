@@ -88,10 +88,6 @@ export class UserReportController {
     }
   }
 
-  /**
-   * Obtener resumen de reportes del usuario
-   * GET /reports/user/resumen
-   */
   @Get('resumen')
   async obtenerResumenReportes(@Request() req: any) {
     try {
