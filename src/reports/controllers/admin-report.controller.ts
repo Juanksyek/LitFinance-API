@@ -71,10 +71,6 @@ export class AdminReportController {
     }
   }
 
-  /**
-   * Actualizar estado de un reporte (solo admins)
-   * PATCH /reports/admin/user-reports/status
-   */
   @Patch('user-reports/status')
   @HttpCode(HttpStatus.OK)
   async actualizarEstadoReporte(
