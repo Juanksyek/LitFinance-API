@@ -75,10 +75,6 @@ export class WebReportController {
     }
   }
 
-  /**
-   * Obtener todos los reportes web (solo admins)
-   * GET /reports/web/admin
-   */
   @Get('admin')
   @UseGuards(JwtAuthGuard)
   async obtenerReportesWeb(
