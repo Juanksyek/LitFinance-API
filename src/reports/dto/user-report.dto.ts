@@ -1,13 +1,4 @@
-import { 
-  IsString, 
-  IsNotEmpty, 
-  MaxLength, 
-  MinLength, 
-  IsEnum, 
-  IsOptional,
-  Matches,
-  IsUUID 
-} from 'class-validator';
+import { IsString, IsNotEmpty, MaxLength, MinLength, IsEnum, IsOptional, Matches, IsUUID } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ReportCategory, ReportPriority } from '../schemas/user-report.schema';
 
