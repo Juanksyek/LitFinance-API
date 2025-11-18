@@ -105,10 +105,6 @@ export class AdminReportController {
     }
   }
 
-  /**
-   * Obtener estadísticas generales de reportes (solo admins)
-   * GET /reports/admin/statistics
-   */
   @Get('statistics')
   async obtenerEstadisticas(@Request() req: any) {
     try {
