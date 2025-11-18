@@ -1,8 +1,6 @@
 import { Module, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerModule } from '@nestjs/throttler';
-
-// Schemas
 import { UserReport, UserReportSchema } from './schemas/user-report.schema';
 import { WebReport, WebReportSchema } from './schemas/web-report.schema';
 import { User, UserSchema } from '../user/schemas/user.schema/user.schema';
