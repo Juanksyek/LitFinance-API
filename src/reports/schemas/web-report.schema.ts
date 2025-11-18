@@ -44,7 +44,6 @@ export class WebReport {
   @Prop()
   cerradoEn?: Date;
 
-  // Metadata de seguridad
   @Prop({ required: true })
   ipAddress: string;
 
