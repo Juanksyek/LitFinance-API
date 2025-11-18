@@ -71,7 +71,7 @@ export class UserReport {
   respuestaAdmin?: string;
 
   @Prop()
-  asignadoA?: string; // ID del admin asignado
+  asignadoA?: string;
 
   @Prop()
   resolvidoEn?: Date;

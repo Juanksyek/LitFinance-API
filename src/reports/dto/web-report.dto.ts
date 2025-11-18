@@ -1,13 +1,4 @@
-import { 
-  IsString, 
-  IsNotEmpty, 
-  MaxLength, 
-  MinLength, 
-  IsEmail,
-  Matches,
-  IsOptional,
-  IsUUID
-} from 'class-validator';
+import { IsString, IsNotEmpty, MaxLength, MinLength, IsEmail, Matches, IsOptional, IsUUID } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class CreateWebReportDto {

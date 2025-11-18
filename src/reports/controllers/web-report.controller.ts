@@ -102,10 +102,6 @@ export class WebReportController {
     }
   }
 
-  /**
-   * Actualizar estado de reporte web (solo admins)
-   * PATCH /reports/web/admin/status
-   */
   @Patch('admin/status')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)

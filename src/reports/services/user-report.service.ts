@@ -27,7 +27,6 @@ export class UserReportService {
         throw new NotFoundException('Usuario no encontrado');
       }
 
-      // Verificar límite de reportes abiertos
       const reportesAbiertos = await this.userReportModel.countDocuments({
         userId,
         estado: { $in: [ReportStatus.ABIERTO, ReportStatus.EN_PROGRESO] }
