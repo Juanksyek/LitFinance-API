@@ -59,7 +59,6 @@ export class WebReport {
   @Prop({ default: 0 })
   puntuacionRiesgo: number; // 0-100
 
-  // Geolocalización aproximada (solo país/ciudad)
   @Prop({ type: Object })
   geolocalizacion?: {
     pais?: string;
