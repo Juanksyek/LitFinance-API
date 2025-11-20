@@ -9,7 +9,6 @@ import { CreateWebReportDto, UpdateWebReportStatusDto, ReportFiltersDto } from '
 export class WebReportService {
   private readonly logger = new Logger(WebReportService.name);
   
-  // Lista de palabras prohibidas (puede expandirse)
   private readonly palabrasProhibidas = [
     'spam', 'hack', 'scam', 'virus', 'malware', 'phishing',
     'casino', 'gambling', 'porn', 'xxx', 'viagra', 'bitcoin',
