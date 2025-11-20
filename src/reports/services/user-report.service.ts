@@ -21,7 +21,6 @@ export class UserReportService {
    */
   async crearReporte(userId: string, createReportDto: CreateUserReportDto): Promise<UserReport> {
     try {
-      // Obtener datos completos del usuario
       const usuario = await this.userModel.findOne({ id: userId });
       if (!usuario) {
         throw new NotFoundException('Usuario no encontrado');
