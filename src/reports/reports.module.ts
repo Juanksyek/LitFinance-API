@@ -14,7 +14,6 @@ import { UserReportController } from './controllers/user-report.controller';
 import { AdminReportController } from './controllers/admin-report.controller';
 import { WebReportController } from './controllers/web-report.controller';
 
-// Middleware
 import { SecurityValidationMiddleware } from './middleware/security-validation.middleware';
 
 @Module({

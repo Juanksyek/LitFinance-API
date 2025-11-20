@@ -136,10 +136,6 @@ export class WebReportController {
     }
   }
 
-  /**
-   * Obtener estadísticas de seguridad (solo admins)
-   * GET /reports/web/admin/security-stats
-   */
   @Get('admin/security-stats')
   @UseGuards(JwtAuthGuard)
   async obtenerEstadisticasSeguridad(@Request() req: any) {

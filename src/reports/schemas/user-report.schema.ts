@@ -82,7 +82,6 @@ export class UserReport {
   @Prop({ default: 0 })
   tiempoRespuestaMinutos: number;
 
-  // Metadata del usuario al momento del reporte
   @Prop({ type: Object })
   metadataUsuario: {
     email: string;
