@@ -44,7 +44,7 @@ export class SecurityValidationMiddleware implements NestMiddleware {
   // IPs bloqueadas (se puede expandir dinámicamente)
   private readonly ipsBloqueadas = new Set([
     '0.0.0.0',
-    '127.0.0.1', // Solo para testing, remover en producción
+    '127.0.0.1',
   ]);
 
   // User agents sospechosos
