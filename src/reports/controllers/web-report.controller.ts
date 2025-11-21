@@ -154,10 +154,6 @@ export class WebReportController {
     }
   }
 
-  /**
-   * Obtener reportes sospechosos (solo admins)
-   * GET /reports/web/admin/suspicious
-   */
   @Get('admin/suspicious')
   @UseGuards(JwtAuthGuard)
   async obtenerReportesSospechosos(

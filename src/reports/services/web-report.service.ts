@@ -15,7 +15,6 @@ export class WebReportService {
     'cryptocurrency', 'investment', 'loan', 'mortgage'
   ];
 
-  // Dominios de email sospechosos
   private readonly dominiosSospechosos = [
     '10minutemail.com', 'tempmail.org', 'guerrillamail.com',
     'mailinator.com', 'yopmail.com', 'temp-mail.org'

@@ -57,7 +57,7 @@ export class WebReport {
   esSospechoso: boolean;
 
   @Prop({ default: 0 })
-  puntuacionRiesgo: number; // 0-100
+  puntuacionRiesgo: number;
 
   @Prop({ type: Object })
   geolocalizacion?: {

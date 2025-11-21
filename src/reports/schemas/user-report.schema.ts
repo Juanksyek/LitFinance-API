@@ -93,7 +93,6 @@ export class UserReport {
     dispositivo?: string;
   };
 
-  // Historial de cambios de estado
   @Prop([{
     estado: { type: String, enum: Object.values(ReportStatus) },
     fechaCambio: { type: Date, default: Date.now },

@@ -5,7 +5,6 @@ import { Request, Response, NextFunction } from 'express';
 export class SecurityValidationMiddleware implements NestMiddleware {
   private readonly logger = new Logger(SecurityValidationMiddleware.name);
 
-  // Lista expandida de patrones maliciosos
   private readonly patronesMaliciosos = [
     // Inyección SQL
     /(\bunion\b|\bselect\b|\binsert\b|\bupdate\b|\bdelete\b|\bdrop\b|\bcreate\b|\balter\b)/i,

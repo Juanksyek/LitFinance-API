@@ -16,9 +16,6 @@ export class UserReportService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
   ) {}
 
-  /**
-   * Crear un nuevo reporte de usuario autenticado
-   */
   async crearReporte(userId: string, createReportDto: CreateUserReportDto): Promise<UserReport> {
     try {
       const usuario = await this.userModel.findOne({ id: userId });
