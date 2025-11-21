@@ -47,10 +47,6 @@ export class AdminReportController {
     }
   }
 
-  /**
-   * Obtener un reporte específico (solo admins)
-   * GET /reports/admin/user-reports/:ticketId
-   */
   @Get('user-reports/:ticketId')
   async obtenerReporte(
     @Param('ticketId') ticketId: string,
