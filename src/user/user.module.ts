@@ -35,6 +35,6 @@ import { Moneda, MonedaSchema } from '../moneda/schema/moneda.schema';
   ],
   controllers: [UserController],
   providers: [UserService, CleanupService, CurrencyConversionService],
-  exports: [MongooseModule, CurrencyConversionService],
+  exports: [UserService, MongooseModule, CurrencyConversionService],
 })
 export class UserModule {}
