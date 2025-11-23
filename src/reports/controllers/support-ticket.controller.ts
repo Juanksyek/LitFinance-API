@@ -11,6 +11,7 @@ import {
   Req,
   HttpCode,
   HttpStatus,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { SupportTicketService } from '../services/support-ticket.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -36,6 +37,9 @@ export class SupportTicketController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async createTicket(@Body() createTicketDto: CreateTicketDto, @Req() req) {
+    if (!req.user || !(req.user._id || req.user.id)) {
+      throw new UnauthorizedException('Usuario no autenticado');
+    }
     const userId = req.user._id || req.user.id;
     return await this.supportTicketService.createTicket(createTicketDto, userId);
   }
@@ -46,6 +50,9 @@ export class SupportTicketController {
    */
   @Get()
   async listTickets(@Query() filters: FilterTicketsDto, @Req() req) {
+    if (!req.user || !(req.user._id || req.user.id)) {
+      throw new UnauthorizedException('Usuario no autenticado');
+    }
     const userId = req.user._id || req.user.id;
     const isStaff = req.user.rol === 'admin' || req.user.rol === 'staff';
 
@@ -75,6 +82,9 @@ export class SupportTicketController {
    */
   @Get(':ticketId')
   async getTicket(@Param('ticketId') ticketId: string, @Req() req) {
+    if (!req.user || !(req.user._id || req.user.id)) {
+      throw new UnauthorizedException('Usuario no autenticado');
+    }
     const userId = req.user._id || req.user.id;
     const isStaff = req.user.rol === 'admin' || req.user.rol === 'staff';
 
@@ -98,6 +108,9 @@ export class SupportTicketController {
     @Body() addMessageDto: AddMessageDto,
     @Req() req,
   ) {
+    if (!req.user || !(req.user._id || req.user.id)) {
+      throw new UnauthorizedException('Usuario no autenticado');
+    }
     const userId = req.user._id || req.user.id;
     const isStaff = req.user.rol === 'admin' || req.user.rol === 'staff';
 
@@ -133,6 +146,9 @@ export class SupportTicketController {
     @Body() updateTicketDto: UpdateTicketDto,
     @Req() req,
   ) {
+    if (!req.user || !(req.user._id || req.user.id)) {
+      throw new UnauthorizedException('Usuario no autenticado');
+    }
     const userId = req.user._id || req.user.id;
     const isStaff = req.user.rol === 'admin' || req.user.rol === 'staff';
 
@@ -151,6 +167,9 @@ export class SupportTicketController {
   @Delete(':ticketId')
   @HttpCode(HttpStatus.OK)
   async deleteTicket(@Param('ticketId') ticketId: string, @Req() req) {
+    if (!req.user || !(req.user._id || req.user.id)) {
+      throw new UnauthorizedException('Usuario no autenticado');
+    }
     const userId = req.user._id || req.user.id;
     const isStaff = req.user.rol === 'admin' || req.user.rol === 'staff';
 
