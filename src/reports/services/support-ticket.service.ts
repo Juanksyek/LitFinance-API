@@ -142,7 +142,11 @@ export class SupportTicketService {
       throw new NotFoundException(`Ticket ${ticketId} no encontrado`);
     }
 
-    // Solo debe impedir si el ticket está cerrado
+    // Validación de entrada
+    if (!addMessageDto || typeof addMessageDto.mensaje !== 'string' || !addMessageDto.mensaje.trim()) {
+      throw new BadRequestException('El mensaje es requerido');
+    }
+
     if (ticket.estado === TicketStatus.CERRADO) {
       throw new BadRequestException('No se pueden agregar mensajes a un ticket cerrado');
     }
