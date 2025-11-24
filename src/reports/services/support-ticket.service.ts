@@ -97,6 +97,7 @@ export class SupportTicketService {
 
   /**
    * Obtener un ticket por su ID
+   * Ahora cualquier usuario puede consultar el ticket.
    */
   async findOne(ticketId: string): Promise<SupportTicket> {
     const ticket = await this.supportTicketModel
@@ -112,6 +113,7 @@ export class SupportTicketService {
 
   /**
    * Verificar que el usuario sea dueño del ticket
+   * (Este método puede seguir existiendo para acciones restringidas, pero no se usa para consulta ni para comentar)
    */
   async verifyOwnership(ticketId: string, userId: string): Promise<SupportTicket> {
     const ticket = await this.findOne(ticketId);
@@ -125,6 +127,8 @@ export class SupportTicketService {
 
   /**
    * Agregar un mensaje/respuesta al ticket
+   * Permitir que cualquier usuario registrado agregue mensajes/comentarios,
+   * excepto si el ticket está cerrado.
    */
   async addMessage(
     ticketId: string,
@@ -138,12 +142,7 @@ export class SupportTicketService {
       throw new NotFoundException(`Ticket ${ticketId} no encontrado`);
     }
 
-    // Si no es staff, verificar que sea el dueño del ticket
-    if (!isStaff && ticket.userId !== userId) {
-      throw new ForbiddenException('No tienes permiso para responder a este ticket');
-    }
-
-    // Verificar que el ticket no esté cerrado
+    // Solo debe impedir si el ticket está cerrado
     if (ticket.estado === TicketStatus.CERRADO) {
       throw new BadRequestException('No se pueden agregar mensajes a un ticket cerrado');
     }
@@ -157,8 +156,7 @@ export class SupportTicketService {
     };
 
     ticket.mensajes.push(newMessage);
-    
-    // Si el ticket estaba resuelto y el usuario responde, reabrirlo
+
     if (!isStaff && ticket.estado === TicketStatus.RESUELTO) {
       ticket.estado = TicketStatus.ABIERTO;
     }
@@ -211,7 +209,8 @@ export class SupportTicketService {
     }
 
     // Solo el dueño o staff pueden editar
-    if (!isStaff && ticket.userId !== userId) {
+    // Compara como string para evitar problemas de tipo
+    if (!isStaff && String(ticket.userId) !== String(userId)) {
       throw new ForbiddenException('No tienes permiso para editar este ticket');
     }
 
@@ -238,7 +237,8 @@ export class SupportTicketService {
     const ticket = await this.findOne(ticketId);
 
     // Solo el dueño o staff pueden eliminar
-    if (!isStaff && ticket.userId !== userId) {
+    // Compara como string para evitar problemas de tipo
+    if (!isStaff && String(ticket.userId) !== String(userId)) {
       throw new ForbiddenException('No tienes permiso para eliminar este ticket');
     }
 

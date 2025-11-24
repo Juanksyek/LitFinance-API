@@ -79,27 +79,21 @@ export class SupportTicketController {
   /**
    * GET /support-tickets/:ticketId
    * Obtener un ticket específico por ID
+   * Permitir que cualquier usuario consulte cualquier ticket.
    */
   @Get(':ticketId')
   async getTicket(@Param('ticketId') ticketId: string, @Req() req) {
     if (!req.user || !(req.user._id || req.user.id)) {
       throw new UnauthorizedException('Usuario no autenticado');
     }
-    const userId = req.user._id || req.user.id;
-    const isStaff = req.user.rol === 'admin' || req.user.rol === 'staff';
-
-    if (isStaff) {
-      // Staff puede ver cualquier ticket
-      return await this.supportTicketService.findOne(ticketId);
-    } else {
-      // Usuarios solo pueden ver sus propios tickets
-      return await this.supportTicketService.verifyOwnership(ticketId, userId);
-    }
+    // Ya no se verifica propiedad, cualquier usuario puede consultar
+    return await this.supportTicketService.findOne(ticketId);
   }
 
   /**
    * POST /support-tickets/:ticketId/messages
    * Agregar un mensaje/respuesta al ticket
+   * Permitir que cualquier usuario registrado agregue mensajes.
    */
   @Post(':ticketId/messages')
   @HttpCode(HttpStatus.OK)
