@@ -12,7 +12,7 @@ import { Controller, Post, Get, Body, Param, Patch, Delete, Query, Req, UseGuard
     @Post()
     @UseGuards(JwtAuthGuard)
     async crear(@Req() req, @Body() dto: CreateTransactionDto) {
-      return this.transactionsService.crear(dto, req.user.sub);
+      return this.transactionsService.crear(dto, req.user.id);
     }
   
     @Patch(':id')
@@ -21,17 +21,17 @@ import { Controller, Post, Get, Body, Param, Patch, Delete, Query, Req, UseGuard
       @Body() dto: UpdateTransactionDto,
       @Req() req,
     ) {
-      return this.transactionsService.editar(id, dto, req.user.sub);
+      return this.transactionsService.editar(id, dto, req.user.id);
     }
   
     @Delete(':id')
     async eliminar(@Param('id') id: string, @Req() req) {
-      return this.transactionsService.eliminar(id, req.user.sub);
+      return this.transactionsService.eliminar(id, req.user.id);
     }
   
     @Get()
       async listar(@Req() req, @Query('rango') rango?: string) {
-        return this.transactionsService.listar(req.user.sub, rango);
+        return this.transactionsService.listar(req.user.id, rango);
     }
   
     @Get('subcuenta/:id/historial')

@@ -11,7 +11,7 @@ export class ConceptosController {
 
   @Post()
   async crear(@Req() req, @Body() dto: CreateConceptoDto) {
-    const concepto = await this.conceptosService.crear(dto, req.user.sub);
+    const concepto = await this.conceptosService.crear(dto, req.user.id);
     return concepto;
   }
 
@@ -22,16 +22,16 @@ export class ConceptosController {
     @Query('limit') limit = 10,
     @Query('search') search?: string,
   ) {
-    return this.conceptosService.listar(req.user.sub, Number(page), Number(limit), search);
+    return this.conceptosService.listar(req.user.id, Number(page), Number(limit), search);
   }
 
   @Patch(':id')
   actualizar(@Param('id') id: string, @Req() req, @Body() dto: UpdateConceptoDto) {
-    return this.conceptosService.actualizar(id, req.user.sub, dto);
+    return this.conceptosService.actualizar(id, req.user.id, dto);
   }
 
   @Delete(':id')
   eliminar(@Param('id') id: string, @Req() req) {
-    return this.conceptosService.eliminar(id, req.user.sub);
+    return this.conceptosService.eliminar(id, req.user.id);
   }
 }

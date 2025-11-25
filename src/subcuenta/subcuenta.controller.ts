@@ -11,7 +11,7 @@ export class SubcuentaController {
 
   @Post()
   async crear(@Req() req, @Body() dto: CreateSubcuentaDto) {
-    return this.subcuentaService.crear(dto, req.user.sub);
+    return this.subcuentaService.crear(dto, req.user.id);
   }
 
   @Get(':userId')
@@ -47,33 +47,33 @@ export class SubcuentaController {
 
   @Delete(':id')
   async eliminar(@Req() req, @Param('id') id: string) {
-    return this.subcuentaService.eliminar(id, req.user.sub);
+    return this.subcuentaService.eliminar(id, req.user.id);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get(':id/historial')
   async obtenerHistorial(@Param('id') id: string, @Req() req) {
-    return this.subcuentaService.obtenerHistorial(id, req.user.sub);
+    return this.subcuentaService.obtenerHistorial(id, req.user.id);
   }
 
   @Get('historial')
   async historialGeneral(@Req() req) {
-    return this.subcuentaService.obtenerHistorial(null, req.user.sub);
+    return this.subcuentaService.obtenerHistorial(null, req.user.id);
   }
 
   @Patch(':id/activar')
   async activar(@Param('id') id: string, @Req() req) {
-    return this.subcuentaService.activar(id, req.user.sub);
+    return this.subcuentaService.activar(id, req.user.id);
   }
 
   @Patch(':id/desactivar')
   async desactivar(@Req() req, @Param('id') id: string) {
-    return this.subcuentaService.desactivar(id, req.user.sub);
+    return this.subcuentaService.desactivar(id, req.user.id);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get('participacion/:cuentaId')
   async calcularParticipacion(@Param('cuentaId') cuentaId: string, @Req() req) {
-    return this.subcuentaService.calcularParticipacion(req.user.sub);
+    return this.subcuentaService.calcularParticipacion(req.user.id);
   }
 }
