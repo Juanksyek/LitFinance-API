@@ -43,7 +43,16 @@ export class SupportTicket {
   })
   estado: TicketStatus;
 
-  @Prop({ type: Array, default: [] })
+  @Prop({ 
+    type: [{
+      id: { type: String, required: true },
+      mensaje: { type: String, required: true },
+      esStaff: { type: Boolean, required: true },
+      creadoPor: { type: String, required: true },
+      createdAt: { type: Date, default: Date.now }
+    }],
+    default: [] 
+  })
   mensajes: TicketMessage[];
 
   @Prop({ default: Date.now })
@@ -65,3 +74,15 @@ export const SupportTicketSchema = SchemaFactory.createForClass(SupportTicket);
 SupportTicketSchema.index({ ticketId: 1 }, { unique: true });
 SupportTicketSchema.index({ userId: 1, createdAt: -1 });
 SupportTicketSchema.index({ estado: 1, createdAt: -1 });
+
+// TTL Index: Elimina automáticamente tickets cerrados después de 7 días
+SupportTicketSchema.index(
+  { cerradoEn: 1 }, 
+  { 
+    expireAfterSeconds: 7 * 24 * 60 * 60, // 7 días en segundos
+    partialFilterExpression: { 
+      estado: TicketStatus.CERRADO,
+      cerradoEn: { $exists: true }
+    }
+  }
+);
