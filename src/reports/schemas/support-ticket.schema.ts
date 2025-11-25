@@ -43,7 +43,16 @@ export class SupportTicket {
   })
   estado: TicketStatus;
 
-  @Prop({ type: Array, default: [] })
+  @Prop({ 
+    type: [{
+      id: { type: String, required: true },
+      mensaje: { type: String, required: true },
+      esStaff: { type: Boolean, required: true },
+      creadoPor: { type: String, required: true },
+      createdAt: { type: Date, default: Date.now }
+    }],
+    default: [] 
+  })
   mensajes: TicketMessage[];
 
   @Prop({ default: Date.now })
