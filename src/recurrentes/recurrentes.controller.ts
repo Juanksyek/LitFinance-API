@@ -11,7 +11,7 @@ export class RecurrentesController {
 
   @Post()
   async crear(@Req() req, @Body() dto: CrearRecurrenteDto) {
-    const userId = req.user.sub;
+    const userId = req.user.id;
     return this.recurrentesService.crear(dto, userId);
   }
 
@@ -24,7 +24,7 @@ export class RecurrentesController {
     @Query('subcuentaId') subcuentaId = '',
   ) {
     return this.recurrentesService.listar(
-      req.user.sub,
+      req.user.id,
       Number(page),
       Number(limit),
       search,
@@ -56,11 +56,11 @@ export class RecurrentesController {
 
   @Put(':recurrenteId/pausar')
   async pausar(@Param('recurrenteId') recurrenteId: string, @Req() req) {
-    return this.recurrentesService.pausarRecurrente(recurrenteId, req.user.sub);
+    return this.recurrentesService.pausarRecurrente(recurrenteId, req.user.id);
   }
 
   @Put(':recurrenteId/reanudar')
   async reanudar(@Param('recurrenteId') recurrenteId: string, @Req() req) {
-    return this.recurrentesService.reanudarRecurrente(recurrenteId, req.user.sub);
+    return this.recurrentesService.reanudarRecurrente(recurrenteId, req.user.id);
   }
 }
