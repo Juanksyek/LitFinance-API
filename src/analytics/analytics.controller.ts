@@ -29,7 +29,7 @@ export class AnalyticsController {
     @Req() req: any,
     @Query() filtros: AnalyticsFiltersDto
   ): Promise<ResumenFinanciero> {
-    const userId = req.user.sub;
+    const userId = req.user.id;
     this.logger.log(`Obteniendo resumen financiero para usuario: ${userId}`);
     
     return this.analyticsService.obtenerResumenFinanciero(userId, filtros);
@@ -45,7 +45,7 @@ export class AnalyticsController {
     @Req() req: any,
     @Query() filtros: AnalyticsFiltersDto
   ): Promise<EstadisticasPorConcepto[]> {
-    const userId = req.user.sub;
+    const userId = req.user.id;
     this.logger.log(`Obteniendo estadísticas por concepto para usuario: ${userId}`);
     
     return this.analyticsService.obtenerEstadisticasPorConcepto(userId, filtros);
@@ -61,7 +61,7 @@ export class AnalyticsController {
     @Req() req: any,
     @Query() filtros: AnalyticsFiltersDto
   ): Promise<EstadisticasPorSubcuenta[]> {
-    const userId = req.user.sub;
+    const userId = req.user.id;
     this.logger.log(`Obteniendo estadísticas por subcuenta para usuario: ${userId}`);
     
     return this.analyticsService.obtenerEstadisticasPorSubcuenta(userId, filtros);
@@ -77,7 +77,7 @@ export class AnalyticsController {
     @Req() req: any,
     @Query() filtros: AnalyticsFiltersDto
   ): Promise<EstadisticasPorRecurrente[]> {
-    const userId = req.user.sub;
+    const userId = req.user.id;
     this.logger.log(`Obteniendo estadísticas por recurrente para usuario: ${userId}`);
     
     return this.analyticsService.obtenerEstadisticasPorRecurrente(userId, filtros);
@@ -93,7 +93,7 @@ export class AnalyticsController {
     @Req() req: any,
     @Query() filtros: AnalyticsFiltersDto
   ): Promise<AnalisisTemporal> {
-    const userId = req.user.sub;
+    const userId = req.user.id;
     this.logger.log(`Obteniendo análisis temporal para usuario: ${userId}`);
     
     return this.analyticsService.obtenerAnalisisTemporal(userId, filtros);
@@ -109,7 +109,7 @@ export class AnalyticsController {
     @Req() req: any,
     @Query() filtros: MovimientosFiltersDto
   ): Promise<MovimientosResponse> {
-    const userId = req.user.sub;
+    const userId = req.user.id;
     this.logger.log(`Obteniendo movimientos detallados para usuario: ${userId}`);
     
     return this.analyticsService.obtenerMovimientosDetallados(userId, filtros);
@@ -125,7 +125,7 @@ export class AnalyticsController {
     @Req() req: any,
     @Query() filtros: AnalyticsFiltersDto
   ): Promise<ComparacionPeriodos> {
-    const userId = req.user.sub;
+    const userId = req.user.id;
     this.logger.log(`Comparando períodos para usuario: ${userId}`);
     
     return this.analyticsService.compararPeriodos(userId, filtros);
@@ -148,7 +148,7 @@ export class AnalyticsController {
     totalMovimientos: number;
     moneda: string;
   }> {
-    const userId = req.user.sub;
+    const userId = req.user.id;
     this.logger.log(`Obteniendo totales rápidos para usuario: ${userId}`);
     
     const resumen = await this.analyticsService.obtenerResumenFinanciero(userId, filtros);
@@ -180,7 +180,7 @@ export class AnalyticsController {
     cantidadMovimientos: number;
     color?: string;
   }[]> {
-    const userId = req.user.sub;
+    const userId = req.user.id;
     this.logger.log(`Obteniendo top gastos para usuario: ${userId}`);
     
     const estadisticas = await this.analyticsService.obtenerEstadisticasPorConcepto(userId, filtros);
@@ -216,7 +216,7 @@ export class AnalyticsController {
     ultimoMovimiento?: Date;
     crecimiento: number;
   }[]> {
-    const userId = req.user.sub;
+    const userId = req.user.id;
     this.logger.log(`Obteniendo subcuentas activas para usuario: ${userId}`);
     
     const filtrosActivas = { ...filtros, incluirSubcuentasInactivas: false };
@@ -258,7 +258,7 @@ export class AnalyticsController {
       movimientos: { absoluto: number; porcentual: number };
     };
   }> {
-    const userId = req.user.sub;
+    const userId = req.user.id;
     this.logger.log(`Obteniendo métricas del mes actual para usuario: ${userId}`);
     
     const filtrosMesActual: AnalyticsFiltersDto = {
