@@ -10,19 +10,19 @@ export class CuentaController {
   @UseGuards(JwtAuthGuard)
   @Get('principal')
   async getCuentaPrincipal(@Req() req) {
-    return this.cuentaService.obtenerCuentaPrincipal(req.user.sub);
+    return this.cuentaService.obtenerCuentaPrincipal(req.user.id);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get('preview-currency-change')
   async previewCurrencyChange(@Req() req, @Query('nuevaMoneda') nuevaMoneda: string) {
-    return this.cuentaService.obtenerVistaPrevia(req.user.sub, nuevaMoneda);
+    return this.cuentaService.obtenerVistaPrevia(req.user.id, nuevaMoneda);
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('sync-currency')
   async syncCurrency(@Req() req) {
-    await this.cuentaService.verificarSincronizacionMoneda(req.user.sub);
+    await this.cuentaService.verificarSincronizacionMoneda(req.user.id);
     return { 
       message: 'Sincronización de moneda completada',
       timestamp: new Date().toISOString()
@@ -32,7 +32,7 @@ export class CuentaController {
   @UseGuards(JwtAuthGuard)
   @Patch('editar-principal')
   async updateCuentaPrincipal(@Req() req, @Body() dto: UpdateCuentaDto) {
-    const result = await this.cuentaService.editarCuentaPrincipal(req.user.sub, dto);
+    const result = await this.cuentaService.editarCuentaPrincipal(req.user.id, dto);
     return {
       message: result.message,
       cuenta: result.cuenta,
