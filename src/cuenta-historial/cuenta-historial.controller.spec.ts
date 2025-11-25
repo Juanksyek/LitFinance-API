@@ -16,7 +16,7 @@ export class CuentaHistorialController {
   @UseGuards(JwtAuthGuard)
   @Get()
   async listar(@Req() req, @Query('page') page = 1, @Query('limit') limit = 10, @Query('search') search?: string) {
-    return this.historialService.buscarHistorial(req.user.sub, +page, +limit, search);
+    return this.historialService.buscarHistorial(req.user.id, +page, +limit, search);
   }
 
   @UseGuards(JwtAuthGuard)
