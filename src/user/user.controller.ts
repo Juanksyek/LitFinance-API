@@ -17,13 +17,13 @@ export class UserController {
     @UseGuards(JwtAuthGuard)
     @Get('profile')
     async getProfile(@Req() req: any) {
-        return this.userService.getProfile(req.user.sub);
+        return this.userService.getProfile(req.user.id);
     }
 
     @Patch('update')
     @UseGuards(JwtAuthGuard)
     async updateProfile(@Req() req, @Body() updateData: UpdateProfileDto) {
-        const userId = req.user.sub;
+        const userId = req.user.id;
         return this.userService.updateProfile(userId, updateData);
     }
 
@@ -51,14 +51,14 @@ export class UserController {
     @UseGuards(JwtAuthGuard)
     @Post('monedas/toggle-favorita')
     async toggleMonedaFavorita(@Req() req: any, @Body() dto: ToggleFavoritaMonedaDto) {
-        const userId = req.user.sub;
+        const userId = req.user.id;
         return this.userService.toggleMonedaFavorita(userId, dto.codigoMoneda);
     }
 
     @UseGuards(JwtAuthGuard)
     @Get('monedas/favoritas')
     async getMonedasFavoritas(@Req() req: any) {
-        const userId = req.user.sub;
+        const userId = req.user.id;
         return this.userService.getMonedasFavoritas(userId);
     }
 }
