@@ -7,6 +7,8 @@ import { SubcuentaHistorial, SubcuentaHistorialSchema } from '../subcuenta/schem
 import { Cuenta, CuentaSchema } from '../cuenta/schemas/cuenta.schema/cuenta.schema';
 import { Subcuenta, SubcuentaSchema } from '../subcuenta/schemas/subcuenta.schema/subcuenta.schema';
 import { CuentaHistorialModule } from '../cuenta-historial/cuenta-historial.module';
+import { UtilsModule } from '../utils/utils.module';
+import { UserModule } from '../user/user.module';
 
 @Module({
   imports: [
@@ -17,6 +19,8 @@ import { CuentaHistorialModule } from '../cuenta-historial/cuenta-historial.modu
       { name: Subcuenta.name, schema: SubcuentaSchema },
     ]),
     CuentaHistorialModule,
+    UtilsModule,
+    UserModule,
   ],
   controllers: [TransactionsController],
   providers: [TransactionsService],
