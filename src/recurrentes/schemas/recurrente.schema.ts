@@ -39,6 +39,17 @@ export class Recurrente {
   @Prop({ required: true })
   monto: number;
 
+  // Campos de conversión (se calculan al ejecutar, no al crear)
+  // Almacenan la última conversión realizada
+  @Prop()
+  montoConvertido?: number; // Último monto convertido a monedaPrincipal
+
+  @Prop()
+  tasaConversion?: number; // Tasa de conversión de la última ejecución
+
+  @Prop()
+  fechaConversion?: Date; // Fecha de la última conversión
+
   @Prop({ required: true })
   afectaCuentaPrincipal: boolean;
 
