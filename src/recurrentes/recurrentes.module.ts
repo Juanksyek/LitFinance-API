@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { RecurrentesService } from './recurrentes.service';
 import { RecurrentesController } from './recurrentes.controller';
@@ -26,7 +26,7 @@ import { UserModule } from 'src/user/user.module';
     MonedaModule,
     CuentaHistorialModule,
     UtilsModule,
-    UserModule,
+    forwardRef(() => UserModule),
   ],
   controllers: [RecurrentesController],
   providers: [RecurrentesService, RecurrentesCronService],
