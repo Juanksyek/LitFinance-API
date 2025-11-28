@@ -30,5 +30,9 @@ export class RegisterAuthDto {
 
   @IsOptional()
   @IsString()
-  monedaPreferencia?: string;
+  monedaPrincipal?: string; // Moneda base inmutable (MXN, USD, EUR, etc.)
+
+  @IsOptional()
+  @IsString()
+  monedaPreferencia?: string; // Moneda de visualización (puede cambiar después)
 }
