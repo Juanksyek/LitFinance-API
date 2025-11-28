@@ -49,7 +49,7 @@ export class CuentaService {
     }
 
     // Validar que la moneda exista
-    const monedaDestino = await this.monedaService.obtenerMonedaPorCodigo(codigoMoneda);
+    const monedaDestino = await this.monedaService.monedaModel.findOne({ codigo: codigoMoneda }).exec();
     if (!monedaDestino) {
       throw new BadRequestException(`Moneda ${codigoMoneda} no encontrada`);
     }
