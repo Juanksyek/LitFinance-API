@@ -11,6 +11,8 @@ import { CuentaService } from '../cuenta/cuenta.service';
 import { CuentaDocument } from '../cuenta/schemas/cuenta.schema/cuenta.schema';
 import { MonedaService } from '../moneda/moneda.service';
 import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.service';
+import { ConversionService } from '../utils/services/conversion.service';
+import { UserService } from '../user/user.service';
 
 @Injectable()
 export class RecurrentesService {
@@ -21,37 +23,29 @@ export class RecurrentesService {
     private readonly cuentaService: CuentaService,
     private readonly monedaService: MonedaService,
     private readonly cuentaHistorialService: CuentaHistorialService,
+    private readonly conversionService: ConversionService,
+    private readonly userService: UserService,
   ) {}
 
   async crear(dto: CrearRecurrenteDto, userId: string): Promise<Recurrente> {
     const recurrenteId = await generateUniqueId(this.recurrenteModel, 'recurrenteId');
     const cuenta: CuentaDocument = await this.cuentaService.obtenerCuentaPrincipal(userId);
 
-    let montoDescontar = dto.monto;
-    if (dto.moneda && dto.moneda !== cuenta.moneda) {
-      const conversion = await this.monedaService.intercambiarDivisa(
-        dto.monto,
-        dto.moneda,
-        cuenta.moneda,
-      );
-      montoDescontar = parseFloat(conversion.montoConvertido.toFixed(2));
-    }
-
+    // NO convertimos en creación, solo registramos en historial para tracking
     if (dto.afectaCuentaPrincipal) {
       await this.cuentaHistorialService.registrarMovimiento({
         cuentaId: (cuenta._id as string).toString(),
         userId,
         tipo: 'recurrente',
-        descripcion: `Se registró el recurrente "${dto.nombre}" por ${dto.monto} ${dto.moneda} (sin afectar saldo aún)`,
-        monto: montoDescontar,
+        descripcion: `Se registró el recurrente "${dto.nombre}" por ${dto.monto} ${dto.moneda} (se convertirá en cada ejecución)`,
+        monto: 0, // No afectamos aún la cuenta
         fecha: new Date().toISOString(),
         conceptoId: undefined,
         subcuentaId: undefined,
         metadata: {
           monedaOrigen: dto.moneda,
-          monedaDestino: cuenta.moneda,
           montoOriginal: dto.monto,
-          montoConvertido: montoDescontar,
+          nota: 'Conversión pendiente hasta ejecución',
         },
       });
     }
@@ -225,9 +219,33 @@ export class RecurrentesService {
 
     const recurrentes = await this.recurrenteModel.find({
       proximaEjecucion: { $gte: hoy, $lt: mañana },
+      pausado: { $ne: true },
     });
 
     for (const r of recurrentes) {
+      // Obtener monedaPrincipal del usuario
+      const user = await this.userService.getProfile(r.userId);
+      const monedaPrincipal = user.monedaPrincipal || 'MXN';
+
+      let montoConvertido = r.monto;
+      let tasaConversion = 1;
+
+      // Convertir usando tasas ACTUALES en cada ejecución
+      if (r.moneda !== monedaPrincipal) {
+        const conversion = await this.conversionService.convertir(
+          r.monto,
+          r.moneda,
+          monedaPrincipal,
+        );
+        montoConvertido = conversion.montoConvertido;
+        tasaConversion = conversion.tasaConversion;
+
+        // Guardar conversión en el documento recurrente para referencia
+        r.montoConvertido = montoConvertido;
+        r.tasaConversion = tasaConversion;
+        r.fechaConversion = conversion.fechaConversion;
+      }
+
       await this.historialModel.create({
         recurrenteId: r.recurrenteId,
         monto: r.monto,
@@ -236,12 +254,15 @@ export class RecurrentesService {
         afectaCuentaPrincipal: r.afectaCuentaPrincipal,
         fecha: new Date(),
         userId: r.userId,
+        observacion: r.moneda !== monedaPrincipal 
+          ? `Convertido de ${r.monto} ${r.moneda} a ${montoConvertido} ${monedaPrincipal} (tasa: ${tasaConversion})`
+          : undefined,
       });
 
       if (r.frecuenciaTipo && r.frecuenciaValor) {
         r.proximaEjecucion = this.calcularProximaFechaPersonalizada(new Date(), r.frecuenciaTipo, r.frecuenciaValor);
-        await r.save();
       }
+      
       await r.save();
     }
 
