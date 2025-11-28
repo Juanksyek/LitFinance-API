@@ -198,11 +198,11 @@ export class AnalyticsService {
 
         const totalIngresos = transacciones
           .filter(t => t.tipo === 'ingreso')
-          .reduce((sum, t) => sum + t.monto, 0);
+          .reduce((sum, t) => sum + (t.montoConvertido || t.monto), 0);
 
         const totalEgresos = transacciones
           .filter(t => t.tipo === 'egreso')
-          .reduce((sum, t) => sum + t.monto, 0);
+          .reduce((sum, t) => sum + (t.montoConvertido || t.monto), 0);
 
         const ultimoMovimiento = transacciones.length > 0 
           ? new Date(Math.max(...transacciones.map(t => (t as any).createdAt ? new Date((t as any).createdAt).getTime() : Date.now())))
@@ -684,11 +684,13 @@ export class AnalyticsService {
     const transaccionesExtremas: Array<{ tipo: string; monto: number; fuente: string }> = [];
 
     for (const tx of transacciones) {
-      const montoSanitizado = this.moneyValidationService.sanitizeAmount(tx.monto);
+      // Usar montoConvertido si está disponible (ya convertido a monedaPrincipal del usuario)
+      const montoOriginal = tx.montoConvertido || tx.monto;
+      const montoSanitizado = this.moneyValidationService.sanitizeAmount(montoOriginal);
       
       const validacion = this.moneyValidationService.validateAmount(montoSanitizado, 'analytics');
       if (!validacion.isValid) {
-        this.logger.warn(`Transacción inválida ignorada: ${validacion.error} - Monto: ${tx.monto}`);
+        this.logger.warn(`Transacción inválida ignorada: ${validacion.error} - Monto: ${montoOriginal}`);
         continue;
       }
 
@@ -702,12 +704,12 @@ export class AnalyticsService {
 
       if (tx.tipo === 'ingreso') {
         totalIngresado += montoSanitizado;
-        const moneda = tx.moneda || monedaBase;
+        const moneda = monedaBase; // Usar monedaBase ya que montoConvertido está en esa moneda
         const actualIngreso = desglosePorMonedaIngresos.get(moneda) || 0;
         desglosePorMonedaIngresos.set(moneda, actualIngreso + montoSanitizado);
       } else {
         totalGastado += montoSanitizado;
-        const moneda = tx.moneda || monedaBase;
+        const moneda = monedaBase; // Usar monedaBase ya que montoConvertido está en esa moneda
         const actualGasto = desglosePorMonedaGastos.get(moneda) || 0;
         desglosePorMonedaGastos.set(moneda, actualGasto + montoSanitizado);
       }
