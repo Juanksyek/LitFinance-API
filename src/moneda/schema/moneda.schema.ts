@@ -19,6 +19,15 @@ export class Moneda {
 
   @Prop({ default: false })
   isPrincipal: boolean;
+
+  // Tasa de conversión respecto a MXN (moneda base del sistema)
+  // Ejemplo: Si 1 USD = 17.5 MXN, entonces tasaBase = 17.5
+  @Prop({ required: true, default: 1 })
+  tasaBase: number;
+
+  // Fecha de última actualización de la tasa
+  @Prop({ default: Date.now })
+  ultimaActualizacion: Date;
 }
 
 export const MonedaSchema = SchemaFactory.createForClass(Moneda);
