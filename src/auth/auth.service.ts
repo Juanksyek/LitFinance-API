@@ -127,6 +127,20 @@ export class AuthService {
             throw new UnauthorizedException('Credenciales inválidas');
         }
 
+        // Forzar monedaPrincipal y monedaPreferencia a 'MXN' si no existen
+        let updated = false;
+        if (!user.monedaPrincipal) {
+            user.monedaPrincipal = 'MXN';
+            updated = true;
+        }
+        if (!user.monedaPreferencia) {
+            user.monedaPreferencia = 'MXN';
+            updated = true;
+        }
+        if (updated) {
+            await user.save();
+        }
+
         user.lastActivityAt = new Date();
         await user.save();
 
