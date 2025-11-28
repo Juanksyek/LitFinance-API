@@ -8,6 +8,8 @@ import { Cuenta, CuentaSchema } from '../cuenta/schemas/cuenta.schema/cuenta.sch
 import { CuentaModule } from '../cuenta/cuenta.module';
 import { MonedaModule } from '../moneda/moneda.module';
 import { CuentaHistorialModule } from '../cuenta-historial/cuenta-historial.module';
+import { UtilsModule } from '../utils/utils.module';
+import { UserModule } from '../user/user.module';
 
 @Module({
   imports: [
@@ -19,6 +21,8 @@ import { CuentaHistorialModule } from '../cuenta-historial/cuenta-historial.modu
     CuentaModule,
     MonedaModule,
     CuentaHistorialModule,
+    UtilsModule,
+    UserModule,
   ],
   controllers: [SubcuentaController],
   providers: [SubcuentaService],
