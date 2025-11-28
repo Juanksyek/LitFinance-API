@@ -7,6 +7,10 @@ export class CreateTransactionDto {
   @IsNumber()
   monto: number;
 
+  @IsOptional()
+  @IsString()
+  moneda?: string; // Código ISO de la moneda (ej: 'USD', 'MXN')
+
   @IsString()
   concepto: string;
 

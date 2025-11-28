@@ -186,4 +186,59 @@ export class MonedaService {
         : `Moneda ${codigoMoneda} removida de favoritas`,
     };
   }
+
+  /**
+   * Actualiza la tasa de conversión de una moneda respecto a MXN (moneda base)
+   * @param codigoMoneda - Código ISO de la moneda a actualizar
+   * @returns Moneda actualizada con nueva tasa
+   */
+  async actualizarTasaMoneda(codigoMoneda: string): Promise<Moneda> {
+    const moneda = await this.monedaModel.findOne({ codigo: codigoMoneda }).exec();
+    if (!moneda) {
+      throw new NotFoundException(`Moneda ${codigoMoneda} no encontrada`);
+    }
+
+    // Si es MXN (moneda base del sistema), siempre debe ser 1
+    if (codigoMoneda === 'MXN') {
+      moneda.tasaBase = 1;
+      moneda.ultimaActualizacion = new Date();
+      return moneda.save();
+    }
+
+    try {
+      // Obtener tasa desde API: cuántos MXN equivalen a 1 unidad de la moneda
+      const tasaInfo = await this.obtenerTasaCambio(codigoMoneda, 'MXN');
+      moneda.tasaBase = tasaInfo.tasa;
+      moneda.ultimaActualizacion = new Date();
+      return moneda.save();
+    } catch (error) {
+      throw new BadRequestException(
+        `No se pudo actualizar la tasa para ${codigoMoneda}`,
+      );
+    }
+  }
+
+  /**
+   * Actualiza las tasas de todas las monedas en el sistema
+   * Útil para ejecutar periódicamente (ej: via cron job)
+   */
+  async actualizarTodasLasTasas(): Promise<{
+    actualizadas: number;
+    errores: string[];
+  }> {
+    const monedas = await this.monedaModel.find().exec();
+    let actualizadas = 0;
+    const errores: string[] = [];
+
+    for (const moneda of monedas) {
+      try {
+        await this.actualizarTasaMoneda(moneda.codigo);
+        actualizadas++;
+      } catch (error) {
+        errores.push(`${moneda.codigo}: ${error.message}`);
+      }
+    }
+
+    return { actualizadas, errores };
+  }
 }

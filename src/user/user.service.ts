@@ -21,6 +21,13 @@ export class UserService {
   }  
 
   async updateProfile(userId: string, updateData: UpdateProfileDto) {
+    // Validar que no se intente cambiar la moneda principal
+    if ('monedaPrincipal' in updateData) {
+      throw new BadRequestException(
+        'La moneda principal no se puede cambiar desde la app. Contacta a soporte si necesitas cambiarla.'
+      );
+    }
+
     if (updateData.email) {
       const existingUser = await this.userModel.findOne({ 
         email: updateData.email, 

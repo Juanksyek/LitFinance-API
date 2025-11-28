@@ -59,6 +59,10 @@ export class AuthService {
         const hashedPassword = await bcrypt.hash(password, 10);
         const generatedId = await this.generateUniqueId();
 
+        // Determinar moneda principal (inmutable)
+        const monedaPrincipal = dto.monedaPrincipal || 'MXN';
+        const monedaPreferencia = dto.monedaPreferencia || monedaPrincipal;
+
         const user = new this.userModel({
             ...dto,
             id: generatedId,
@@ -68,13 +72,15 @@ export class AuthService {
             activationToken,
             tokenExpires,
             isPremium: dto.isPremium || false,
-            monedaPreferencia: dto.monedaPreferencia || 'USD',
+            monedaPrincipal, // Inmutable
+            monedaPreferencia, // Puede cambiar después
         });
 
         await user.save();
         await this.emailService.sendConfirmationEmail(user.email, activationToken, user.nombreCompleto);
         
-        const codigoMoneda = dto.monedaPreferencia || 'USD';
+        // Usar monedaPrincipal para la cuenta principal
+        const codigoMoneda = monedaPrincipal;
         const monedaSeleccionada = await this.getMonedaInfo(codigoMoneda);
 
         let cuentaPrincipalId: string;
