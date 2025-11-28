@@ -64,8 +64,8 @@ export class AuthService {
             const monedaPreferencia = dto.monedaPreferencia ? dto.monedaPreferencia : 'MXN';
 
             const user = new this.userModel({
-                ...dto,
                 id: generatedId,
+                email: dto.email,
                 password: hashedPassword,
                 proveedor: null,
                 isActive: false,
@@ -74,6 +74,10 @@ export class AuthService {
                 isPremium: dto.isPremium || false,
                 monedaPrincipal,
                 monedaPreferencia,
+                // otros campos opcionales del DTO
+                nombreCompleto: dto.nombreCompleto,
+                // Si agregas estos campos al DTO, puedes volver a incluirlos aquí
+                // agrega aquí otros campos opcionales si existen
             });
 
         await user.save();
