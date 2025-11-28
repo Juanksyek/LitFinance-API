@@ -11,6 +11,8 @@ import { RecurrentesCronService } from './recurrentes-cron/recurrentes-cron.serv
 import { CuentaModule } from 'src/cuenta/cuenta.module';
 import { MonedaModule } from 'src/moneda/moneda.module';
 import { CuentaHistorialModule } from 'src/cuenta-historial/cuenta-historial.module';
+import { UtilsModule } from 'src/utils/utils.module';
+import { UserModule } from 'src/user/user.module';
 
 @Module({
   imports: [
@@ -22,7 +24,9 @@ import { CuentaHistorialModule } from 'src/cuenta-historial/cuenta-historial.mod
     NotificacionesModule,
     CuentaModule,
     MonedaModule,
-    CuentaHistorialModule
+    CuentaHistorialModule,
+    UtilsModule,
+    UserModule,
   ],
   controllers: [RecurrentesController],
   providers: [RecurrentesService, RecurrentesCronService],
