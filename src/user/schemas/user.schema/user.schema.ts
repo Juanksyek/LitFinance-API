@@ -50,7 +50,12 @@ export class User {
   @Prop({ default: false })
   isPremium: boolean;
 
-  @Prop({ required: false, default: 'USD' })
+  // Moneda base del usuario - INMUTABLE después del registro
+  @Prop({ required: true, immutable: true, default: 'MXN' })
+  monedaPrincipal: string;
+
+  // Moneda de visualización (puede cambiar) - solo afecta el UI
+  @Prop({ required: false, default: 'MXN' })
   monedaPreferencia: string;
 
   @Prop({ type: [String], default: [] })
