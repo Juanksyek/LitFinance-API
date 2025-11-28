@@ -1,4 +1,4 @@
-import { Controller, Get, Body, Patch, UseGuards, Req, Query, Post } from '@nestjs/common';
+import { Controller, Get, Body, Patch, UseGuards, Req, Query, Post, Param } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CuentaService } from './cuenta.service';
 import { UpdateCuentaDto } from './dto/update-cuenta.dto/update-cuenta.dto';
@@ -27,6 +27,12 @@ export class CuentaController {
       message: 'Sincronización de moneda completada',
       timestamp: new Date().toISOString()
     };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('preview/:codigoMoneda')
+  async previewEnOtraMoneda(@Req() req, @Param('codigoMoneda') codigoMoneda: string) {
+    return this.cuentaService.obtenerPreviewEnOtraMoneda(req.user.id, codigoMoneda);
   }
 
   @UseGuards(JwtAuthGuard)
