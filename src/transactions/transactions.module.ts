@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { TransactionsController } from './transactions.controller';
 import { TransactionsService } from './transactions.service';
@@ -20,7 +20,7 @@ import { UserModule } from '../user/user.module';
     ]),
     CuentaHistorialModule,
     UtilsModule,
-    UserModule,
+    forwardRef(() => UserModule),
   ],
   controllers: [TransactionsController],
   providers: [TransactionsService],
