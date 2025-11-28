@@ -10,6 +10,9 @@ import { randomBytes } from 'crypto';
 
 @Injectable()
 export class MonedaService {
+    async findByCodigo(codigo: string): Promise<Moneda | null> {
+      return this.monedaModel.findOne({ codigo }).exec();
+    }
   constructor(
     @InjectModel(Moneda.name) private monedaModel: Model<MonedaDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
