@@ -59,22 +59,22 @@ export class AuthService {
         const hashedPassword = await bcrypt.hash(password, 10);
         const generatedId = await this.generateUniqueId();
 
-        // Determinar moneda principal (inmutable)
-        const monedaPrincipal = dto.monedaPrincipal || 'MXN';
-        const monedaPreferencia = dto.monedaPreferencia || monedaPrincipal;
+            // Forzar monedaPrincipal y monedaPreferencia a 'MXN' si no se especifican
+            const monedaPrincipal = dto.monedaPrincipal ? dto.monedaPrincipal : 'MXN';
+            const monedaPreferencia = dto.monedaPreferencia ? dto.monedaPreferencia : 'MXN';
 
-        const user = new this.userModel({
-            ...dto,
-            id: generatedId,
-            password: hashedPassword,
-            proveedor: null,
-            isActive: false,
-            activationToken,
-            tokenExpires,
-            isPremium: dto.isPremium || false,
-            monedaPrincipal, // Inmutable
-            monedaPreferencia, // Puede cambiar después
-        });
+            const user = new this.userModel({
+                ...dto,
+                id: generatedId,
+                password: hashedPassword,
+                proveedor: null,
+                isActive: false,
+                activationToken,
+                tokenExpires,
+                isPremium: dto.isPremium || false,
+                monedaPrincipal,
+                monedaPreferencia,
+            });
 
         await user.save();
         await this.emailService.sendConfirmationEmail(user.email, activationToken, user.nombreCompleto);
