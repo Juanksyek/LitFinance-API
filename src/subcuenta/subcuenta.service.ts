@@ -10,6 +10,8 @@ import { MonedaService } from '../moneda/moneda.service';
 import { SubcuentaHistorial, SubcuentaHistorialDocument } from './schemas/subcuenta-historial.schema/subcuenta-historial.schema';
 import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.service';
 import { generateUniqueId } from '../utils/generate-id';
+import { ConversionService } from '../utils/services/conversion.service';
+import { UserService } from '../user/user.service';
 
 @Injectable()
 export class SubcuentaService {
@@ -18,7 +20,9 @@ export class SubcuentaService {
     @InjectCuentaModel(Cuenta.name) private cuentaModel: Model<Cuenta>,
     private readonly monedaService: MonedaService,
     @InjectModel(SubcuentaHistorial.name) private historialModel: Model<SubcuentaHistorialDocument>,
-    private readonly cuentaHistorialService: CuentaHistorialService
+    private readonly cuentaHistorialService: CuentaHistorialService,
+    private readonly conversionService: ConversionService,
+    private readonly userService: UserService,
   ) {}
 
   async crear(dto: CreateSubcuentaDto, userId: string) {
@@ -43,8 +47,7 @@ export class SubcuentaService {
     const subcuenta = new this.subcuentaModel(payload);
     subcuenta.set('subsubCuentaId', await generateUniqueId(this.subcuentaModel));
   
-    const creada = await subcuenta.save();
-  
+    // Si afecta cuenta y las monedas difieren, calcular conversión
     if (dto.afectaCuenta && cuentaPrincipalId) {
       const cuenta = await this.cuentaModel.findOne({ id: cuentaPrincipalId, userId });
       if (!cuenta) throw new NotFoundException('Cuenta principal no encontrada');
@@ -52,8 +55,17 @@ export class SubcuentaService {
       let cantidadAjustada = dto.cantidad;
     
       if (dto.moneda && dto.moneda !== cuenta.moneda) {
-        const conversion = await this.monedaService.obtenerTasaCambio(dto.moneda, cuenta.moneda);
-        cantidadAjustada = dto.cantidad * conversion.tasa;
+        const conversion = await this.conversionService.convertir(
+          dto.cantidad,
+          dto.moneda,
+          cuenta.moneda,
+        );
+        cantidadAjustada = conversion.montoConvertido;
+        
+        // Guardar metadata de conversión en la subcuenta
+        subcuenta.montoConvertido = conversion.montoConvertido;
+        subcuenta.tasaConversion = conversion.tasaConversion;
+        subcuenta.fechaConversion = conversion.fechaConversion;
       }
     
       await this.cuentaModel.findOneAndUpdate(
@@ -75,6 +87,7 @@ export class SubcuentaService {
       });
     }
 
+    const creada = await subcuenta.save();
 
     await this.historialModel.create({
       subcuentaId: creada._id,
@@ -120,9 +133,14 @@ export class SubcuentaService {
   
     let cambios: Record<string, { antes: any; despues: any }> = {};
   
+    // Si cambia la moneda, recalcular cantidad en la nueva moneda
     if (dto.moneda && dto.moneda !== antes.moneda) {
-      const conversion = await this.monedaService.obtenerTasaCambio(antes.moneda, dto.moneda);
-      const nuevaCantidad = antes.cantidad * conversion.tasa;
+      const conversion = await this.conversionService.convertir(
+        antes.cantidad,
+        antes.moneda,
+        dto.moneda,
+      );
+      const nuevaCantidad = conversion.montoConvertido;
   
       dto.cantidad = nuevaCantidad;
   
@@ -179,8 +197,12 @@ export class SubcuentaService {
           let cantidadAjustada = sub.cantidad;
   
           if (sub.moneda && cuenta.moneda && sub.moneda !== cuenta.moneda) {
-            const conversion = await this.monedaService.obtenerTasaCambio(sub.moneda, cuenta.moneda);
-            cantidadAjustada = sub.cantidad * conversion.tasa;
+            const conversion = await this.conversionService.convertir(
+              sub.cantidad,
+              sub.moneda,
+              cuenta.moneda,
+            );
+            cantidadAjustada = conversion.montoConvertido;
           }
   
           const resultado = await this.cuentaModel.findOneAndUpdate(
