@@ -27,7 +27,7 @@ import { Moneda, MonedaSchema } from '../moneda/schema/moneda.schema';
       { name: Moneda.name, schema: MonedaSchema }
     ]),
     forwardRef(() => CuentaModule),
-    SubcuentaModule,
+    forwardRef(() => SubcuentaModule),
     TransactionsModule,
     CuentaHistorialModule,
     MonedaModule,

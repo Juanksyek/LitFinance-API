@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { SubcuentaService } from './subcuenta.service';
 import { SubcuentaController } from './subcuenta.controller';
@@ -18,11 +18,11 @@ import { UserModule } from '../user/user.module';
       { name: Subcuenta.name, schema: SubcuentaSchema },
       { name: Cuenta.name, schema: CuentaSchema },
     ]),
-    CuentaModule,
+    forwardRef(() => CuentaModule),
     MonedaModule,
     CuentaHistorialModule,
     UtilsModule,
-    UserModule,
+    forwardRef(() => UserModule),
   ],
   controllers: [SubcuentaController],
   providers: [SubcuentaService],

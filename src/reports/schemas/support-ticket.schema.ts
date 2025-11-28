@@ -70,8 +70,7 @@ export class SupportTicket {
 
 export const SupportTicketSchema = SchemaFactory.createForClass(SupportTicket);
 
-// Índices para optimización
-SupportTicketSchema.index({ ticketId: 1 }, { unique: true });
+// Índices para optimización (ticketId ya tiene unique: true en @Prop, no se necesita duplicar)
 SupportTicketSchema.index({ userId: 1, createdAt: -1 });
 SupportTicketSchema.index({ estado: 1, createdAt: -1 });
 
