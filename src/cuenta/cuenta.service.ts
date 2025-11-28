@@ -8,6 +8,8 @@ import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.ser
 import { CuentaDocument } from './schemas/cuenta.schema/cuenta.schema';
 import { CurrencyConversionService } from '../user/services/currency-conversion.service';
 import { User, UserDocument } from '../user/schemas/user.schema/user.schema';
+import { ConversionService } from '../utils/services/conversion.service';
+import { Subcuenta, SubcuentaDocument } from '../subcuenta/schemas/subcuenta.schema/subcuenta.schema';
 
 @Injectable()
 export class CuentaService {
@@ -16,10 +18,12 @@ export class CuentaService {
   constructor(
     @InjectModel(Cuenta.name) private cuentaModel: Model<Cuenta>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Subcuenta.name) private subcuentaModel: Model<SubcuentaDocument>,
     private readonly monedaService: MonedaService,
     private readonly cuentaHistorialService: CuentaHistorialService,
     @Inject(forwardRef(() => CurrencyConversionService))
     private readonly currencyConversionService: CurrencyConversionService,
+    private readonly conversionService: ConversionService,
   ) { }
 
   async obtenerCuentaPrincipal(userId: string): Promise<CuentaDocument> {
@@ -32,6 +36,84 @@ export class CuentaService {
 
   async obtenerVistaPrevia(userId: string, nuevaMoneda: string) {
     return this.currencyConversionService.obtenerResumenCambioMoneda(userId, nuevaMoneda);
+  }
+
+  /**
+   * Obtiene una vista previa de todos los balances convertidos a una moneda específica
+   * Sin modificar la base de datos - Solo lectura
+   */
+  async obtenerPreviewEnOtraMoneda(userId: string, codigoMoneda: string) {
+    const usuario = await this.userModel.findOne({ id: userId });
+    if (!usuario) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    // Validar que la moneda exista
+    const monedaDestino = await this.monedaService.obtenerMonedaPorCodigo(codigoMoneda);
+    if (!monedaDestino) {
+      throw new BadRequestException(`Moneda ${codigoMoneda} no encontrada`);
+    }
+
+    // Obtener cuenta principal
+    const cuentaPrincipal = await this.cuentaModel.findOne({ userId, isPrincipal: true });
+    if (!cuentaPrincipal) {
+      throw new NotFoundException('Cuenta principal no encontrada');
+    }
+
+    // Obtener todas las subcuentas activas
+    const subcuentas = await this.subcuentaModel.find({ userId, activa: true });
+
+    // Convertir balance de cuenta principal
+    const cuentaConvertida = await this.conversionService.convertir(
+      cuentaPrincipal.cantidad,
+      cuentaPrincipal.moneda,
+      codigoMoneda
+    );
+
+    // Convertir balances de subcuentas
+    const subcuentasConvertidas = await Promise.all(
+      subcuentas.map(async (subcuenta) => {
+        const conversion = await this.conversionService.convertir(
+          subcuenta.cantidad,
+          subcuenta.moneda,
+          codigoMoneda
+        );
+
+        return {
+          id: subcuenta.subCuentaId,
+          nombre: subcuenta.nombre,
+          color: subcuenta.color,
+          monedaOriginal: subcuenta.moneda,
+          balanceOriginal: subcuenta.cantidad,
+          balanceConvertido: conversion.montoConvertido,
+          tasaConversion: conversion.tasaConversion,
+        };
+      })
+    );
+
+    // Calcular total general
+    const totalConvertido = cuentaConvertida.montoConvertido + 
+      subcuentasConvertidas.reduce((sum, sub) => sum + sub.balanceConvertido, 0);
+
+    return {
+      monedaVisualizacion: codigoMoneda,
+      simbolo: monedaDestino.simbolo,
+      fechaConversion: new Date(),
+      cuentaPrincipal: {
+        nombre: cuentaPrincipal.nombre,
+        monedaOriginal: cuentaPrincipal.moneda,
+        balanceOriginal: cuentaPrincipal.cantidad,
+        balanceConvertido: cuentaConvertida.montoConvertido,
+        tasaConversion: cuentaConvertida.tasaConversion,
+      },
+      subcuentas: subcuentasConvertidas,
+      totalGeneral: {
+        moneda: codigoMoneda,
+        monto: totalConvertido,
+        simbolo: monedaDestino.simbolo,
+      },
+      nota: 'Esta es una vista previa. Los datos no se han modificado en la base de datos.',
+    };
   }
   
   async verificarSincronizacionMoneda(userId: string): Promise<void> {
