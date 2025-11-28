@@ -9,6 +9,8 @@ import { Cuenta } from '../cuenta/schemas/cuenta.schema/cuenta.schema';
 import { Subcuenta } from '../subcuenta/schemas/subcuenta.schema/subcuenta.schema';
 import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.service';
 import { generateUniqueId } from '../utils/generate-id';
+import { ConversionService } from '../utils/services/conversion.service';
+import { UserService } from '../user/user.service';
 
 @Injectable()
 export class TransactionsService {
@@ -17,19 +19,43 @@ export class TransactionsService {
     @InjectModel(SubcuentaHistorial.name) private readonly historialModel: Model<any>,
     @InjectModel(Cuenta.name) private readonly cuentaModel: Model<any>,
     @InjectModel(Subcuenta.name) private readonly subcuentaModel: Model<any>,
-    private readonly historialService: CuentaHistorialService
+    private readonly historialService: CuentaHistorialService,
+    private readonly conversionService: ConversionService,
+    private readonly userService: UserService,
   ) {}
 
   async crear(dto: CreateTransactionDto, userId: string) {
     const transaccionId = await generateUniqueId(this.transactionModel, 'transaccionId');
   
-    const nueva = new this.transactionModel({
+    // Obtener monedaPrincipal del usuario
+    const user = await this.userService.getProfile(userId);
+    const monedaPrincipal = user.monedaPrincipal || 'MXN';
+
+    // Asegurar que la transacción tenga moneda (por defecto la del usuario)
+    const monedaTransaccion = dto.moneda || monedaPrincipal;
+  
+    const payload: any = {
       ...dto,
       userId,
       transaccionId,
-    });
-  
+      moneda: monedaTransaccion,
+    };
+
+    // Si la moneda de la transacción difiere de monedaPrincipal, convertir
+    if (monedaTransaccion !== monedaPrincipal) {
+      const conversion = await this.conversionService.convertir(
+        dto.monto,
+        monedaTransaccion,
+        monedaPrincipal,
+      );
+      payload.montoConvertido = conversion.montoConvertido;
+      payload.tasaConversion = conversion.tasaConversion;
+      payload.fechaConversion = conversion.fechaConversion;
+    }
+
+    const nueva = new this.transactionModel(payload);
     const guardada = await nueva.save();
+    
     const result: { subcuenta?: any; historial?: any } = await this.aplicarTransaccion({
       ...guardada.toObject(),
       motivo: dto.motivo,
