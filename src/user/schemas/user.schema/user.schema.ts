@@ -44,6 +44,9 @@ export class User {
   @Prop({ type: Date, default: Date.now })
   lastActivityAt: Date;
 
+  @Prop({ type: [String], default: [] })
+  expoPushTokens: string[];
+
   @Prop({ default: 'usuario' })
   rol: string;
 

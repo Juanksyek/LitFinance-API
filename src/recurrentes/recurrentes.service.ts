@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Recurrente, RecurrenteDocument } from './schemas/recurrente.schema';
@@ -8,7 +8,8 @@ import { HistorialRecurrente, HistorialRecurrenteDocument } from './schemas/hist
 import { generateUniqueId } from 'src/utils/generate-id';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import { CuentaService } from '../cuenta/cuenta.service';
-import { CuentaDocument } from '../cuenta/schemas/cuenta.schema/cuenta.schema';
+import { Cuenta, CuentaDocument } from '../cuenta/schemas/cuenta.schema/cuenta.schema';
+import { Subcuenta, SubcuentaDocument } from '../subcuenta/schemas/subcuenta.schema/subcuenta.schema';
 import { MonedaService } from '../moneda/moneda.service';
 import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.service';
 import { ConversionService } from '../utils/services/conversion.service';
@@ -19,6 +20,8 @@ export class RecurrentesService {
   constructor(
     @InjectModel(Recurrente.name) private readonly recurrenteModel: Model<RecurrenteDocument>,
     @InjectModel(HistorialRecurrente.name) private readonly historialModel: Model<HistorialRecurrenteDocument>,
+    @InjectModel(Cuenta.name) private readonly cuentaModel: Model<CuentaDocument>,
+    @InjectModel(Subcuenta.name) private readonly subcuentaModel: Model<SubcuentaDocument>,
     private readonly notificacionesService: NotificacionesService,
     private readonly cuentaService: CuentaService,
     private readonly monedaService: MonedaService,
@@ -211,7 +214,7 @@ export class RecurrentesService {
     }
   }
 
-  async ejecutarRecurrentesDelDia(): Promise<number> {
+  async ejecutarRecurrentesDelDia(): Promise<{ ejecutados: number; exitosos: number; fallidos: number }> {
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
     const mañana = new Date(hoy);
@@ -220,53 +223,172 @@ export class RecurrentesService {
     const recurrentes = await this.recurrenteModel.find({
       proximaEjecucion: { $gte: hoy, $lt: mañana },
       pausado: { $ne: true },
+      estado: { $ne: 'ejecutando' },
     });
 
+    let exitosos = 0;
+    let fallidos = 0;
+
     for (const r of recurrentes) {
-      // Obtener monedaPrincipal del usuario
-      const user = await this.userService.getProfile(r.userId);
-      const monedaPrincipal = user.monedaPrincipal || 'MXN';
+      try {
+        // Marcar como ejecutando
+        r.estado = 'ejecutando';
+        await r.save();
 
-      let montoConvertido = r.monto;
-      let tasaConversion = 1;
+        // Obtener monedaPrincipal del usuario y cuenta
+        const user = await this.userService.getProfile(r.userId);
+        const monedaPrincipal = user.monedaPrincipal || 'MXN';
+        const cuenta = await this.cuentaService.obtenerCuentaPrincipal(r.userId);
 
-      // Convertir usando tasas ACTUALES en cada ejecución
-      if (r.moneda !== monedaPrincipal) {
-        const conversion = await this.conversionService.convertir(
-          r.monto,
-          r.moneda,
-          monedaPrincipal,
-        );
-        montoConvertido = conversion.montoConvertido;
-        tasaConversion = conversion.tasaConversion;
+        let montoConvertido = r.monto;
+        let tasaConversion = 1;
 
-        // Guardar conversión en el documento recurrente para referencia
-        r.montoConvertido = montoConvertido;
-        r.tasaConversion = tasaConversion;
-        r.fechaConversion = conversion.fechaConversion;
+        // Convertir usando tasas ACTUALES en cada ejecución
+        if (r.moneda !== monedaPrincipal) {
+          const conversion = await this.conversionService.convertir(
+            r.monto,
+            r.moneda,
+            monedaPrincipal,
+          );
+          montoConvertido = conversion.montoConvertido;
+          tasaConversion = conversion.tasaConversion;
+
+          // Guardar conversión en el documento recurrente para referencia
+          r.montoConvertido = montoConvertido;
+          r.tasaConversion = tasaConversion;
+          r.fechaConversion = conversion.fechaConversion;
+        }
+
+        // ✅ DESCUENTO REAL DE SALDOS (Implementado)
+        if (r.afectaSubcuenta && r.subcuentaId) {
+          // Verificar que subcuenta existe
+          const subcuenta = await this.subcuentaModel.findOne({ 
+            subCuentaId: r.subcuentaId, 
+            userId: r.userId 
+          });
+          
+          if (!subcuenta) {
+            throw new NotFoundException(`Subcuenta ${r.subcuentaId} no encontrada`);
+          }
+
+          // Verificar saldo suficiente
+          if (subcuenta.cantidad < montoConvertido) {
+            throw new BadRequestException(
+              `Saldo insuficiente en subcuenta "${subcuenta.nombre}". Disponible: ${subcuenta.cantidad}, Requerido: ${montoConvertido}`
+            );
+          }
+
+          // Descontar de subcuenta
+          await this.subcuentaModel.updateOne(
+            { subCuentaId: r.subcuentaId, userId: r.userId },
+            { $inc: { cantidad: -montoConvertido } }
+          );
+        }
+
+        if (r.afectaCuentaPrincipal) {
+          // Verificar que cuenta existe y tiene saldo
+          const cuentaDoc = await this.cuentaModel.findOne({ 
+            id: cuenta.id, 
+            userId: r.userId 
+          });
+          
+          if (!cuentaDoc) {
+            throw new NotFoundException('Cuenta principal no encontrada');
+          }
+
+          // Verificar saldo suficiente
+          if (cuentaDoc.cantidad < montoConvertido) {
+            throw new BadRequestException(
+              `Saldo insuficiente en cuenta principal. Disponible: ${cuentaDoc.cantidad}, Requerido: ${montoConvertido}`
+            );
+          }
+
+          // Descontar de cuenta principal
+          await this.cuentaModel.updateOne(
+            { id: cuenta.id, userId: r.userId },
+            { $inc: { cantidad: -montoConvertido } }
+          );
+        }
+
+        // Registrar en historial de recurrentes
+        await this.historialModel.create({
+          recurrenteId: r.recurrenteId,
+          monto: r.monto,
+          moneda: r.moneda,
+          montoConvertido,
+          tasaConversion,
+          cuentaId: r.cuentaId || cuenta.id,
+          subcuentaId: r.subcuentaId,
+          afectaCuentaPrincipal: r.afectaCuentaPrincipal,
+          fecha: new Date(),
+          userId: r.userId,
+          estado: 'exitoso',
+          nombreRecurrente: r.nombre,
+          plataforma: r.plataforma,
+        });
+
+        // Registrar en historial de cuenta (esto debería actualizar el balance)
+        await this.cuentaHistorialService.registrarMovimiento({
+          cuentaId: r.cuentaId || cuenta.id,
+          userId: r.userId,
+          tipo: 'recurrente',
+          descripcion: `Cargo recurrente: ${r.nombre} (${r.plataforma.nombre})`,
+          monto: -montoConvertido,
+          fecha: new Date().toISOString(),
+          conceptoId: undefined,
+          subcuentaId: r.subcuentaId,
+          metadata: {
+            recurrenteId: r.recurrenteId,
+            monedaOrigen: r.moneda,
+            montoOriginal: r.monto,
+            tasaConversion,
+            plataforma: r.plataforma.nombre,
+            afectaCuentaPrincipal: r.afectaCuentaPrincipal,
+            afectaSubcuenta: r.afectaSubcuenta,
+          },
+        });
+
+        // Actualizar próxima ejecución
+        if (r.frecuenciaTipo && r.frecuenciaValor) {
+          r.proximaEjecucion = this.calcularProximaFechaPersonalizada(
+            new Date(),
+            r.frecuenciaTipo,
+            r.frecuenciaValor
+          );
+        }
+
+        r.estado = 'activo';
+        r.ultimaEjecucion = new Date();
+        r.mensajeError = undefined;
+        await r.save();
+
+        exitosos++;
+      } catch (error) {
+        // Registrar error
+        r.estado = 'error';
+        r.mensajeError = error.message;
+        await r.save();
+
+        await this.historialModel.create({
+          recurrenteId: r.recurrenteId,
+          monto: r.monto,
+          moneda: r.moneda,
+          cuentaId: r.cuentaId,
+          subcuentaId: r.subcuentaId,
+          afectaCuentaPrincipal: r.afectaCuentaPrincipal,
+          fecha: new Date(),
+          userId: r.userId,
+          estado: 'fallido',
+          mensajeError: error.message,
+          nombreRecurrente: r.nombre,
+          plataforma: r.plataforma,
+        });
+
+        fallidos++;
       }
-
-      await this.historialModel.create({
-        recurrenteId: r.recurrenteId,
-        monto: r.monto,
-        cuentaId: r.cuentaId,
-        subcuentaId: r.subcuentaId,
-        afectaCuentaPrincipal: r.afectaCuentaPrincipal,
-        fecha: new Date(),
-        userId: r.userId,
-        observacion: r.moneda !== monedaPrincipal 
-          ? `Convertido de ${r.monto} ${r.moneda} a ${montoConvertido} ${monedaPrincipal} (tasa: ${tasaConversion})`
-          : undefined,
-      });
-
-      if (r.frecuenciaTipo && r.frecuenciaValor) {
-        r.proximaEjecucion = this.calcularProximaFechaPersonalizada(new Date(), r.frecuenciaTipo, r.frecuenciaValor);
-      }
-      
-      await r.save();
     }
 
-    return recurrentes.length;
+    return { ejecutados: recurrentes.length, exitosos, fallidos };
   }
 
   async pausarRecurrente(recurrenteId: string, userId: string) {

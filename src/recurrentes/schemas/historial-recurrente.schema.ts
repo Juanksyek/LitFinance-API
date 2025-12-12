@@ -11,6 +11,15 @@ export class HistorialRecurrente {
   @Prop({ required: true })
   monto: number;
 
+  @Prop({ required: true })
+  moneda: string;
+
+  @Prop()
+  montoConvertido?: number;
+
+  @Prop()
+  tasaConversion?: number;
+
   @Prop()
   cuentaId?: string;
 
@@ -25,6 +34,23 @@ export class HistorialRecurrente {
 
   @Prop({ required: true })
   userId: string;
+
+  @Prop({ required: true, enum: ['exitoso', 'fallido'] })
+  estado: string;
+
+  @Prop()
+  mensajeError?: string;
+
+  @Prop({ required: true })
+  nombreRecurrente: string;
+
+  @Prop({ type: Object })
+  plataforma: {
+    plataformaId: string;
+    nombre: string;
+    color: string;
+    categoria: string;
+  };
 }
 
 export const HistorialRecurrenteSchema = SchemaFactory.createForClass(HistorialRecurrente);
