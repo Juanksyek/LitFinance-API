@@ -73,6 +73,15 @@ export class Recurrente {
 
   @Prop({ default: false })
   pausado: boolean;
+
+  @Prop({ default: 'activo', enum: ['activo', 'ejecutando', 'error', 'pausado'] })
+  estado: string;
+
+  @Prop()
+  ultimaEjecucion?: Date;
+
+  @Prop()
+  mensajeError?: string;
 }
 
 export const RecurrenteSchema = SchemaFactory.createForClass(Recurrente);
