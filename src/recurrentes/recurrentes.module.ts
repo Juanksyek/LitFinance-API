@@ -9,6 +9,8 @@ import { PlataformaRecurrente, PlataformaRecurrenteSchema } from '../plataformas
 import { NotificacionesModule } from '../notificaciones/notificaciones.module';
 import { RecurrentesCronService } from './recurrentes-cron/recurrentes-cron.service';
 import { CuentaModule } from 'src/cuenta/cuenta.module';
+import { Cuenta, CuentaSchema } from '../cuenta/schemas/cuenta.schema/cuenta.schema';
+import { Subcuenta, SubcuentaSchema } from '../subcuenta/schemas/subcuenta.schema/subcuenta.schema';
 import { MonedaModule } from 'src/moneda/moneda.module';
 import { CuentaHistorialModule } from 'src/cuenta-historial/cuenta-historial.module';
 import { UtilsModule } from 'src/utils/utils.module';
@@ -20,6 +22,8 @@ import { UserModule } from 'src/user/user.module';
       { name: Recurrente.name, schema: RecurrenteSchema },
       { name: HistorialRecurrente.name, schema: HistorialRecurrenteSchema },
       { name: PlataformaRecurrente.name, schema: PlataformaRecurrenteSchema },
+      { name: Cuenta.name, schema: CuentaSchema },
+      { name: Subcuenta.name, schema: SubcuentaSchema },
     ]),
     NotificacionesModule,
     CuentaModule,
