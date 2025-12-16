@@ -235,31 +235,15 @@ export class RecurrentesService {
         r.estado = 'ejecutando';
         await r.save();
 
-        // Obtener monedaPrincipal del usuario y cuenta
-        const user = await this.userService.getProfile(r.userId);
-        const monedaPrincipal = user.monedaPrincipal || 'MXN';
+        // Obtener cuenta principal
         const cuenta = await this.cuentaService.obtenerCuentaPrincipal(r.userId);
 
-        let montoConvertido = r.monto;
-        let tasaConversion = 1;
+        let montoConvertidoSubcuenta = r.monto;
+        let tasaConversionSubcuenta = 1;
+        let montoConvertidoCuenta = r.monto;
+        let tasaConversionCuenta = 1;
 
-        // Convertir usando tasas ACTUALES en cada ejecución
-        if (r.moneda !== monedaPrincipal) {
-          const conversion = await this.conversionService.convertir(
-            r.monto,
-            r.moneda,
-            monedaPrincipal,
-          );
-          montoConvertido = conversion.montoConvertido;
-          tasaConversion = conversion.tasaConversion;
-
-          // Guardar conversión en el documento recurrente para referencia
-          r.montoConvertido = montoConvertido;
-          r.tasaConversion = tasaConversion;
-          r.fechaConversion = conversion.fechaConversion;
-        }
-
-        // ✅ DESCUENTO REAL DE SALDOS (Implementado)
+        // DESCUENTO REAL DE SALDOS CON CONVERSIÓN AUTOMÁTICA
         if (r.afectaSubcuenta && r.subcuentaId) {
           // Verificar que subcuenta existe
           const subcuenta = await this.subcuentaModel.findOne({ 
@@ -271,17 +255,28 @@ export class RecurrentesService {
             throw new NotFoundException(`Subcuenta ${r.subcuentaId} no encontrada`);
           }
 
+          // CONVERSIÓN: Solo si la moneda del recurrente es diferente a la de la subcuenta
+          if (r.moneda !== subcuenta.moneda) {
+            const conversion = await this.conversionService.convertir(
+              r.monto,
+              r.moneda,
+              subcuenta.moneda,
+            );
+            montoConvertidoSubcuenta = conversion.montoConvertido;
+            tasaConversionSubcuenta = conversion.tasaConversion;
+          }
+
           // Verificar saldo suficiente
-          if (subcuenta.cantidad < montoConvertido) {
+          if (subcuenta.cantidad < montoConvertidoSubcuenta) {
             throw new BadRequestException(
-              `Saldo insuficiente en subcuenta "${subcuenta.nombre}". Disponible: ${subcuenta.cantidad}, Requerido: ${montoConvertido}`
+              `Saldo insuficiente en subcuenta "${subcuenta.nombre}". Disponible: ${subcuenta.cantidad} ${subcuenta.moneda}, Requerido: ${montoConvertidoSubcuenta} ${subcuenta.moneda}`
             );
           }
 
           // Descontar de subcuenta
           await this.subcuentaModel.updateOne(
             { subCuentaId: r.subcuentaId, userId: r.userId },
-            { $inc: { cantidad: -montoConvertido } }
+            { $inc: { cantidad: -montoConvertidoSubcuenta } }
           );
         }
 
@@ -296,27 +291,49 @@ export class RecurrentesService {
             throw new NotFoundException('Cuenta principal no encontrada');
           }
 
+          // CONVERSIÓN: Solo si la moneda del recurrente es diferente a la de la cuenta
+          if (r.moneda !== cuentaDoc.moneda) {
+            const conversion = await this.conversionService.convertir(
+              r.monto,
+              r.moneda,
+              cuentaDoc.moneda,
+            );
+            montoConvertidoCuenta = conversion.montoConvertido;
+            tasaConversionCuenta = conversion.tasaConversion;
+          }
+
           // Verificar saldo suficiente
-          if (cuentaDoc.cantidad < montoConvertido) {
+          if (cuentaDoc.cantidad < montoConvertidoCuenta) {
             throw new BadRequestException(
-              `Saldo insuficiente en cuenta principal. Disponible: ${cuentaDoc.cantidad}, Requerido: ${montoConvertido}`
+              `Saldo insuficiente en cuenta principal. Disponible: ${cuentaDoc.cantidad} ${cuentaDoc.moneda}, Requerido: ${montoConvertidoCuenta} ${cuentaDoc.moneda}`
             );
           }
 
           // Descontar de cuenta principal
           await this.cuentaModel.updateOne(
             { id: cuenta.id, userId: r.userId },
-            { $inc: { cantidad: -montoConvertido } }
+            { $inc: { cantidad: -montoConvertidoCuenta } }
           );
         }
 
+        // Guardar conversión en el documento recurrente para referencia
+        const montoConvertido = r.afectaSubcuenta ? montoConvertidoSubcuenta : montoConvertidoCuenta;
+        const tasaConversion = r.afectaSubcuenta ? tasaConversionSubcuenta : tasaConversionCuenta;
+        
+        r.montoConvertido = montoConvertido;
+        r.tasaConversion = tasaConversion;
+        r.fechaConversion = new Date();
+
         // Registrar en historial de recurrentes
+        const montoFinalConvertido = r.afectaSubcuenta ? montoConvertidoSubcuenta : montoConvertidoCuenta;
+        const tasaFinalConversion = r.afectaSubcuenta ? tasaConversionSubcuenta : tasaConversionCuenta;
+        
         await this.historialModel.create({
           recurrenteId: r.recurrenteId,
           monto: r.monto,
           moneda: r.moneda,
-          montoConvertido,
-          tasaConversion,
+          montoConvertido: montoFinalConvertido,
+          tasaConversion: tasaFinalConversion,
           cuentaId: r.cuentaId || cuenta.id,
           subcuentaId: r.subcuentaId,
           afectaCuentaPrincipal: r.afectaCuentaPrincipal,
@@ -327,13 +344,13 @@ export class RecurrentesService {
           plataforma: r.plataforma,
         });
 
-        // Registrar en historial de cuenta (esto debería actualizar el balance)
+        // Registrar en historial de cuenta
         await this.cuentaHistorialService.registrarMovimiento({
           cuentaId: r.cuentaId || cuenta.id,
           userId: r.userId,
           tipo: 'recurrente',
           descripcion: `Cargo recurrente: ${r.nombre} (${r.plataforma.nombre})`,
-          monto: -montoConvertido,
+          monto: -montoFinalConvertido,
           fecha: new Date().toISOString(),
           conceptoId: undefined,
           subcuentaId: r.subcuentaId,
