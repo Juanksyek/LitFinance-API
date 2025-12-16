@@ -403,12 +403,17 @@ export class RecurrentesService {
   
     await this.historialModel.create({
       recurrenteId: recurrente.recurrenteId,
+      nombreRecurrente: recurrente.nombre,
+      plataforma: recurrente.plataforma,
       monto: 0,
+      moneda: recurrente.moneda,
       cuentaId: recurrente.cuentaId,
       subcuentaId: recurrente.subcuentaId,
       afectaCuentaPrincipal: recurrente.afectaCuentaPrincipal,
       fecha: new Date(),
       userId: recurrente.userId,
+      estado: 'pausado',
+      mensajeError: undefined,
       observacion: '⏸ Recurrente pausado por el usuario',
     });
   
@@ -427,12 +432,17 @@ export class RecurrentesService {
   
     await this.historialModel.create({
       recurrenteId: recurrente.recurrenteId,
+      nombreRecurrente: recurrente.nombre,
+      plataforma: recurrente.plataforma,
       monto: 0,
+      moneda: recurrente.moneda,
       cuentaId: recurrente.cuentaId,
       subcuentaId: recurrente.subcuentaId,
       afectaCuentaPrincipal: recurrente.afectaCuentaPrincipal,
       fecha: new Date(),
       userId: recurrente.userId,
+      estado: 'activo',
+      mensajeError: undefined,
       observacion: '▶️ Recurrente reanudado por el usuario',
     });
   
