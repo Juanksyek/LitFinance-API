@@ -35,7 +35,7 @@ export class HistorialRecurrente {
   @Prop({ required: true })
   userId: string;
 
-  @Prop({ required: true, enum: ['exitoso', 'fallido'] })
+  @Prop({ required: true, enum: ['exitoso', 'fallido', 'pausado', 'activo'] })
   estado: string;
 
   @Prop()
