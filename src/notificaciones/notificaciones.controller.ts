@@ -56,7 +56,8 @@ export class NotificacionesController {
     return this.notificacionesService.enviarNotificacionATodos(
       body.titulo,
       body.mensaje,
-      body.data
+      body.data,
+      body.filtro || 'all'
     );
   }
 
