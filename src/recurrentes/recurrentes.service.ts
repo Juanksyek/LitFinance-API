@@ -34,24 +34,25 @@ export class RecurrentesService {
     const recurrenteId = await generateUniqueId(this.recurrenteModel, 'recurrenteId');
     const cuenta: CuentaDocument = await this.cuentaService.obtenerCuentaPrincipal(userId);
 
-    // NO convertimos en creación, solo registramos en historial para tracking
-    if (dto.afectaCuentaPrincipal) {
-      await this.cuentaHistorialService.registrarMovimiento({
-        cuentaId: (cuenta._id as string).toString(),
-        userId,
-        tipo: 'recurrente',
-        descripcion: `Se registró el recurrente "${dto.nombre}" por ${dto.monto} ${dto.moneda} (se convertirá en cada ejecución)`,
-        monto: 0, // No afectamos aún la cuenta
-        fecha: new Date().toISOString(),
-        conceptoId: undefined,
-        subcuentaId: undefined,
-        metadata: {
-          monedaOrigen: dto.moneda,
-          montoOriginal: dto.monto,
-          nota: 'Conversión pendiente hasta ejecución',
-        },
-      });
-    }
+    // Registrar creación de recurrente en historial
+    await this.cuentaHistorialService.registrarMovimiento({
+      cuentaId: dto.cuentaId || cuenta.id,
+      userId,
+      tipo: 'recurrente',
+      descripcion: `Recurrente creado: "${dto.nombre}" - ${dto.monto} ${dto.moneda}`,
+      monto: 0,
+      fecha: new Date().toISOString(),
+      conceptoId: undefined,
+      subcuentaId: dto.subcuentaId,
+      metadata: {
+        accion: 'crear',
+        recurrenteId,
+        moneda: dto.moneda,
+        monto: dto.monto,
+        afectaCuentaPrincipal: dto.afectaCuentaPrincipal,
+        afectaSubcuenta: dto.afectaSubcuenta,
+      },
+    });
 
     const nuevo = new this.recurrenteModel({
       ...dto,
@@ -154,6 +155,9 @@ export class RecurrentesService {
       throw new ForbiddenException('frecuenciaTipo y frecuenciaValor son requeridos para actualizar la próxima ejecución');
     }
     
+    const recurrente = await this.recurrenteModel.findOne({ recurrenteId });
+    if (!recurrente) throw new NotFoundException('Recurrente no encontrado para editar');
+
     const actualizado = await this.recurrenteModel.findOneAndUpdate(
       { recurrenteId },
       {
@@ -167,11 +171,59 @@ export class RecurrentesService {
       { new: true },
     );
 
-    if (!actualizado) throw new NotFoundException('Recurrente no encontrado para editar');
+    if (!actualizado) throw new NotFoundException('No se pudo actualizar el recurrente');
+
+    // Registrar modificación en historial
+    const cuenta = await this.cuentaService.obtenerCuentaPrincipal(recurrente.userId);
+    await this.cuentaHistorialService.registrarMovimiento({
+      cuentaId: cuenta.id,
+      userId: recurrente.userId,
+      tipo: 'recurrente',
+      descripcion: `Recurrente modificado: "${dto.nombre || recurrente.nombre}"`,
+      monto: 0,
+      fecha: new Date().toISOString(),
+      conceptoId: undefined,
+      subcuentaId: dto.subcuentaId || recurrente.subcuentaId,
+      metadata: {
+        accion: 'modificar',
+        recurrenteId,
+        cambios: dto,
+      },
+    });
+
     return actualizado;
   }
 
   async eliminar(recurrenteId: string): Promise<{ eliminado: boolean; mensaje: string }> {
+    const recurrente = await this.recurrenteModel.findOne({ recurrenteId });
+    
+    if (!recurrente) {
+      return {
+        eliminado: false,
+        mensaje: `No se encontró un recurrente con ID ${recurrenteId}.`,
+      };
+    }
+
+    // Registrar eliminación en historial antes de borrar
+    const cuenta = await this.cuentaService.obtenerCuentaPrincipal(recurrente.userId);
+    await this.cuentaHistorialService.registrarMovimiento({
+      cuentaId: cuenta.id,
+      userId: recurrente.userId,
+      tipo: 'recurrente',
+      descripcion: `Recurrente eliminado: "${recurrente.nombre}" - ${recurrente.monto} ${recurrente.moneda}`,
+      monto: 0,
+      fecha: new Date().toISOString(),
+      conceptoId: undefined,
+      subcuentaId: recurrente.subcuentaId,
+      metadata: {
+        accion: 'eliminar',
+        recurrenteId,
+        nombre: recurrente.nombre,
+        monto: recurrente.monto,
+        moneda: recurrente.moneda,
+      },
+    });
+
     const res = await this.recurrenteModel.deleteOne({ recurrenteId });
 
     if (res.deletedCount > 0) {
@@ -334,7 +386,7 @@ export class RecurrentesService {
           moneda: r.moneda,
           montoConvertido: montoFinalConvertido,
           tasaConversion: tasaFinalConversion,
-          cuentaId: r.cuentaId || cuenta.id,
+          cuentaId: cuenta.id,
           subcuentaId: r.subcuentaId,
           afectaCuentaPrincipal: r.afectaCuentaPrincipal,
           fecha: new Date(),
@@ -346,7 +398,7 @@ export class RecurrentesService {
 
         // Registrar en historial de cuenta
         await this.cuentaHistorialService.registrarMovimiento({
-          cuentaId: r.cuentaId || cuenta.id,
+          cuentaId: cuenta.id,
           userId: r.userId,
           tipo: 'recurrente',
           descripcion: `Cargo recurrente: ${r.nombre} (${r.plataforma.nombre})`,
