@@ -27,6 +27,10 @@ export class EnviarNotificacionTodosDto {
   @IsNotEmpty()
   mensaje: string;
 
+  @IsString()
+  @IsOptional()
+  filtro?: 'all' | 'active' | 'inactive';
+
   @IsObject()
   @IsOptional()
   data?: Record<string, any>;

@@ -102,15 +102,51 @@ export class NotificacionesService {
     }
   }
 
-  // Enviar notificación a todos los usuarios
+  // Enviar notificación a todos los usuarios con filtrado opcional
   async enviarNotificacionATodos(
     titulo: string,
     mensaje: string,
-    data?: Record<string, any>
+    data?: Record<string, any>,
+    filtro: 'all' | 'active' | 'inactive' = 'all'
   ): Promise<{ enviados: number; fallidos: number }> {
-    const usuarios = await this.userModel.find({
-      expoPushTokens: { $exists: true, $ne: [] },
-    });
+    let usuarios: UserDocument[] = [];
+
+    switch (filtro) {
+      case 'all':
+        // Todos los usuarios con tokens registrados
+        usuarios = await this.userModel.find({
+          expoPushTokens: { $exists: true, $ne: [] },
+        });
+        this.logger.log(`Enviando notificación a TODOS los usuarios (${usuarios.length})`);
+        break;
+
+      case 'active':
+        // Usuarios con actividad en los últimos 7 días
+        const hace7Dias = new Date();
+        hace7Dias.setDate(hace7Dias.getDate() - 7);
+        usuarios = await this.userModel.find({
+          lastActivityAt: { $gte: hace7Dias },
+          expoPushTokens: { $exists: true, $ne: [] },
+        });
+        this.logger.log(`Enviando notificación a usuarios ACTIVOS (${usuarios.length})`);
+        break;
+
+      case 'inactive':
+        // Usuarios sin actividad por más de 7 días
+        const hace7DiasInactivos = new Date();
+        hace7DiasInactivos.setDate(hace7DiasInactivos.getDate() - 7);
+        usuarios = await this.userModel.find({
+          lastActivityAt: { $lt: hace7DiasInactivos },
+          expoPushTokens: { $exists: true, $ne: [] },
+        });
+        this.logger.log(`Enviando notificación a usuarios INACTIVOS (${usuarios.length})`);
+        break;
+
+      default:
+        usuarios = await this.userModel.find({
+          expoPushTokens: { $exists: true, $ne: [] },
+        });
+    }
 
     let enviados = 0;
     let fallidos = 0;
@@ -125,7 +161,7 @@ export class NotificacionesService {
       }
     }
 
-    this.logger.log(`📊 Notificación masiva: ${enviados} enviados, ${fallidos} fallidos`);
+    this.logger.log(`Notificación masiva (filtro: ${filtro}): ${enviados} enviados, ${fallidos} fallidos`);
     return { enviados, fallidos };
   }
 
