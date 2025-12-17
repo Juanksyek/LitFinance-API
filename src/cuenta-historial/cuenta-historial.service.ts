@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { CuentaHistorial } from './interfaces/cuenta-historial.interface';
 import { CreateCuentaHistorialDto } from './dto/create-cuenta-historial.dto';
 import { generateUniqueId } from '../utils/generate-id';
+import { HistorialRecurrente, HistorialRecurrenteDocument } from '../recurrentes/schemas/historial-recurrente.schema';
 
 @Injectable()
 export class CuentaHistorialService {
@@ -12,6 +13,8 @@ export class CuentaHistorialService {
     private readonly historialModel: Model<CuentaHistorial>,
     @InjectModel('ConceptoPersonalizado')
     private readonly conceptoModel: Model<any>,
+    @InjectModel(HistorialRecurrente.name)
+    private readonly historialRecurrenteModel: Model<HistorialRecurrenteDocument>,
   ) {}
 
   async registrarMovimiento(dto: CreateCuentaHistorialDto): Promise<CuentaHistorial> {
@@ -65,7 +68,38 @@ export class CuentaHistorialService {
         },
     }));
 
-    return { total, page, limit, data: enriched };
+    // Obtener historial de recurrentes para la misma cuenta
+    const recurrentes = await this.historialRecurrenteModel
+      .find({ cuentaId, estado: 'exitoso' })
+      .sort({ fecha: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+
+    // Combinar y ordenar por fecha
+    const recurrentesFormateados = recurrentes.map((r) => ({
+      ...r,
+      _id: r._id,
+      tipo: 'recurrente',
+      descripcion: `Cargo recurrente: ${r.nombreRecurrente}`,
+      monto: -r.montoConvertido || -r.monto,
+      conceptoId: undefined,
+      detalles: {
+        origen: r.subcuentaId ? 'Desde subcuenta' : 'Movimiento directo',
+        etiqueta: 'Recurrente',
+        resumen: `${r.nombreRecurrente} - ${r.plataforma?.nombre || 'Sin plataforma'} (${r.montoConvertido || r.monto})`,
+        plataforma: r.plataforma?.nombre,
+        monedaOriginal: r.moneda,
+        montoOriginal: r.monto,
+        tasaConversion: r.tasaConversion,
+      },
+    }));
+
+    const todosLosMovimientos = [...enriched, ...recurrentesFormateados].sort(
+      (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+    );
+
+    return { total: total + recurrentes.length, page, limit, data: todosLosMovimientos };
   }
 
   async eliminar(id: string) {
