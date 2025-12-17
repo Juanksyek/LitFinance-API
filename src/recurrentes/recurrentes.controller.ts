@@ -63,4 +63,12 @@ export class RecurrentesController {
   async reanudar(@Param('recurrenteId') recurrenteId: string, @Req() req) {
     return this.recurrentesService.reanudarRecurrente(recurrenteId, req.user.id);
   }
+
+  @Get('historial/estadisticas')
+  async obtenerEstadisticas(
+    @Req() req,
+    @Query('filtro') filtro: 'año' | 'mes' | 'quincena' | 'semana' = 'mes'
+  ) {
+    return this.recurrentesService.obtenerEstadisticasHistorial(req.user.id, filtro);
+  }
 }
