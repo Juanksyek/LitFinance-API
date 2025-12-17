@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { CuentaHistorialController } from './cuenta-historial.controller';
 import { CuentaHistorialService } from './cuenta-historial.service';
 import { CuentaHistorial, CuentaHistorialSchema } from './schemas/cuenta-historial.schema';
+import { HistorialRecurrente, HistorialRecurrenteSchema } from '../recurrentes/schemas/historial-recurrente.schema';
 import { ConceptosModule } from '../conceptos/conceptos.module';
 
 @Module({
@@ -11,6 +12,10 @@ import { ConceptosModule } from '../conceptos/conceptos.module';
       {
         name: CuentaHistorial.name,
         schema: CuentaHistorialSchema,
+      },
+      {
+        name: HistorialRecurrente.name,
+        schema: HistorialRecurrenteSchema,
       },
     ]),
     ConceptosModule,
