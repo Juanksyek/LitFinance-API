@@ -41,12 +41,9 @@ export class CuentaHistorialService {
       ];
     }
 
-    const total = await this.historialModel.countDocuments(filtro);
+    // Obtener todos los movimientos manuales
     const data = await this.historialModel
       .find(filtro)
-      .sort({ fecha: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
       .lean();
 
     const conceptosMap = new Map<string, string>();
@@ -58,25 +55,21 @@ export class CuentaHistorialService {
     }
 
     const enriched = data.map((item) => ({
-        ...item,
-        motivo: item.motivo ?? null,
-        detalles: {
-          origen: item.subcuentaId ? 'Desde subcuenta' : 'Movimiento directo',
-          etiqueta: item.tipo === 'ajuste_subcuenta' ? 'Ajuste' : 'Manual',
-          resumen: `${item.descripcion} (${item.monto})`,
-          conceptoNombre: item.conceptoId ? conceptosMap.get(item.conceptoId) : undefined,
-        },
+      ...item,
+      motivo: item.motivo ?? null,
+      detalles: {
+        origen: item.subcuentaId ? 'Desde subcuenta' : 'Movimiento directo',
+        etiqueta: item.tipo === 'ajuste_subcuenta' ? 'Ajuste' : 'Manual',
+        resumen: `${item.descripcion} (${item.monto})`,
+        conceptoNombre: item.conceptoId ? conceptosMap.get(item.conceptoId) : undefined,
+      },
     }));
 
-    // Obtener historial de recurrentes para la misma cuenta
+    // Obtener todos los recurrentes exitosos para la misma cuenta
     const recurrentes = await this.historialRecurrenteModel
       .find({ cuentaId, estado: 'exitoso' })
-      .sort({ fecha: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
       .lean();
 
-    // Combinar y ordenar por fecha
     const recurrentesFormateados = recurrentes.map((r) => ({
       ...r,
       _id: r._id,
@@ -95,11 +88,17 @@ export class CuentaHistorialService {
       },
     }));
 
+    // Unificar, ordenar y paginar
     const todosLosMovimientos = [...enriched, ...recurrentesFormateados].sort(
       (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
     );
 
-    return { total: total + recurrentes.length, page, limit, data: todosLosMovimientos };
+    const total = todosLosMovimientos.length;
+    const start = (page - 1) * limit;
+    const end = start + limit;
+    const paginados = todosLosMovimientos.slice(start, end);
+
+    return { total, page, limit, data: paginados };
   }
 
   async eliminar(id: string) {
