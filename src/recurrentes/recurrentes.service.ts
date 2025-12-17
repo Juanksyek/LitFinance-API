@@ -465,4 +465,69 @@ export class RecurrentesService {
   
     return { mensaje: `Recurrente \"${recurrente.nombre}\" reanudado correctamente.` };
   }
+
+  async obtenerEstadisticasHistorial(
+    userId: string,
+    filtro: 'año' | 'mes' | 'quincena' | 'semana'
+  ): Promise<{
+    totalCobrado: number;
+    cantidadEjecuciones: number;
+    porRecurrente: Array<{ nombre: string; total: number; cantidad: number }>;
+    periodo: { inicio: Date; fin: Date };
+  }> {
+    // Calcular fechas según filtro
+    const ahora = new Date();
+    let fechaInicio = new Date();
+
+    switch (filtro) {
+      case 'año':
+        fechaInicio.setFullYear(ahora.getFullYear() - 1);
+        break;
+      case 'mes':
+        fechaInicio.setMonth(ahora.getMonth() - 1);
+        break;
+      case 'quincena':
+        fechaInicio.setDate(ahora.getDate() - 15);
+        break;
+      case 'semana':
+        fechaInicio.setDate(ahora.getDate() - 7);
+        break;
+    }
+
+    // Obtener historial de recurrentes exitosos en el periodo
+    const historial = await this.historialModel.find({
+      userId,
+      fecha: { $gte: fechaInicio, $lte: ahora },
+      estado: 'exitoso',
+    });
+
+    // Calcular total cobrado
+    const totalCobrado = historial.reduce((sum, item) => {
+      return sum + (item.montoConvertido || item.monto);
+    }, 0);
+
+    // Agrupar por recurrente
+    const agrupado = new Map<string, { total: number; cantidad: number }>();
+
+    historial.forEach((item) => {
+      const nombre = item.nombreRecurrente || 'Sin nombre';
+      const existente = agrupado.get(nombre) || { total: 0, cantidad: 0 };
+      existente.total += item.montoConvertido || item.monto;
+      existente.cantidad += 1;
+      agrupado.set(nombre, existente);
+    });
+
+    const porRecurrente = Array.from(agrupado.entries()).map(([nombre, data]) => ({
+      nombre,
+      total: data.total,
+      cantidad: data.cantidad,
+    }));
+
+    return {
+      totalCobrado,
+      cantidadEjecuciones: historial.length,
+      porRecurrente,
+      periodo: { inicio: fechaInicio, fin: ahora },
+    };
+  }
 }
