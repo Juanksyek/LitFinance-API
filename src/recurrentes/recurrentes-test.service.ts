@@ -4,7 +4,7 @@ import { CuentaService } from '../cuenta/cuenta.service';
 import { SubcuentaService } from '../subcuenta/subcuenta.service';
 import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.service';
 
-interface TestResult {
+export interface TestResult {
   test: string;
   passed: boolean;
   detalles: string;
