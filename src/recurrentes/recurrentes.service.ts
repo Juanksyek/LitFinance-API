@@ -582,4 +582,55 @@ export class RecurrentesService {
       periodo: { inicio: fechaInicio, fin: ahora },
     };
   }
+
+  async ejecutarRecurrenteTest(recurrenteId: string, userId: string): Promise<any> {
+    // Verificar que el recurrente existe y pertenece al usuario
+    const recurrente = await this.recurrenteModel.findOne({ recurrenteId, userId });
+    
+    if (!recurrente) {
+      throw new NotFoundException('Recurrente no encontrado o no tienes permisos');
+    }
+
+    // Guardar la fecha original
+    const fechaOriginal = recurrente.proximaEjecucion;
+
+    try {
+      // Cambiar temporalmente la próxima ejecución a ahora
+      await this.recurrenteModel.updateOne(
+        { recurrenteId },
+        { 
+          $set: { 
+            proximaEjecucion: new Date(),
+            pausado: false // Asegurar que no esté pausado
+          } 
+        }
+      );
+
+      // Ejecutar el cron
+      const result = await this.ejecutarRecurrentesDelDia();
+
+      // Obtener el estado actualizado del recurrente
+      const recurrenteActualizado = await this.recurrenteModel.findOne({ recurrenteId });
+
+      return {
+        mensaje: '✅ Recurrente ejecutado exitosamente para prueba',
+        recurrenteId,
+        nombre: recurrente.nombre,
+        montoOriginal: recurrente.monto,
+        monedaOriginal: recurrente.moneda,
+        resultadoEjecucion: result,
+        estado: recurrenteActualizado?.estado,
+        mensajeError: recurrenteActualizado?.mensajeError,
+        proximaEjecucion: recurrenteActualizado?.proximaEjecucion,
+        instrucciones: 'Verifica el historial en /api/cuenta-historial y el saldo de tu cuenta/subcuenta'
+      };
+    } catch (error) {
+      // Restaurar la fecha original si algo falla
+      await this.recurrenteModel.updateOne(
+        { recurrenteId },
+        { $set: { proximaEjecucion: fechaOriginal } }
+      );
+      throw error;
+    }
+  }
 }
