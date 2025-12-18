@@ -1,5 +1,6 @@
 import { Controller, Get, Req, Post, Body, Param, Put, Delete, Query, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import { RecurrentesService } from './recurrentes.service';
+import { RecurrentesTestService } from './recurrentes-test.service';
 import { CrearRecurrenteDto } from './dto/crear-recurrente.dto';
 import { EditarRecurrenteDto } from './dto/editar-recurrente.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -7,7 +8,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 @UseGuards(JwtAuthGuard)
 @Controller('recurrentes')
 export class RecurrentesController {
-  constructor(private readonly recurrentesService: RecurrentesService) {}
+  constructor(
+    private readonly recurrentesService: RecurrentesService,
+    private readonly recurrentesTestService: RecurrentesTestService,
+  ) {}
 
   @Post()
   async crear(@Req() req, @Body() dto: CrearRecurrenteDto) {
@@ -70,5 +74,18 @@ export class RecurrentesController {
     @Query('filtro') filtro: 'año' | 'mes' | 'quincena' | 'semana' = 'mes'
   ) {
     return this.recurrentesService.obtenerEstadisticasHistorial(req.user.id, filtro);
+  }
+
+  @Post('test/ejecutar/:recurrenteId')
+  async ejecutarRecurrenteTest(
+    @Param('recurrenteId') recurrenteId: string,
+    @Req() req
+  ) {
+    return this.recurrentesService.ejecutarRecurrenteTest(recurrenteId, req.user.id);
+  }
+
+  @Post('test/automatizado')
+  async ejecutarTestsAutomatizados(@Req() req) {
+    return this.recurrentesTestService.ejecutarTestsCompletos(req.user.id);
   }
 }

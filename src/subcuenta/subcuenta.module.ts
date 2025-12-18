@@ -26,6 +26,6 @@ import { UserModule } from '../user/user.module';
   ],
   controllers: [SubcuentaController],
   providers: [SubcuentaService],
-  exports: [MongooseModule],
+  exports: [MongooseModule, SubcuentaService],
 })
 export class SubcuentaModule {}
