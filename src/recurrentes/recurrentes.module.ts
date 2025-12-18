@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { RecurrentesService } from './recurrentes.service';
+import { RecurrentesTestService } from './recurrentes-test.service';
 import { RecurrentesController } from './recurrentes.controller';
 
 import { Recurrente, RecurrenteSchema } from './schemas/recurrente.schema';
@@ -15,6 +16,7 @@ import { MonedaModule } from 'src/moneda/moneda.module';
 import { CuentaHistorialModule } from 'src/cuenta-historial/cuenta-historial.module';
 import { UtilsModule } from 'src/utils/utils.module';
 import { UserModule } from 'src/user/user.module';
+import { SubcuentaModule } from 'src/subcuenta/subcuenta.module';
 
 @Module({
   imports: [
@@ -27,13 +29,14 @@ import { UserModule } from 'src/user/user.module';
     ]),
     NotificacionesModule,
     CuentaModule,
+    SubcuentaModule,
     MonedaModule,
     CuentaHistorialModule,
     UtilsModule,
     forwardRef(() => UserModule),
   ],
   controllers: [RecurrentesController],
-  providers: [RecurrentesService, RecurrentesCronService],
+  providers: [RecurrentesService, RecurrentesCronService, RecurrentesTestService],
   exports: [RecurrentesService],
 })
 export class RecurrentesModule {}
