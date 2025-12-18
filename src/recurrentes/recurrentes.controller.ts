@@ -86,6 +86,7 @@ export class RecurrentesController {
 
   @Post('test/automatizado')
   async ejecutarTestsAutomatizados(@Req() req) {
+    // No tipar el retorno para evitar error TS4053
     return this.recurrentesTestService.ejecutarTestsCompletos(req.user.id);
   }
 }
