@@ -49,7 +49,7 @@ describe('AnalyticsController', () => {
 
   describe('obtenerResumenFinanciero', () => {
     it('should return financial summary', async () => {
-      const mockRequest = { user: { sub: 'user123' } };
+      const mockRequest = { user: { id: 'user123' } };
       const mockFiltros = { rangoTiempo: 'mes' as const };
       const mockResponse = {
         totalIngresado: { monto: 5000, moneda: 'USD', desglosePorMoneda: [] },
@@ -75,7 +75,7 @@ describe('AnalyticsController', () => {
 
   describe('obtenerEstadisticasPorConcepto', () => {
     it('should return statistics by concept', async () => {
-      const mockRequest = { user: { sub: 'user123' } };
+      const mockRequest = { user: { id: 'user123' } };
       const mockFiltros = { rangoTiempo: 'mes' as const };
       const mockResponse = [
         {
