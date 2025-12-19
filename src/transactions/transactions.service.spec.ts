@@ -44,6 +44,14 @@ describe('TransactionsService', () => {
     registrarMovimiento: jest.fn(),
   };
 
+  const mockConversionService = {
+    convertir: jest.fn().mockResolvedValue({ montoConvertido: 100 }),
+  };
+
+  const mockUserService = {
+    findById: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -53,6 +61,8 @@ describe('TransactionsService', () => {
         { provide: getModelToken('Cuenta'), useValue: mockCuentaModel },
         { provide: getModelToken('Subcuenta'), useValue: mockSubcuentaModel },
         { provide: CuentaHistorialService, useValue: mockHistorialService },
+        { provide: 'ConversionService', useValue: mockConversionService },
+        { provide: 'UserService', useValue: mockUserService },
       ],
     }).compile();
 
