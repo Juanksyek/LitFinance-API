@@ -24,8 +24,13 @@ describe('NotificacionesService', () => {
         {
           provide: getModelToken(DispositivoUsuario.name),
           useValue: mockModel,
-        },
-      ],
+        },        {
+          provide: getModelToken('User'),
+          useValue: {
+            find: jest.fn(),
+            findById: jest.fn(),
+          },
+        },      ],
     }).compile();
 
     service = module.get<NotificacionesService>(NotificacionesService);
