@@ -34,18 +34,17 @@ describe('EmailService', () => {
     );
   });
 
-  it('should send reset password email correctly', async () => {
-    process.env.FRONTEND_RESET_URL = 'https://litfinance.com/reset/';
+  it('should send reset password code correctly', async () => {
     const to = 'reset@example.com';
-    const token = 'reset456';
+    const code = '123456';
     const nombre = 'Carlos';
 
-    await service.sendResetPasswordEmail(to, token, nombre);
+    await service.sendResetPasswordCode(to, code, nombre);
 
     expect(mockSend).toHaveBeenCalledWith(
       expect.objectContaining({
         to,
-        subject: 'Recuperar contraseña',
+        subject: 'Código de recuperación de contraseña',
         html: expect.stringContaining('Hola Carlos'),
       })
     );
