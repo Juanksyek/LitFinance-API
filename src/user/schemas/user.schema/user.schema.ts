@@ -84,6 +84,19 @@ export class User {
 
   @Prop({ type: Number, default: 3 }) // Campo para almacenar los intentos restantes
   intentosRestantes: number;
+
+  // Campos de Stripe para Premium
+  @Prop({ required: false })
+  stripeCustomerId?: string;
+
+  @Prop({ required: false })
+  premiumSubscriptionId?: string;
+
+  @Prop({ required: false })
+  premiumSubscriptionStatus?: string; // 'active' | 'trialing' | 'canceled' | ...
+
+  @Prop({ type: Date, required: false })
+  premiumUntil?: Date; // para Jar (días regalados)
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
