@@ -22,6 +22,7 @@ import { CuentaHistorialModule } from './cuenta-historial/cuenta-historial.modul
 import { PlataformasRecurrentesModule } from './plataformas-recurrentes/plataformas-recurrentes.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { ReportsModule } from './reports/reports.module';
+import { StripeModule } from './stripe/stripe.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { ReportsModule } from './reports/reports.module';
     PlataformasRecurrentesModule,
     AnalyticsModule,
     ReportsModule,
+    StripeModule,
   ],
   controllers: [AppController],
   providers: [

@@ -35,6 +35,20 @@ describe('CuentaHistorialService', () => {
             this.save = saveMock;
           },
         },
+        {
+          provide: getModelToken('ConceptoPersonalizado'),
+          useValue: {
+            find: jest.fn(),
+            findById: jest.fn(),
+          },
+        },
+        {
+          provide: getModelToken('HistorialRecurrente'),
+          useValue: {
+            find: jest.fn(),
+            findById: jest.fn(),
+          },
+        },
       ],
     }).compile();
 

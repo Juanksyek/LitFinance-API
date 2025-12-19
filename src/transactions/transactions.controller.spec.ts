@@ -28,7 +28,7 @@ describe('TransactionsController', () => {
   });
 
   it('listar() debe invocar al servicio con userId y rango', async () => {
-    const mockReq = { user: { sub: 'usuario123' } };
+    const mockReq = { user: { id: 'usuario123' } };
     const rango = '2023-01-01_2023-01-31';
     mockService.listar.mockResolvedValue(['mock']);
 
@@ -38,7 +38,7 @@ describe('TransactionsController', () => {
   });
 
   it('eliminar() debe invocar al servicio con id y userId', async () => {
-    const mockReq = { user: { sub: 'usuario123' } };
+    const mockReq = { user: { id: 'usuario123' } };
     const id = 'transaccion123';
     mockService.eliminar.mockResolvedValue({ message: 'Transacción eliminada' });
 
