@@ -122,6 +122,7 @@ export class StripeController {
       { apiVersion: (process.env.STRIPE_API_VERSION as any) || '2024-06-20' },
     );
 
+
     const subscription = await this.stripeSvc.stripe.subscriptions.create({
       customer: customerId,
       items: [{ price: body.priceId }],
@@ -130,7 +131,14 @@ export class StripeController {
       expand: ['latest_invoice.payment_intent'],
     });
 
-    const paymentIntent = (subscription.latest_invoice as any).payment_intent;
+    const latestInvoice = subscription.latest_invoice;
+    let paymentIntent: any = null;
+    if (latestInvoice && typeof latestInvoice !== 'string' && 'payment_intent' in latestInvoice) {
+      paymentIntent = latestInvoice.payment_intent;
+    }
+    if (!paymentIntent || !paymentIntent.client_secret) {
+      throw new BadRequestException('No se pudo obtener el client_secret de Stripe');
+    }
 
     await this.patchUser(user, { premiumSubscriptionId: subscription.id });
 
