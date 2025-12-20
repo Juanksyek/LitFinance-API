@@ -52,8 +52,12 @@ export class StripeController {
   @UseGuards(JwtAuthGuard)
   @Post('web/checkout/subscription')
   async webCheckoutSubscription(@Req() req: any, @Body() body: { priceId: string }) {
+    this.logger.log('=== INICIO webCheckoutSubscription ===');
+    this.logger.log(`priceId: ${body.priceId}`);
+    
     const authId = this.getAuthUserId(req);
     const user = await this.findUserByAuthId(authId);
+    this.logger.log(`Usuario: ${user._id}, email: ${user.email}`);
 
     const session = await this.stripeSvc.stripe.checkout.sessions.create({
       mode: 'subscription',
@@ -64,6 +68,9 @@ export class StripeController {
       cancel_url: `${process.env.FRONTEND_WEB_URL}/billing/cancel`,
       customer_email: user.email,
     });
+    
+    this.logger.log(`Session creada: ${session.id}, url: ${session.url}`);
+    this.logger.log('=== FIN webCheckoutSubscription ===');
 
     return { url: session.url };
   }
@@ -74,8 +81,12 @@ export class StripeController {
   @UseGuards(JwtAuthGuard)
   @Post('web/checkout/tipjar')
   async webCheckoutTipJar(@Req() req: any, @Body() body: { amountMXN: number }) {
+    this.logger.log('=== INICIO webCheckoutTipJar ===');
+    this.logger.log(`amountMXN: ${body.amountMXN}`);
+    
     const authId = this.getAuthUserId(req);
     const user = await this.findUserByAuthId(authId);
+    this.logger.log(`Usuario: ${user._id}, email: ${user.email}`);
 
     const session = await this.stripeSvc.stripe.checkout.sessions.create({
       mode: 'payment',
@@ -94,6 +105,9 @@ export class StripeController {
       success_url: `${process.env.FRONTEND_WEB_URL}/billing/thanks?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.FRONTEND_WEB_URL}/billing/cancel`,
     });
+    
+    this.logger.log(`Session creada: ${session.id}, url: ${session.url}`);
+    this.logger.log('=== FIN webCheckoutTipJar ===');
 
     return { url: session.url };
   }
@@ -104,26 +118,38 @@ export class StripeController {
   @UseGuards(JwtAuthGuard)
   @Post('mobile/paymentsheet/subscription')
   async mobilePaymentSheetSubscription(@Req() req: any, @Body() body: { priceId: string }) {
+    this.logger.log('=== INICIO mobilePaymentSheetSubscription ===');
+    this.logger.log(`priceId recibido: ${body.priceId}`);
+    
     const authId = this.getAuthUserId(req);
+    this.logger.log(`authId: ${authId}`);
+    
     const user = await this.findUserByAuthId(authId);
+    this.logger.log(`Usuario encontrado: ${user._id}, email: ${user.email}, stripeCustomerId: ${user.stripeCustomerId || 'null'}`);
 
     let customerId = user.stripeCustomerId;
     if (!customerId) {
+      this.logger.log('Creando nuevo Stripe customer...');
       const customer = await this.stripeSvc.stripe.customers.create({
         email: user.email,
         metadata: { userMongoId: String(user._id) },
       });
       customerId = customer.id;
+      this.logger.log(`Stripe customer creado: ${customerId}`);
       await this.patchUser(user, { stripeCustomerId: customerId });
       user.stripeCustomerId = customerId; // Actualiza el objeto en memoria para siguientes pasos
+    } else {
+      this.logger.log(`Usando Stripe customer existente: ${customerId}`);
     }
 
+    this.logger.log('Creando ephemeralKey...');
     const ephemeralKey = await this.stripeSvc.stripe.ephemeralKeys.create(
       { customer: customerId },
       { apiVersion: (process.env.STRIPE_API_VERSION as any) || '2024-06-20' },
     );
+    this.logger.log(`EphemeralKey creado: ${ephemeralKey.id}`);
 
-
+    this.logger.log(`Creando subscription con priceId: ${body.priceId}...`);
     const subscription = await this.stripeSvc.stripe.subscriptions.create({
       customer: customerId,
       items: [{ price: body.priceId }],
@@ -132,33 +158,64 @@ export class StripeController {
       expand: ['latest_invoice.payment_intent'],
     });
 
-    // Log para debug
-    this.logger.log('Stripe subscription response: ' + JSON.stringify(subscription, null, 2));
+    this.logger.log(`Subscription creada: ${subscription.id}, status: ${subscription.status}`);
+    this.logger.log('Stripe subscription response completo:');
+    this.logger.log(JSON.stringify(subscription, null, 2));
 
     const latestInvoice = subscription.latest_invoice;
+    this.logger.log(`latest_invoice type: ${typeof latestInvoice}`);
+    this.logger.log(`latest_invoice: ${JSON.stringify(latestInvoice, null, 2)}`);
+    
     let paymentIntent: any = null;
     if (latestInvoice && typeof latestInvoice !== 'string' && 'payment_intent' in latestInvoice) {
       paymentIntent = latestInvoice.payment_intent;
+      this.logger.log(`payment_intent extraído type: ${typeof paymentIntent}`);
+      this.logger.log(`payment_intent: ${JSON.stringify(paymentIntent, null, 2)}`);
+    } else {
+      this.logger.error(`No se pudo extraer payment_intent de latest_invoice`);
     }
-    if (!paymentIntent || !paymentIntent.client_secret) {
-      throw new BadRequestException('No se pudo obtener el client_secret de Stripe');
+    
+    if (!paymentIntent) {
+      this.logger.error('paymentIntent es null o undefined');
+      throw new BadRequestException('No se pudo obtener el paymentIntent de Stripe. Revisa que el priceId existe y está configurado correctamente.');
     }
+    
+    // Si paymentIntent es string (ID), necesitamos expandirlo
+    if (typeof paymentIntent === 'string') {
+      this.logger.log(`paymentIntent es string (ID): ${paymentIntent}, expandiendo...`);
+      paymentIntent = await this.stripeSvc.stripe.paymentIntents.retrieve(paymentIntent);
+      this.logger.log(`paymentIntent expandido: ${JSON.stringify(paymentIntent, null, 2)}`);
+    }
+    
+    if (!paymentIntent.client_secret) {
+      this.logger.error(`paymentIntent no tiene client_secret. Estado: ${paymentIntent.status}`);
+      throw new BadRequestException(`PaymentIntent sin client_secret. Estado: ${paymentIntent.status}. Puede que el pago ya fue procesado.`);
+    }
+    
+    this.logger.log(`client_secret obtenido: ${paymentIntent.client_secret.substring(0, 20)}...`);
 
     // Guardar todos los campos relevantes de Stripe
+    this.logger.log('Actualizando usuario en BD con datos de Stripe...');
     await this.patchUser(user, {
       stripeCustomerId: customerId,
       premiumSubscriptionId: subscription.id,
       premiumSubscriptionStatus: subscription.status,
       premiumUntil: null // Se puede actualizar por webhook si aplica
     });
+    this.logger.log('Usuario actualizado correctamente en BD');
 
-    return {
+    const response = {
       customerId,
       ephemeralKeySecret: ephemeralKey.secret,
       paymentIntentClientSecret: paymentIntent.client_secret,
       subscriptionId: subscription.id,
       subscriptionStatus: subscription.status,
     };
+    
+    this.logger.log('=== FIN mobilePaymentSheetSubscription - Respuesta enviada ===');
+    this.logger.log(`Response: ${JSON.stringify(response, null, 2)}`);
+    
+    return response;
   }
 
   // -----------------------------
@@ -167,24 +224,35 @@ export class StripeController {
   @UseGuards(JwtAuthGuard)
   @Post('mobile/paymentsheet/tipjar')
   async mobilePaymentSheetTipJar(@Req() req: any, @Body() body: { amountMXN: number }) {
+    this.logger.log('=== INICIO mobilePaymentSheetTipJar ===');
+    this.logger.log(`amountMXN: ${body.amountMXN}`);
+    
     const authId = this.getAuthUserId(req);
     const user = await this.findUserByAuthId(authId);
+    this.logger.log(`Usuario: ${user._id}, stripeCustomerId: ${user.stripeCustomerId || 'null'}`);
 
     let customerId = user.stripeCustomerId;
     if (!customerId) {
+      this.logger.log('Creando nuevo Stripe customer...');
       const customer = await this.stripeSvc.stripe.customers.create({
         email: user.email,
         metadata: { userMongoId: String(user._id) },
       });
       customerId = customer.id;
+      this.logger.log(`Stripe customer creado: ${customerId}`);
       await this.patchUser(user, { stripeCustomerId: customerId });
+    } else {
+      this.logger.log(`Usando Stripe customer existente: ${customerId}`);
     }
 
+    this.logger.log('Creando ephemeralKey...');
     const ephemeralKey = await this.stripeSvc.stripe.ephemeralKeys.create(
       { customer: customerId },
       { apiVersion: (process.env.STRIPE_API_VERSION as any) || '2024-06-20' },
     );
+    this.logger.log(`EphemeralKey creado: ${ephemeralKey.id}`);
 
+    this.logger.log('Creando PaymentIntent...');
     const paymentIntent = await this.stripeSvc.stripe.paymentIntents.create({
       amount: Math.round(body.amountMXN * 100),
       currency: 'mxn',
@@ -192,12 +260,18 @@ export class StripeController {
       metadata: { userMongoId: String(user._id), flow: 'tipjar_mobile' },
       automatic_payment_methods: { enabled: true },
     });
+    this.logger.log(`PaymentIntent creado: ${paymentIntent.id}, client_secret: ${paymentIntent.client_secret?.substring(0, 20)}...`);
 
-    return {
+    const response = {
       customerId,
       ephemeralKeySecret: ephemeralKey.secret,
       paymentIntentClientSecret: paymentIntent.client_secret,
     };
+    
+    this.logger.log('=== FIN mobilePaymentSheetTipJar ===');
+    this.logger.log(`Response: ${JSON.stringify(response, null, 2)}`);
+
+    return response;
   }
 
   // -----------------------------
