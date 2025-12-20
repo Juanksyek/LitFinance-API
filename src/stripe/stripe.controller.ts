@@ -115,6 +115,7 @@ export class StripeController {
       });
       customerId = customer.id;
       await this.patchUser(user, { stripeCustomerId: customerId });
+      user.stripeCustomerId = customerId; // Actualiza el objeto en memoria para siguientes pasos
     }
 
     const ephemeralKey = await this.stripeSvc.stripe.ephemeralKeys.create(
@@ -131,6 +132,9 @@ export class StripeController {
       expand: ['latest_invoice.payment_intent'],
     });
 
+    // Log para debug
+    this.logger.log('Stripe subscription response: ' + JSON.stringify(subscription, null, 2));
+
     const latestInvoice = subscription.latest_invoice;
     let paymentIntent: any = null;
     if (latestInvoice && typeof latestInvoice !== 'string' && 'payment_intent' in latestInvoice) {
@@ -140,13 +144,20 @@ export class StripeController {
       throw new BadRequestException('No se pudo obtener el client_secret de Stripe');
     }
 
-    await this.patchUser(user, { premiumSubscriptionId: subscription.id });
+    // Guardar todos los campos relevantes de Stripe
+    await this.patchUser(user, {
+      stripeCustomerId: customerId,
+      premiumSubscriptionId: subscription.id,
+      premiumSubscriptionStatus: subscription.status,
+      premiumUntil: null // Se puede actualizar por webhook si aplica
+    });
 
     return {
       customerId,
       ephemeralKeySecret: ephemeralKey.secret,
       paymentIntentClientSecret: paymentIntent.client_secret,
       subscriptionId: subscription.id,
+      subscriptionStatus: subscription.status,
     };
   }
 
