@@ -47,6 +47,55 @@ export class StripeController {
   }
 
   // -----------------------------
+  // MOBILE — PaymentSheet SetupIntent (para guardar método de pago)
+  // -----------------------------
+  @UseGuards(JwtAuthGuard)
+  @Post('mobile/paymentsheet/setup-intent')
+  async mobilePaymentSheetSetupIntent(@Req() req: any) {
+    this.logger.log('=== INICIO mobilePaymentSheetSetupIntent ===');
+    const authId = this.getAuthUserId(req);
+    const user = await this.findUserByAuthId(authId);
+    this.logger.log(`Usuario: ${user._id}, email: ${user.email}, stripeCustomerId: ${user.stripeCustomerId || 'null'}`);
+
+    let customerId = user.stripeCustomerId;
+    if (!customerId) {
+      this.logger.log('Creando nuevo Stripe customer...');
+      const customer = await this.stripeSvc.stripe.customers.create({
+        email: user.email,
+        metadata: { userMongoId: String(user._id) },
+      });
+      customerId = customer.id;
+      this.logger.log(`Stripe customer creado: ${customerId}`);
+      await this.patchUser(user, { stripeCustomerId: customerId });
+    } else {
+      this.logger.log(`Usando Stripe customer existente: ${customerId}`);
+    }
+
+    this.logger.log('Creando ephemeralKey...');
+    const ephemeralKey = await this.stripeSvc.stripe.ephemeralKeys.create(
+      { customer: customerId },
+      { apiVersion: (process.env.STRIPE_API_VERSION as any) || '2024-06-20' },
+    );
+    this.logger.log(`EphemeralKey creado: ${ephemeralKey.id}`);
+
+    this.logger.log('Creando SetupIntent...');
+    const setupIntent = await this.stripeSvc.stripe.setupIntents.create({
+      customer: customerId,
+      usage: 'off_session',
+    });
+    this.logger.log(`SetupIntent creado: ${setupIntent.id}`);
+
+    const response = {
+      setupIntentClientSecret: setupIntent.client_secret,
+      customerId,
+      customerEphemeralKeySecret: ephemeralKey.secret,
+    };
+    this.logger.log('=== FIN mobilePaymentSheetSetupIntent ===');
+    this.logger.log(`Response: ${JSON.stringify(response, null, 2)}`);
+    return response;
+  }
+
+  // -----------------------------
   // WEB — Checkout Subscription
   // -----------------------------
   @UseGuards(JwtAuthGuard)
