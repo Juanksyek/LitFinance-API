@@ -71,19 +71,26 @@ export class StripeController {
       this.logger.log(`Usando Stripe customer existente: ${customerId}`);
     }
 
-    this.logger.log('Creando ephemeralKey...');
+    // Usar la versión de API EXACTA que requiere Stripe (por ejemplo, 2025-11-17.clover)
+    const apiVersion = process.env.STRIPE_API_VERSION || '2025-11-17.clover';
+    this.logger.log(`Creando ephemeralKey con apiVersion: ${apiVersion}`);
     const ephemeralKey = await this.stripeSvc.stripe.ephemeralKeys.create(
       { customer: customerId },
-      { apiVersion: (process.env.STRIPE_API_VERSION as any) || '2024-06-20' },
+      { apiVersion },
     );
     this.logger.log(`EphemeralKey creado: ${ephemeralKey.id}`);
 
-    this.logger.log('Creando SetupIntent...');
+    this.logger.log('Creando SetupIntent con automatic_payment_methods y allow_redirects: never...');
     const setupIntent = await this.stripeSvc.stripe.setupIntents.create({
       customer: customerId,
       usage: 'off_session',
+      automatic_payment_methods: {
+        enabled: true,
+        allow_redirects: 'never',
+      },
     });
     this.logger.log(`SetupIntent creado: ${setupIntent.id}`);
+    this.logger.log('Respuesta completa de SetupIntent: ' + JSON.stringify(setupIntent, null, 2));
 
     const response = {
       setupIntentClientSecret: setupIntent.client_secret,
