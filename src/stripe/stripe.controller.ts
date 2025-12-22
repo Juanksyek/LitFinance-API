@@ -282,9 +282,10 @@ export class StripeController {
     }
 
     this.logger.log('[mobilePaymentSheetSubscription] Creando ephemeralKey...');
+    const apiVersion = process.env.STRIPE_API_VERSION || '2025-11-17.clover';
     const ephemeralKey = await this.stripeSvc.stripe.ephemeralKeys.create(
       { customer: customerId },
-      { apiVersion: (process.env.STRIPE_API_VERSION as any) || '2024-06-20' },
+      { apiVersion },
     );
     this.logger.log(`[mobilePaymentSheetSubscription] EphemeralKey creado: ${ephemeralKey.id}`);
 
@@ -293,8 +294,16 @@ export class StripeController {
       customer: customerId,
       items: [{ price: body.priceId }],
       payment_behavior: 'default_incomplete',
+      collection_method: 'charge_automatically',
+      // Clave: fuerza métodos para invoices/subscription
+      payment_settings: {
+        payment_method_types: ['card'],
+        // Recomendado por Stripe para que se guarde como default tras el primer pago
+        save_default_payment_method: 'on_subscription',
+      },
       metadata: { userMongoId: String(user._id), flow: 'subscription_mobile' },
-      expand: ['latest_invoice.payment_intent'],
+      // Expande ambos niveles
+      expand: ['latest_invoice', 'latest_invoice.payment_intent'],
     };
     
     // Si tenemos paymentMethodId, especificarlo directamente en la suscripción
@@ -309,37 +318,51 @@ export class StripeController {
     this.logger.log('[mobilePaymentSheetSubscription] Stripe subscription response completo:');
     this.logger.log(JSON.stringify(subscription, null, 2));
 
-    const latestInvoice = subscription.latest_invoice;
-    this.logger.log(`[mobilePaymentSheetSubscription] latest_invoice type: ${typeof latestInvoice}`);
-    this.logger.log(`[mobilePaymentSheetSubscription] latest_invoice: ${JSON.stringify(latestInvoice, null, 2)}`);
+    // Obtener invoiceId sí o sí
+    const invoiceId =
+      typeof subscription.latest_invoice === 'string'
+        ? subscription.latest_invoice
+        : subscription.latest_invoice?.id;
 
-    let paymentIntent: any = null;
-    if (latestInvoice && typeof latestInvoice !== 'string' && 'payment_intent' in latestInvoice) {
-      paymentIntent = latestInvoice.payment_intent;
-      this.logger.log(`[mobilePaymentSheetSubscription] payment_intent extraído type: ${typeof paymentIntent}`);
-      this.logger.log(`[mobilePaymentSheetSubscription] payment_intent: ${JSON.stringify(paymentIntent, null, 2)}`);
-    } else {
-      this.logger.warn('[mobilePaymentSheetSubscription] No se pudo extraer payment_intent de latest_invoice. Esto puede ocurrir si el método de pago no está adjuntado, el trial es gratis, o el primer pago es $0.');
+    if (!invoiceId) {
+      this.logger.error('[mobilePaymentSheetSubscription] Stripe no devolvió latest_invoice en la suscripción.');
+      throw new BadRequestException('Stripe no devolvió latest_invoice en la suscripción.');
     }
 
-    if (!paymentIntent) {
-      this.logger.warn('[mobilePaymentSheetSubscription] paymentIntent es null o undefined. Verifica que el método de pago esté adjuntado al customer y que la suscripción requiera pago inmediato.');
-      throw new BadRequestException('No se pudo obtener el paymentIntent de Stripe. Revisa que el priceId existe, el método de pago está adjuntado y la suscripción requiere pago inmediato.');
+    this.logger.log(`[mobilePaymentSheetSubscription] Recuperando invoice ${invoiceId} con expand de payment_intent...`);
+    // Recuperar el invoice con expand (más confiable)
+    const invoiceResponse = await this.stripeSvc.stripe.invoices.retrieve(invoiceId, {
+      expand: ['payment_intent'],
+    });
+    const invoice = (invoiceResponse as any).data ?? invoiceResponse;
+    this.logger.log(`[mobilePaymentSheetSubscription] Invoice recuperado: ${JSON.stringify(invoice, null, 2)}`);
+
+    let paymentIntent: any = invoice.payment_intent;
+
+    if (!paymentIntent || typeof paymentIntent === 'string') {
+      this.logger.log(`[mobilePaymentSheetSubscription] payment_intent es ${typeof paymentIntent}, intentando retrieval...`);
+      // Si es string, recupéralo
+      const piId = typeof paymentIntent === 'string' ? paymentIntent : null;
+      if (piId) {
+        paymentIntent = await this.stripeSvc.stripe.paymentIntents.retrieve(piId);
+        this.logger.log(`[mobilePaymentSheetSubscription] PaymentIntent recuperado: ${JSON.stringify(paymentIntent, null, 2)}`);
+      } else {
+        this.logger.error(`[mobilePaymentSheetSubscription] No se pudo obtener PaymentIntent para el invoice ${invoiceId}. Revisa Billing/Invoice payment methods y payment_settings.payment_method_types.`);
+        throw new BadRequestException(
+          `No se pudo obtener PaymentIntent para el invoice ${invoiceId}. ` +
+          `Revisa Billing/Invoice payment methods y payment_settings.payment_method_types en Stripe Dashboard.`
+        );
+      }
     }
-    
-    // Si paymentIntent es string (ID), necesitamos expandirlo
-    if (typeof paymentIntent === 'string') {
-      this.logger.log(`paymentIntent es string (ID): ${paymentIntent}, expandiendo...`);
-      paymentIntent = await this.stripeSvc.stripe.paymentIntents.retrieve(paymentIntent);
-      this.logger.log(`paymentIntent expandido: ${JSON.stringify(paymentIntent, null, 2)}`);
-    }
-    
+
     if (!paymentIntent.client_secret) {
-      this.logger.error(`paymentIntent no tiene client_secret. Estado: ${paymentIntent.status}`);
-      throw new BadRequestException(`PaymentIntent sin client_secret. Estado: ${paymentIntent.status}. Puede que el pago ya fue procesado.`);
+      this.logger.error(`[mobilePaymentSheetSubscription] PaymentIntent sin client_secret (invoice ${invoiceId}, status ${paymentIntent.status}).`);
+      throw new BadRequestException(
+        `PaymentIntent sin client_secret (invoice ${invoiceId}, status ${paymentIntent.status}).`
+      );
     }
     
-    this.logger.log(`client_secret obtenido: ${paymentIntent.client_secret.substring(0, 20)}...`);
+    this.logger.log(`[mobilePaymentSheetSubscription] client_secret obtenido: ${paymentIntent.client_secret.substring(0, 20)}...`);
 
     // Guardar todos los campos relevantes de Stripe
     this.logger.log('Actualizando usuario en BD con datos de Stripe...');
