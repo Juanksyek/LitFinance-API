@@ -239,21 +239,21 @@ export class StripeController {
     this.logger.log(JSON.stringify(subscription, null, 2));
 
     const latestInvoice = subscription.latest_invoice;
-    this.logger.log(`latest_invoice type: ${typeof latestInvoice}`);
-    this.logger.log(`latest_invoice: ${JSON.stringify(latestInvoice, null, 2)}`);
-    
+    this.logger.log(`[mobilePaymentSheetSubscription] latest_invoice type: ${typeof latestInvoice}`);
+    this.logger.log(`[mobilePaymentSheetSubscription] latest_invoice: ${JSON.stringify(latestInvoice, null, 2)}`);
+
     let paymentIntent: any = null;
     if (latestInvoice && typeof latestInvoice !== 'string' && 'payment_intent' in latestInvoice) {
       paymentIntent = latestInvoice.payment_intent;
-      this.logger.log(`payment_intent extraído type: ${typeof paymentIntent}`);
-      this.logger.log(`payment_intent: ${JSON.stringify(paymentIntent, null, 2)}`);
+      this.logger.log(`[mobilePaymentSheetSubscription] payment_intent extraído type: ${typeof paymentIntent}`);
+      this.logger.log(`[mobilePaymentSheetSubscription] payment_intent: ${JSON.stringify(paymentIntent, null, 2)}`);
     } else {
-      this.logger.error(`No se pudo extraer payment_intent de latest_invoice`);
+      this.logger.warn('[mobilePaymentSheetSubscription] No se pudo extraer payment_intent de latest_invoice. Esto puede ocurrir si el método de pago no está adjuntado, el trial es gratis, o el primer pago es $0.');
     }
-    
+
     if (!paymentIntent) {
-      this.logger.error('paymentIntent es null o undefined');
-      throw new BadRequestException('No se pudo obtener el paymentIntent de Stripe. Revisa que el priceId existe y está configurado correctamente.');
+      this.logger.warn('[mobilePaymentSheetSubscription] paymentIntent es null o undefined. Verifica que el método de pago esté adjuntado al customer y que la suscripción requiera pago inmediato.');
+      throw new BadRequestException('No se pudo obtener el paymentIntent de Stripe. Revisa que el priceId existe, el método de pago está adjuntado y la suscripción requiere pago inmediato.');
     }
     
     // Si paymentIntent es string (ID), necesitamos expandirlo
