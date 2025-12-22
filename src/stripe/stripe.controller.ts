@@ -331,37 +331,39 @@ export class StripeController {
 
     this.logger.log(`[mobilePaymentSheetSubscription] Recuperando invoice ${invoiceId} con expand de payment_intent...`);
     // Recuperar el invoice con expand (más confiable)
-    const invoiceResponse = await this.stripeSvc.stripe.invoices.retrieve(invoiceId, {
+    let invoice = await this.stripeSvc.stripe.invoices.retrieve(invoiceId, {
       expand: ['payment_intent'],
     });
-    const invoice = (invoiceResponse as any).data ?? invoiceResponse;
-    this.logger.log(`[mobilePaymentSheetSubscription] Invoice recuperado: ${JSON.stringify(invoice, null, 2)}`);
 
-    let paymentIntent: any = invoice.payment_intent;
-
-    if (!paymentIntent || typeof paymentIntent === 'string') {
-      this.logger.log(`[mobilePaymentSheetSubscription] payment_intent es ${typeof paymentIntent}, intentando retrieval...`);
-      // Si es string, recupéralo
-      const piId = typeof paymentIntent === 'string' ? paymentIntent : null;
-      if (piId) {
-        paymentIntent = await this.stripeSvc.stripe.paymentIntents.retrieve(piId);
-        this.logger.log(`[mobilePaymentSheetSubscription] PaymentIntent recuperado: ${JSON.stringify(paymentIntent, null, 2)}`);
-      } else {
-        this.logger.error(`[mobilePaymentSheetSubscription] No se pudo obtener PaymentIntent para el invoice ${invoiceId}. Revisa Billing/Invoice payment methods y payment_settings.payment_method_types.`);
-        throw new BadRequestException(
-          `No se pudo obtener PaymentIntent para el invoice ${invoiceId}. ` +
-          `Revisa Billing/Invoice payment methods y payment_settings.payment_method_types en Stripe Dashboard.`
-        );
-      }
+    // Si está en draft, finalízalo (esto suele disparar la creación del PaymentIntent)
+    if ((invoice as any).status === 'draft') {
+      this.logger.warn(`[mobilePaymentSheetSubscription] Invoice ${invoiceId} está en draft; finalizando...`);
+      invoice = await this.stripeSvc.stripe.invoices.finalizeInvoice(invoiceId, {
+        expand: ['payment_intent'],
+      });
     }
 
-    if (!paymentIntent.client_secret) {
-      this.logger.error(`[mobilePaymentSheetSubscription] PaymentIntent sin client_secret (invoice ${invoiceId}, status ${paymentIntent.status}).`);
+    this.logger.log(`[mobilePaymentSheetSubscription] Invoice recuperado: status=${(invoice as any).status}, collection_method=${(invoice as any).collection_method}`);
+
+    let paymentIntent: any = (invoice as any).payment_intent;
+
+    // Si sigue siendo string, recupéralo
+    if (typeof paymentIntent === 'string') {
+      this.logger.log(`[mobilePaymentSheetSubscription] payment_intent es string, recuperando...`);
+      paymentIntent = await this.stripeSvc.stripe.paymentIntents.retrieve(paymentIntent);
+      this.logger.log(`[mobilePaymentSheetSubscription] PaymentIntent recuperado: ${paymentIntent.id}`);
+    }
+
+    if (!paymentIntent?.client_secret) {
+      this.logger.error(
+        `[mobilePaymentSheetSubscription] Invoice ${invoiceId} sin payment_intent. ` +
+        `status=${(invoice as any).status}, collection_method=${(invoice as any).collection_method}, amount_due=${(invoice as any).amount_due}`
+      );
       throw new BadRequestException(
-        `PaymentIntent sin client_secret (invoice ${invoiceId}, status ${paymentIntent.status}).`
+        `Stripe invoice ${invoiceId} no generó PaymentIntent. Revisa status/collection_method/payment methods.`
       );
     }
-    
+
     this.logger.log(`[mobilePaymentSheetSubscription] client_secret obtenido: ${paymentIntent.client_secret.substring(0, 20)}...`);
 
     // Guardar todos los campos relevantes de Stripe
