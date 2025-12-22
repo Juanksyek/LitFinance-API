@@ -193,9 +193,10 @@ export class StripeController {
   // -----------------------------
   @UseGuards(JwtAuthGuard)
   @Post('mobile/paymentsheet/subscription')
-  async mobilePaymentSheetSubscription(@Req() req: any, @Body() body: { priceId: string }) {
+  async mobilePaymentSheetSubscription(@Req() req: any, @Body() body: { priceId: string; paymentMethodId: string }) {
     this.logger.log('=== INICIO mobilePaymentSheetSubscription ===');
     this.logger.log(`[mobilePaymentSheetSubscription] priceId recibido: ${body.priceId}`);
+    this.logger.log(`[mobilePaymentSheetSubscription] paymentMethodId recibido: ${body.paymentMethodId}`);
 
     const authId = this.getAuthUserId(req);
     this.logger.log(`[mobilePaymentSheetSubscription] authId: ${authId}`);
@@ -216,6 +217,20 @@ export class StripeController {
       user.stripeCustomerId = customerId; // Actualiza el objeto en memoria para siguientes pasos
     } else {
       this.logger.log(`[mobilePaymentSheetSubscription] Usando Stripe customer existente: ${customerId}`);
+    }
+
+    // Adjuntar el paymentMethodId al customer y marcarlo como default
+    if (body.paymentMethodId) {
+      this.logger.log(`[mobilePaymentSheetSubscription] Adjuntando paymentMethodId ${body.paymentMethodId} al customer ${customerId}...`);
+      await this.stripeSvc.stripe.paymentMethods.attach(body.paymentMethodId, {
+        customer: customerId,
+      });
+      await this.stripeSvc.stripe.customers.update(customerId, {
+        invoice_settings: { default_payment_method: body.paymentMethodId },
+      });
+      this.logger.log(`[mobilePaymentSheetSubscription] paymentMethodId adjuntado y marcado como default.`);
+    } else {
+      this.logger.warn('[mobilePaymentSheetSubscription] No se recibió paymentMethodId, la suscripción puede fallar si el customer no tiene método de pago por defecto.');
     }
 
     this.logger.log('[mobilePaymentSheetSubscription] Creando ephemeralKey...');
