@@ -195,37 +195,37 @@ export class StripeController {
   @Post('mobile/paymentsheet/subscription')
   async mobilePaymentSheetSubscription(@Req() req: any, @Body() body: { priceId: string }) {
     this.logger.log('=== INICIO mobilePaymentSheetSubscription ===');
-    this.logger.log(`priceId recibido: ${body.priceId}`);
-    
+    this.logger.log(`[mobilePaymentSheetSubscription] priceId recibido: ${body.priceId}`);
+
     const authId = this.getAuthUserId(req);
-    this.logger.log(`authId: ${authId}`);
-    
+    this.logger.log(`[mobilePaymentSheetSubscription] authId: ${authId}`);
+
     const user = await this.findUserByAuthId(authId);
-    this.logger.log(`Usuario encontrado: ${user._id}, email: ${user.email}, stripeCustomerId: ${user.stripeCustomerId || 'null'}`);
+    this.logger.log(`[mobilePaymentSheetSubscription] Usuario encontrado: ${user._id}, email: ${user.email}, stripeCustomerId: ${user.stripeCustomerId || 'null'}`);
 
     let customerId = user.stripeCustomerId;
     if (!customerId) {
-      this.logger.log('Creando nuevo Stripe customer...');
+      this.logger.log('[mobilePaymentSheetSubscription] Creando nuevo Stripe customer...');
       const customer = await this.stripeSvc.stripe.customers.create({
         email: user.email,
         metadata: { userMongoId: String(user._id) },
       });
       customerId = customer.id;
-      this.logger.log(`Stripe customer creado: ${customerId}`);
+      this.logger.log(`[mobilePaymentSheetSubscription] Stripe customer creado: ${customerId}`);
       await this.patchUser(user, { stripeCustomerId: customerId });
       user.stripeCustomerId = customerId; // Actualiza el objeto en memoria para siguientes pasos
     } else {
-      this.logger.log(`Usando Stripe customer existente: ${customerId}`);
+      this.logger.log(`[mobilePaymentSheetSubscription] Usando Stripe customer existente: ${customerId}`);
     }
 
-    this.logger.log('Creando ephemeralKey...');
+    this.logger.log('[mobilePaymentSheetSubscription] Creando ephemeralKey...');
     const ephemeralKey = await this.stripeSvc.stripe.ephemeralKeys.create(
       { customer: customerId },
       { apiVersion: (process.env.STRIPE_API_VERSION as any) || '2024-06-20' },
     );
-    this.logger.log(`EphemeralKey creado: ${ephemeralKey.id}`);
+    this.logger.log(`[mobilePaymentSheetSubscription] EphemeralKey creado: ${ephemeralKey.id}`);
 
-    this.logger.log(`Creando subscription con priceId: ${body.priceId}...`);
+    this.logger.log(`[mobilePaymentSheetSubscription] Creando subscription con priceId: ${body.priceId}...`);
     const subscription = await this.stripeSvc.stripe.subscriptions.create({
       customer: customerId,
       items: [{ price: body.priceId }],
@@ -234,8 +234,8 @@ export class StripeController {
       expand: ['latest_invoice.payment_intent'],
     });
 
-    this.logger.log(`Subscription creada: ${subscription.id}, status: ${subscription.status}`);
-    this.logger.log('Stripe subscription response completo:');
+    this.logger.log(`[mobilePaymentSheetSubscription] Subscription creada: ${subscription.id}, status: ${subscription.status}`);
+    this.logger.log('[mobilePaymentSheetSubscription] Stripe subscription response completo:');
     this.logger.log(JSON.stringify(subscription, null, 2));
 
     const latestInvoice = subscription.latest_invoice;
