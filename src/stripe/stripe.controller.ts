@@ -289,13 +289,21 @@ export class StripeController {
     this.logger.log(`[mobilePaymentSheetSubscription] EphemeralKey creado: ${ephemeralKey.id}`);
 
     this.logger.log(`[mobilePaymentSheetSubscription] Creando subscription con priceId: ${body.priceId}...`);
-    const subscription = await this.stripeSvc.stripe.subscriptions.create({
+    const subscriptionParams: any = {
       customer: customerId,
       items: [{ price: body.priceId }],
       payment_behavior: 'default_incomplete',
       metadata: { userMongoId: String(user._id), flow: 'subscription_mobile' },
       expand: ['latest_invoice.payment_intent'],
-    });
+    };
+    
+    // Si tenemos paymentMethodId, especificarlo directamente en la suscripción
+    if (body.paymentMethodId) {
+      subscriptionParams.default_payment_method = body.paymentMethodId;
+      this.logger.log(`[mobilePaymentSheetSubscription] Usando default_payment_method en la suscripción: ${body.paymentMethodId}`);
+    }
+    
+    const subscription = await this.stripeSvc.stripe.subscriptions.create(subscriptionParams);
 
     this.logger.log(`[mobilePaymentSheetSubscription] Subscription creada: ${subscription.id}, status: ${subscription.status}`);
     this.logger.log('[mobilePaymentSheetSubscription] Stripe subscription response completo:');
