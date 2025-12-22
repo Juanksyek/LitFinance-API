@@ -219,16 +219,64 @@ export class StripeController {
       this.logger.log(`[mobilePaymentSheetSubscription] Usando Stripe customer existente: ${customerId}`);
     }
 
+    // Verificar si el usuario ya tiene una suscripción activa para este priceId
+    this.logger.log(`[mobilePaymentSheetSubscription] Verificando suscripciones existentes para customerId: ${customerId}...`);
+    const existingSubscriptions = await this.stripeSvc.stripe.subscriptions.list({
+      customer: customerId,
+      status: 'active',
+      limit: 10,
+    });
+    
+    const hasActiveSubscription = existingSubscriptions.data.some(sub => 
+      sub.items.data.some(item => item.price.id === body.priceId)
+    );
+    
+    if (hasActiveSubscription) {
+      this.logger.warn(`[mobilePaymentSheetSubscription] El usuario ya tiene una suscripción activa para el priceId: ${body.priceId}`);
+      throw new BadRequestException('Ya tienes una suscripción activa a este plan. No puedes crear otra.');
+    }
+    
+    this.logger.log('[mobilePaymentSheetSubscription] No hay suscripciones activas para este plan, continuando...');
+    
+    // Verificar si hay suscripciones incompletas y cancelarlas
+    const incompleteSubscriptions = await this.stripeSvc.stripe.subscriptions.list({
+      customer: customerId,
+      status: 'incomplete',
+      limit: 10,
+    });
+    
+    if (incompleteSubscriptions.data.length > 0) {
+      this.logger.warn(`[mobilePaymentSheetSubscription] Encontradas ${incompleteSubscriptions.data.length} suscripciones incompletas. Cancelando...`);
+      for (const sub of incompleteSubscriptions.data) {
+        await this.stripeSvc.stripe.subscriptions.cancel(sub.id);
+        this.logger.log(`[mobilePaymentSheetSubscription] Suscripción incompleta cancelada: ${sub.id}`);
+      }
+    }
+
     // Adjuntar el paymentMethodId al customer y marcarlo como default
     if (body.paymentMethodId) {
       this.logger.log(`[mobilePaymentSheetSubscription] Adjuntando paymentMethodId ${body.paymentMethodId} al customer ${customerId}...`);
-      await this.stripeSvc.stripe.paymentMethods.attach(body.paymentMethodId, {
-        customer: customerId,
-      });
-      await this.stripeSvc.stripe.customers.update(customerId, {
-        invoice_settings: { default_payment_method: body.paymentMethodId },
-      });
-      this.logger.log(`[mobilePaymentSheetSubscription] paymentMethodId adjuntado y marcado como default.`);
+      try {
+        const attached = await this.stripeSvc.stripe.paymentMethods.attach(body.paymentMethodId, {
+          customer: customerId,
+        });
+        this.logger.log(`[mobilePaymentSheetSubscription] Resultado de attach: ${JSON.stringify(attached, null, 2)}`);
+        
+        await this.stripeSvc.stripe.customers.update(customerId, {
+          invoice_settings: { default_payment_method: body.paymentMethodId },
+        });
+        this.logger.log(`[mobilePaymentSheetSubscription] paymentMethodId adjuntado y marcado como default.`);
+      } catch (err: any) {
+        this.logger.error(`[mobilePaymentSheetSubscription] Error al adjuntar paymentMethodId: ${err.message}`);
+        if (err.code === 'resource_already_attached') {
+          this.logger.log('[mobilePaymentSheetSubscription] El paymentMethod ya estaba adjuntado, continuando...');
+          await this.stripeSvc.stripe.customers.update(customerId, {
+            invoice_settings: { default_payment_method: body.paymentMethodId },
+          });
+        } else {
+          throw err;
+        }
+      }
     } else {
       this.logger.warn('[mobilePaymentSheetSubscription] No se recibió paymentMethodId, la suscripción puede fallar si el customer no tiene método de pago por defecto.');
     }
