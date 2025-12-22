@@ -103,6 +103,26 @@ export class StripeController {
   }
 
   // -----------------------------
+  // MOBILE — Obtener métodos de pago guardados del usuario
+  // -----------------------------
+  @UseGuards(JwtAuthGuard)
+  @Post('mobile/customer/payment-methods')
+  async getCustomerPaymentMethods(@Req() req: any) {
+    const authId = this.getAuthUserId(req);
+    const user = await this.findUserByAuthId(authId);
+    if (!user.stripeCustomerId) {
+      throw new BadRequestException('El usuario no tiene Stripe customerId');
+    }
+    this.logger.log(`[getCustomerPaymentMethods] Buscando métodos de pago para customerId: ${user.stripeCustomerId}`);
+    const paymentMethods = await this.stripeSvc.stripe.paymentMethods.list({
+      customer: user.stripeCustomerId,
+      type: 'card',
+    });
+    this.logger.log(`[getCustomerPaymentMethods] Métodos encontrados: ${paymentMethods.data.length}`);
+    return { paymentMethods: paymentMethods.data };
+  }
+
+  // -----------------------------
   // WEB — Checkout Subscription
   // -----------------------------
   @UseGuards(JwtAuthGuard)
