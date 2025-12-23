@@ -38,10 +38,6 @@ export class StripeController {
     throw new BadRequestException('User not found in DB for req.user.id');
   }
 
-  private async patchUser(user: any, patch: any) {
-    await this.userModel.updateOne({ _id: user._id }, { $set: patch });
-  }
-
   private async findByStripeCustomerId(customerId: string) {
     return this.userModel.findOne({ stripeCustomerId: customerId });
   }
@@ -329,65 +325,83 @@ export class StripeController {
       throw new BadRequestException('Stripe no devolvió latest_invoice en la suscripción.');
     }
 
-    this.logger.log(`[mobilePaymentSheetSubscription] Recuperando invoice ${invoiceId} con expand de payment_intent...`);
-    // Recuperar el invoice con expand (más confiable)
-    let invoice = await this.stripeSvc.stripe.invoices.retrieve(invoiceId, {
-      expand: ['payment_intent'],
+    this.logger.log(`[mobilePaymentSheetSubscription] Recuperando invoice ${invoiceId} con expand...`);
+    // Recuperar el invoice con expand de payments (recomendado por Stripe API reciente)
+    let invoice: any = await this.stripeSvc.stripe.invoices.retrieve(invoiceId, {
+      expand: ['payments.data.payment', 'payments.data.payment.payment_intent'],
     });
 
-    // Si está en draft, finalízalo (esto suele disparar la creación del PaymentIntent)
-    if ((invoice as any).status === 'draft') {
-      this.logger.warn(`[mobilePaymentSheetSubscription] Invoice ${invoiceId} está en draft; finalizando...`);
-      invoice = await this.stripeSvc.stripe.invoices.finalizeInvoice(invoiceId, {
-        expand: ['payment_intent'],
+    // Log útil para diagnóstico
+    this.logger.log(
+      `[mobilePaymentSheetSubscription] Invoice ${invoiceId}: status=${invoice.status}, amount_due=${invoice.amount_due}, ` +
+      `attempted=${invoice.attempted}, auto_advance=${invoice.auto_advance}, collection_method=${invoice.collection_method}`
+    );
+
+    // ✅ OPCIÓN 1 (recomendada): usar confirmation_secret.client_secret
+    const confirmationSecret = invoice?.confirmation_secret?.client_secret;
+    if (confirmationSecret) {
+      this.logger.log(`[mobilePaymentSheetSubscription] ✅ Usando invoice.confirmation_secret.client_secret`);
+      
+      // Guardar todos los campos relevantes de Stripe
+      await this.patchUser(user, {
+        stripeCustomerId: customerId,
+        premiumSubscriptionId: subscription.id,
+        premiumSubscriptionStatus: subscription.status,
+        premiumUntil: null // Se puede actualizar por webhook si aplica
       });
+
+      return {
+        customerId,
+        ephemeralKeySecret: ephemeralKey.secret,
+        paymentIntentClientSecret: confirmationSecret,
+        subscriptionId: subscription.id,
+        subscriptionStatus: subscription.status,
+      };
     }
 
-    this.logger.log(`[mobilePaymentSheetSubscription] Invoice recuperado: status=${(invoice as any).status}, collection_method=${(invoice as any).collection_method}`);
+    // ✅ OPCIÓN 2 (fallback): sacar payment_intent del InvoicePayment default
+    const defaultPayment = invoice?.payments?.data?.find((p: any) => p.is_default);
+    const piId = defaultPayment?.payment?.payment_intent;
 
-    let paymentIntent: any = (invoice as any).payment_intent;
+    if (typeof piId === 'string') {
+      this.logger.log(`[mobilePaymentSheetSubscription] Usando PI desde invoice.payments default: ${piId}`);
+      const pi = await this.stripeSvc.stripe.paymentIntents.retrieve(piId);
+      if (pi?.client_secret) {
+        this.logger.log(`[mobilePaymentSheetSubscription] ✅ Client secret obtenido desde payments: ${pi.client_secret.substring(0, 20)}...`);
+        
+        // Guardar todos los campos relevantes de Stripe
+        await this.patchUser(user, {
+          stripeCustomerId: customerId,
+          premiumSubscriptionId: subscription.id,
+          premiumSubscriptionStatus: subscription.status,
+          premiumUntil: null // Se puede actualizar por webhook si aplica
+        });
 
-    // Si sigue siendo string, recupéralo
-    if (typeof paymentIntent === 'string') {
-      this.logger.log(`[mobilePaymentSheetSubscription] payment_intent es string, recuperando...`);
-      paymentIntent = await this.stripeSvc.stripe.paymentIntents.retrieve(paymentIntent);
-      this.logger.log(`[mobilePaymentSheetSubscription] PaymentIntent recuperado: ${paymentIntent.id}`);
+        return {
+          customerId,
+          ephemeralKeySecret: ephemeralKey.secret,
+          paymentIntentClientSecret: pi.client_secret,
+          subscriptionId: subscription.id,
+          subscriptionStatus: subscription.status,
+        };
+      }
     }
 
-    if (!paymentIntent?.client_secret) {
-      this.logger.error(
-        `[mobilePaymentSheetSubscription] Invoice ${invoiceId} sin payment_intent. ` +
-        `status=${(invoice as any).status}, collection_method=${(invoice as any).collection_method}, amount_due=${(invoice as any).amount_due}`
-      );
-      throw new BadRequestException(
-        `Stripe invoice ${invoiceId} no generó PaymentIntent. Revisa status/collection_method/payment methods.`
-      );
-    }
+    // ❌ Último fallback: si no hay nada, registra todo lo necesario para diagnóstico
+    this.logger.error(
+      `[mobilePaymentSheetSubscription] Invoice ${invoiceId} sin confirmation_secret y sin payments.payment_intent. ` +
+      `status=${invoice.status}, amount_due=${invoice.amount_due}, attempted=${invoice.attempted}, ` +
+      `auto_advance=${invoice.auto_advance}, confirmation_secret=${JSON.stringify(invoice.confirmation_secret)}, ` +
+      `payments=${JSON.stringify(invoice.payments?.data?.[0])}, payment_settings=${JSON.stringify(invoice.payment_settings)}`
+    );
 
-    this.logger.log(`[mobilePaymentSheetSubscription] client_secret obtenido: ${paymentIntent.client_secret.substring(0, 20)}...`);
+    throw new BadRequestException(
+      `Stripe invoice ${invoiceId} no expuso client_secret. Revisa Payment Methods + Billing config.`
+    );
+  }
 
-    // Guardar todos los campos relevantes de Stripe
-    this.logger.log('Actualizando usuario en BD con datos de Stripe...');
-    await this.patchUser(user, {
-      stripeCustomerId: customerId,
-      premiumSubscriptionId: subscription.id,
-      premiumSubscriptionStatus: subscription.status,
-      premiumUntil: null // Se puede actualizar por webhook si aplica
-    });
-    this.logger.log('Usuario actualizado correctamente en BD');
-
-    const response = {
-      customerId,
-      ephemeralKeySecret: ephemeralKey.secret,
-      paymentIntentClientSecret: paymentIntent.client_secret,
-      subscriptionId: subscription.id,
-      subscriptionStatus: subscription.status,
-    };
-    
-    this.logger.log('=== FIN mobilePaymentSheetSubscription - Respuesta enviada ===');
-    this.logger.log(`Response: ${JSON.stringify(response, null, 2)}`);
-    
-    return response;
+  private async patchUser(user: any, updates: any) {
+    await this.userModel.updateOne({ _id: user._id }, { $set: updates });
   }
 
   // -----------------------------
