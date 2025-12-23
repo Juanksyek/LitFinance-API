@@ -359,44 +359,64 @@ export class StripeController {
       };
     }
 
-    // ✅ OPCIÓN 2 (fallback): sacar payment_intent del InvoicePayment default
-    const defaultPayment = invoice?.payments?.data?.find((p: any) => p.is_default);
-    const piId = defaultPayment?.payment?.payment_intent;
+    // ✅ OPCIÓN 2 (fallback): sacar payment_intent de payments
+    // payments puede venir como LISTA (payments.data) o como OBJETO (payments)
+    let piCandidate: any = null;
 
-    if (typeof piId === 'string') {
-      this.logger.log(`[mobilePaymentSheetSubscription] Usando PI desde invoice.payments default: ${piId}`);
-      const pi = await this.stripeSvc.stripe.paymentIntents.retrieve(piId);
-      if (pi?.client_secret) {
-        this.logger.log(`[mobilePaymentSheetSubscription] ✅ Client secret obtenido desde payments: ${pi.client_secret.substring(0, 20)}...`);
-        
-        // Guardar todos los campos relevantes de Stripe
-        await this.patchUser(user, {
-          stripeCustomerId: customerId,
-          premiumSubscriptionId: subscription.id,
-          premiumSubscriptionStatus: subscription.status,
-          premiumUntil: null // Se puede actualizar por webhook si aplica
-        });
+    // Caso A: payments como lista
+    if (Array.isArray(invoice?.payments?.data)) {
+      const defaultPayment = invoice.payments.data.find((p: any) => p?.is_default) ?? invoice.payments.data[0];
+      piCandidate = defaultPayment?.payment?.payment_intent;
+      this.logger.log(`[mobilePaymentSheetSubscription] Buscando PI en payments.data (lista), encontrado: ${!!piCandidate}`);
+    }
 
-        return {
-          customerId,
-          ephemeralKeySecret: ephemeralKey.secret,
-          paymentIntentClientSecret: pi.client_secret,
-          subscriptionId: subscription.id,
-          subscriptionStatus: subscription.status,
-        };
-      }
+    // Caso B: payments como objeto directo (estructura actual de Stripe)
+    if (!piCandidate && invoice?.payments?.payment?.payment_intent) {
+      piCandidate = invoice.payments.payment.payment_intent;
+      this.logger.log(`[mobilePaymentSheetSubscription] Encontrado PI en payments.payment.payment_intent (objeto directo)`);
+    }
+
+    // 3) piCandidate puede ser string (id) o objeto expandido
+    let paymentIntent: any = null;
+
+    if (typeof piCandidate === 'string') {
+      this.logger.log(`[mobilePaymentSheetSubscription] PI es string, recuperando: ${piCandidate}`);
+      paymentIntent = await this.stripeSvc.stripe.paymentIntents.retrieve(piCandidate);
+    } else if (piCandidate && typeof piCandidate === 'object') {
+      this.logger.log(`[mobilePaymentSheetSubscription] PI ya expandido: ${piCandidate.id}`);
+      paymentIntent = piCandidate;
+    }
+
+    if (paymentIntent?.client_secret) {
+      this.logger.log(`[mobilePaymentSheetSubscription] ✅ Client secret obtenido: ${paymentIntent.client_secret.substring(0, 20)}...`);
+      
+      // Guardar todos los campos relevantes de Stripe
+      await this.patchUser(user, {
+        stripeCustomerId: customerId,
+        premiumSubscriptionId: subscription.id,
+        premiumSubscriptionStatus: subscription.status,
+        premiumUntil: null // Se puede actualizar por webhook si aplica
+      });
+
+      return {
+        customerId,
+        ephemeralKeySecret: ephemeralKey.secret,
+        paymentIntentClientSecret: paymentIntent.client_secret,
+        subscriptionId: subscription.id,
+        subscriptionStatus: subscription.status,
+      };
     }
 
     // ❌ Último fallback: si no hay nada, registra todo lo necesario para diagnóstico
     this.logger.error(
-      `[mobilePaymentSheetSubscription] Invoice ${invoiceId} sin confirmation_secret y sin payments.payment_intent. ` +
-      `status=${invoice.status}, amount_due=${invoice.amount_due}, attempted=${invoice.attempted}, ` +
-      `auto_advance=${invoice.auto_advance}, confirmation_secret=${JSON.stringify(invoice.confirmation_secret)}, ` +
-      `payments=${JSON.stringify(invoice.payments?.data?.[0])}, payment_settings=${JSON.stringify(invoice.payment_settings)}`
+      `[mobilePaymentSheetSubscription] Invoice ${invoiceId} sin client_secret. ` +
+      `status=${invoice.status}, attempted=${invoice.attempted}, auto_advance=${invoice.auto_advance}, ` +
+      `confirmation_secret=${JSON.stringify(invoice.confirmation_secret)}, ` +
+      `payments=${JSON.stringify(invoice.payments)}, payment_settings=${JSON.stringify(invoice.payment_settings)}`
     );
 
     throw new BadRequestException(
-      `Stripe invoice ${invoiceId} no expuso client_secret. Revisa Payment Methods + Billing config.`
+      `Invoice ${invoiceId} no expuso client_secret. Revisa Payment Methods + Billing config.`
     );
   }
 
