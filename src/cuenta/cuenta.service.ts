@@ -31,7 +31,13 @@ export class CuentaService {
     if (!cuenta) {
       throw new NotFoundException('Cuenta principal no encontrada');
     }
-    return cuenta;
+    // Buscar usuario para extraer premiumSubscriptionStatus y premiumUntil
+    const usuario = await this.userModel.findOne({ id: userId });
+    return {
+      ...cuenta.toObject(),
+      premiumSubscriptionStatus: usuario?.premiumSubscriptionStatus || null,
+      premiumUntil: usuario?.premiumUntil || null,
+    };
   }
 
   async obtenerVistaPrevia(userId: string, nuevaMoneda: string) {
