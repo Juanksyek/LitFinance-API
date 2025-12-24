@@ -26,7 +26,7 @@ export class CuentaService {
     private readonly conversionService: ConversionService,
   ) { }
 
-  async obtenerCuentaPrincipal(userId: string): Promise<CuentaDocument> {
+  async obtenerCuentaPrincipal(userId: string): Promise<any> {
     const cuenta = await this.cuentaModel.findOne({ userId, isPrincipal: true });
     if (!cuenta) {
       throw new NotFoundException('Cuenta principal no encontrada');
