@@ -545,14 +545,19 @@ export class StripeController {
           if (days > 0) {
             const user = await this.userModel.findById(userMongoId);
             if (user) {
-              const next = this.stripeSvc.extendPremiumUntil(user.premiumUntil || null, days);
-              const status = next.getTime() > Date.now() ? 'active' : 'expired';
-              this.logger.log(`[checkout.session.completed] Actualizando premiumUntil a: ${next}, status: ${status}`);
-              await this.patchUser(user, {
-                premiumUntil: next,
-                premiumSubscriptionStatus: status,
-                premiumSubscriptionId: 'tipjar'
-              });
+              // Si el usuario NO tiene suscripción activa, actualiza premium por donación
+              if (!user.premiumSubscriptionId || user.premiumSubscriptionStatus === 'canceled' || user.premiumSubscriptionStatus === 'expired') {
+                const next = this.stripeSvc.extendPremiumUntil(user.premiumUntil || null, days);
+                const status = next.getTime() > Date.now() ? 'active' : 'expired';
+                this.logger.log(`[checkout.session.completed] Actualizando premiumUntil a: ${next}, status: ${status}`);
+                await this.patchUser(user, {
+                  premiumUntil: next,
+                  premiumSubscriptionStatus: status,
+                  premiumSubscriptionId: 'tipjar'
+                });
+              } else {
+                this.logger.log(`[checkout.session.completed] No se actualiza premium por donación porque hay suscripción activa.`);
+              }
             } else {
               this.logger.warn(`[checkout.session.completed] Usuario no encontrado: ${userMongoId}`);
             }
@@ -573,14 +578,19 @@ export class StripeController {
           if (days > 0 && userMongoId) {
             const user = await this.userModel.findById(userMongoId);
             if (user) {
-              const next = this.stripeSvc.extendPremiumUntil(user.premiumUntil || null, days);
-              const status = next.getTime() > Date.now() ? 'active' : 'expired';
-              this.logger.log(`[payment_intent.succeeded] Actualizando premiumUntil a: ${next}, status: ${status}`);
-              await this.patchUser(user, {
-                premiumUntil: next,
-                premiumSubscriptionStatus: status,
-                premiumSubscriptionId: 'tipjar'
-              });
+              // Si el usuario NO tiene suscripción activa, actualiza premium por donación
+              if (!user.premiumSubscriptionId || user.premiumSubscriptionStatus === 'canceled' || user.premiumSubscriptionStatus === 'expired') {
+                const next = this.stripeSvc.extendPremiumUntil(user.premiumUntil || null, days);
+                const status = next.getTime() > Date.now() ? 'active' : 'expired';
+                this.logger.log(`[payment_intent.succeeded] Actualizando premiumUntil a: ${next}, status: ${status}`);
+                await this.patchUser(user, {
+                  premiumUntil: next,
+                  premiumSubscriptionStatus: status,
+                  premiumSubscriptionId: 'tipjar'
+                });
+              } else {
+                this.logger.log(`[payment_intent.succeeded] No se actualiza premium por donación porque hay suscripción activa.`);
+              }
             } else {
               this.logger.warn(`[payment_intent.succeeded] Usuario no encontrado: ${userMongoId}`);
             }
@@ -609,6 +619,7 @@ export class StripeController {
             const currentPeriodEnd = new Date(subscription.current_period_end * 1000);
             
             this.logger.log(`[invoice.paid] Actualizando usuario: subscriptionId=${subscriptionId}, status=active, premiumUntil=${currentPeriodEnd.toISOString()}`);
+            // Siempre sobrescribe los campos premium con la suscripción
             await this.patchUser(user, {
               premiumSubscriptionId: subscriptionId,
               premiumSubscriptionStatus: 'active',
@@ -630,6 +641,7 @@ export class StripeController {
         const user = await this.findByStripeCustomerId(customerId);
         if (user) {
           this.logger.log(`[customer.subscription.updated] Actualizando usuario`);
+          // Siempre sobrescribe los campos premium con la suscripción
           await this.patchUser(user, {
             premiumSubscriptionId: sub.id,
             premiumSubscriptionStatus: sub.status,
