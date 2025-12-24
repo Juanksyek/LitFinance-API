@@ -41,10 +41,14 @@ export class PlanConfigController {
 
   @Get(':planType')
   @Roles('admin')
-  async findOne(@Param('planType') planType: string) {
-    this.logger.log(`GET /plan-config/${planType} - Obtener configuración`);
-    return this.planConfigService.findByPlanType(planType);
-  }
+    async findOne(@Param('planType') planType: string) {
+      this.logger.log(`GET /plan-config/${planType} - Obtener configuración`);
+      const config = await this.planConfigService.findByPlanType(planType);
+      if (!config) {
+        throw new (await import('@nestjs/common')).NotFoundException(`Configuración de plan ${planType} no encontrada`);
+      }
+      return config;
+    }
 
 
   @Put(':planType')
