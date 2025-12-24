@@ -23,6 +23,7 @@ import { PlataformasRecurrentesModule } from './plataformas-recurrentes/platafor
 import { AnalyticsModule } from './analytics/analytics.module';
 import { ReportsModule } from './reports/reports.module';
 import { StripeModule } from './stripe/stripe.module';
+import { PlanConfigModule } from './plan-config/plan-config.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { StripeModule } from './stripe/stripe.module';
     AnalyticsModule,
     ReportsModule,
     StripeModule,
+    PlanConfigModule,
   ],
   controllers: [AppController],
   providers: [
