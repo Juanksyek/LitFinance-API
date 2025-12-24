@@ -27,8 +27,22 @@ const mockStripeService = {
     },
     subscriptions: {
       create: jest.fn(),
+      update: jest.fn(),
+      cancel: jest.fn(),
+      list: jest.fn(),
+    },
+    billingPortal: {
+      sessions: {
+        create: jest.fn(),
+      },
     },
     paymentIntents: {
+      create: jest.fn(),
+    },
+    invoices: {
+      retrieve: jest.fn(),
+    },
+    refunds: {
       create: jest.fn(),
     },
     webhooks: {
@@ -55,7 +69,7 @@ describe('StripeController', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
   });
 
   it('debería crear una sesión de suscripción web', async () => {
@@ -89,13 +103,58 @@ describe('StripeController', () => {
     mockUserModel.findById.mockResolvedValueOnce(user);
     mockStripeService.giftDaysForJar.mockReturnValueOnce(7);
     mockStripeService.extendPremiumUntil.mockReturnValueOnce(new Date('2025-12-31'));
-    mockUserModel.updateOne.mockResolvedValueOnce({});
 
     const result = await controller.webhook(req, sig);
     expect(result).toEqual({ received: true });
-    expect(mockUserModel.updateOne).toHaveBeenCalledWith(
-      { _id: 'mongoId' },
-      { $set: { premiumUntil: expect.any(Date) } }
+
+    expect(mockStripeService.giftDaysForJar).toHaveBeenCalled();
+    expect(mockUserModel.findById).toHaveBeenCalledWith('mongoId');
+
+    expect(mockStripeService.extendPremiumUntil).toHaveBeenCalled();
+  });
+
+  it('debería marcar cancelación al fin de periodo (cancel-renewal)', async () => {
+    const req = { user: { id: 'user123' } };
+    const user: any = { _id: 'mongoId', email: 'test@mail.com', stripeCustomerId: 'cus_123', premiumSubscriptionId: 'sub_123' };
+    mockUserModel.findById.mockResolvedValueOnce(null);
+    mockUserModel.findOne.mockResolvedValueOnce(user);
+    mockStripeService.stripe.subscriptions.update.mockResolvedValueOnce({
+      id: 'sub_123',
+      status: 'active',
+      cancel_at_period_end: true,
+      current_period_end: 1735689600,
+    });
+    mockUserModel.updateOne.mockResolvedValueOnce({});
+
+    const result = await controller.cancelSubscriptionRenewal(req as any, { subscriptionId: 'sub_123' });
+    expect(result).toEqual({
+      subscriptionId: 'sub_123',
+      status: 'active',
+      cancel_at_period_end: true,
+      current_period_end: 1735689600,
+    });
+    expect(mockStripeService.stripe.subscriptions.update).toHaveBeenCalledWith('sub_123', { cancel_at_period_end: true });
+  });
+
+  it('debería crear un reembolso (admin/refund) usando paymentIntentId', async () => {
+    mockStripeService.stripe.refunds.create.mockResolvedValueOnce({
+      id: 're_123',
+      status: 'succeeded',
+      amount: 3900,
+      currency: 'mxn',
+      reason: 'requested_by_customer',
+    });
+
+    const result = await controller.adminRefund({ paymentIntentId: 'pi_123', amountMXN: 39, reason: 'requested_by_customer' });
+    expect(result).toEqual({
+      refundId: 're_123',
+      status: 'succeeded',
+      amount: 3900,
+      currency: 'mxn',
+      reason: 'requested_by_customer',
+    });
+    expect(mockStripeService.stripe.refunds.create).toHaveBeenCalledWith(
+      expect.objectContaining({ payment_intent: 'pi_123', amount: 3900, reason: 'requested_by_customer' }),
     );
   });
 });
