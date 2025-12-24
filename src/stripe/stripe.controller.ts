@@ -546,8 +546,13 @@ export class StripeController {
             const user = await this.userModel.findById(userMongoId);
             if (user) {
               const next = this.stripeSvc.extendPremiumUntil(user.premiumUntil || null, days);
-              this.logger.log(`[checkout.session.completed] Actualizando premiumUntil a: ${next}`);
-              await this.patchUser(user, { premiumUntil: next });
+              const status = next.getTime() > Date.now() ? 'active' : 'expired';
+              this.logger.log(`[checkout.session.completed] Actualizando premiumUntil a: ${next}, status: ${status}`);
+              await this.patchUser(user, {
+                premiumUntil: next,
+                premiumSubscriptionStatus: status,
+                premiumSubscriptionId: 'tipjar'
+              });
             } else {
               this.logger.warn(`[checkout.session.completed] Usuario no encontrado: ${userMongoId}`);
             }
@@ -569,8 +574,13 @@ export class StripeController {
             const user = await this.userModel.findById(userMongoId);
             if (user) {
               const next = this.stripeSvc.extendPremiumUntil(user.premiumUntil || null, days);
-              this.logger.log(`[payment_intent.succeeded] Actualizando premiumUntil a: ${next}`);
-              await this.patchUser(user, { premiumUntil: next });
+              const status = next.getTime() > Date.now() ? 'active' : 'expired';
+              this.logger.log(`[payment_intent.succeeded] Actualizando premiumUntil a: ${next}, status: ${status}`);
+              await this.patchUser(user, {
+                premiumUntil: next,
+                premiumSubscriptionStatus: status,
+                premiumSubscriptionId: 'tipjar'
+              });
             } else {
               this.logger.warn(`[payment_intent.succeeded] Usuario no encontrado: ${userMongoId}`);
             }
