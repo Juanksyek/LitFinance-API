@@ -47,6 +47,10 @@ export class AuthService {
         const tokenExpires = new Date(Date.now() + 30 * 60 * 1000);
         const { email, password, confirmPassword } = dto;
 
+        // Log para detectar flujos incompletos
+        // eslint-disable-next-line no-console
+        console.log('[REGISTER] Payload recibido:', JSON.stringify(dto));
+
         const existing = await this.userModel.findOne({ email });
         if (existing) {
             throw new BadRequestException('El correo ya está registrado');
@@ -56,33 +60,38 @@ export class AuthService {
             throw new BadRequestException('Las contraseñas no coinciden');
         }
 
+        // Validación explícita para edad y ocupacion
+        if (dto.edad === undefined || dto.ocupacion === undefined) {
+            throw new BadRequestException('Faltan campos obligatorios: edad y ocupacion');
+        }
+
         const hashedPassword = await bcrypt.hash(password, 10);
         const generatedId = await this.generateUniqueId();
 
-            // Forzar monedaPrincipal y monedaPreferencia a 'MXN' si no se especifican
-            const monedaPrincipal = dto.monedaPrincipal ? dto.monedaPrincipal : 'MXN';
-            const monedaPreferencia = dto.monedaPreferencia ? dto.monedaPreferencia : 'MXN';
+        // Forzar monedaPrincipal y monedaPreferencia a 'MXN' si no se especifican
+        const monedaPrincipal = dto.monedaPrincipal ? dto.monedaPrincipal : 'MXN';
+        const monedaPreferencia = dto.monedaPreferencia ? dto.monedaPreferencia : 'MXN';
 
-            const user = new this.userModel({
-                id: generatedId,
-                email: dto.email,
-                password: hashedPassword,
-                proveedor: null,
-                isActive: false,
-                activationToken,
-                tokenExpires,
-                isPremium: dto.isPremium || false,
-                monedaPrincipal,
-                monedaPreferencia,
-                // otros campos opcionales del DTO
-                nombreCompleto: dto.nombreCompleto,
-                // Si agregas estos campos al DTO, puedes volver a incluirlos aquí
-                // agrega aquí otros campos opcionales si existen
-            });
+        const user = new this.userModel({
+            id: generatedId,
+            email: dto.email,
+            password: hashedPassword,
+            proveedor: null,
+            isActive: false,
+            activationToken,
+            tokenExpires,
+            isPremium: dto.isPremium || false,
+            monedaPrincipal,
+            monedaPreferencia,
+            nombreCompleto: dto.nombreCompleto,
+            edad: dto.edad,
+            ocupacion: dto.ocupacion,
+            // otros campos opcionales del DTO
+        });
 
         await user.save();
         await this.emailService.sendConfirmationEmail(user.email, activationToken, user.nombreCompleto);
-        
+
         // Usar monedaPrincipal para la cuenta principal
         const codigoMoneda = monedaPrincipal;
         const monedaSeleccionada = await this.getMonedaInfo(codigoMoneda);
