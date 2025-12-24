@@ -555,15 +555,28 @@ export class StripeController {
         const customerId = invoice.customer;
         const subscriptionId = invoice.subscription;
         this.logger.log(`[invoice.paid] customerId: ${customerId}, subscriptionId: ${subscriptionId}`);
-        const user = await this.findByStripeCustomerId(customerId);
-        if (user) {
-          this.logger.log(`[invoice.paid] Actualizando premiumSubscriptionId y premiumSubscriptionStatus`);
-          await this.patchUser(user, {
-            premiumSubscriptionId: subscriptionId,
-            premiumSubscriptionStatus: 'active',
-          });
-        } else {
-          this.logger.warn(`[invoice.paid] Usuario no encontrado para customerId: ${customerId}`);
+        
+        if (subscriptionId) {
+          // Obtener detalles de la suscripción para determinar el período
+          const subscriptionResponse = await this.stripeSvc.stripe.subscriptions.retrieve(subscriptionId);
+          const subscription = (subscriptionResponse as any).current_period_end !== undefined
+            ? subscriptionResponse
+            : (subscriptionResponse as any).data || subscriptionResponse;
+          const user = await this.findByStripeCustomerId(customerId);
+          
+          if (user) {
+            // Calcular premiumUntil basado en el período de la suscripción
+            const currentPeriodEnd = new Date(subscription.current_period_end * 1000);
+            
+            this.logger.log(`[invoice.paid] Actualizando usuario: subscriptionId=${subscriptionId}, status=active, premiumUntil=${currentPeriodEnd.toISOString()}`);
+            await this.patchUser(user, {
+              premiumSubscriptionId: subscriptionId,
+              premiumSubscriptionStatus: 'active',
+              premiumUntil: currentPeriodEnd,
+            });
+          } else {
+            this.logger.warn(`[invoice.paid] Usuario no encontrado para customerId: ${customerId}`);
+          }
         }
         break;
       }
@@ -571,13 +584,16 @@ export class StripeController {
       case 'customer.subscription.updated': {
         const sub: any = event.data.object;
         const customerId = sub.customer;
-        this.logger.log(`[customer.subscription.updated] customerId: ${customerId}, subId: ${sub.id}, status: ${sub.status}`);
+        const currentPeriodEnd = new Date(sub.current_period_end * 1000);
+        
+        this.logger.log(`[customer.subscription.updated] customerId: ${customerId}, subId: ${sub.id}, status: ${sub.status}, current_period_end: ${currentPeriodEnd.toISOString()}`);
         const user = await this.findByStripeCustomerId(customerId);
         if (user) {
-          this.logger.log(`[customer.subscription.updated] Actualizando premiumSubscriptionId y premiumSubscriptionStatus`);
+          this.logger.log(`[customer.subscription.updated] Actualizando usuario`);
           await this.patchUser(user, {
             premiumSubscriptionId: sub.id,
             premiumSubscriptionStatus: sub.status,
+            premiumUntil: currentPeriodEnd,
           });
         } else {
           this.logger.warn(`[customer.subscription.updated] Usuario no encontrado para customerId: ${customerId}`);
