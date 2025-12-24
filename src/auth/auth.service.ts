@@ -167,6 +167,8 @@ export class AuthService {
                 id: user.id,
                 email: user.email,
                 nombre: user.nombreCompleto,
+                premiumSubscriptionStatus: user.premiumSubscriptionStatus || null,
+                premiumUntil: user.premiumUntil || null,
             },
             rol: user.rol,
         };

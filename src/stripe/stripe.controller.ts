@@ -5,6 +5,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { User, UserDocument } from '../user/schemas/user.schema/user.schema';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
 
 @Controller('stripe')
 export class StripeController {
@@ -424,6 +426,34 @@ export class StripeController {
     await this.userModel.updateOne({ _id: user._id }, { $set: updates });
   }
 
+  private async resolveSubscriptionIdForUser(user: any, subscriptionId?: string) {
+    if (subscriptionId) return subscriptionId;
+    if (user?.premiumSubscriptionId) return String(user.premiumSubscriptionId);
+    if (!user?.stripeCustomerId) {
+      throw new BadRequestException('El usuario no tiene Stripe customerId');
+    }
+
+    const subs = await this.stripeSvc.stripe.subscriptions.list({
+      customer: user.stripeCustomerId,
+      status: 'all',
+      limit: 10,
+    });
+
+    const candidate = subs.data.find((s: any) =>
+      ['active', 'trialing', 'past_due', 'unpaid', 'incomplete'].includes(s.status),
+    );
+    if (!candidate) {
+      throw new BadRequestException('No se encontró una suscripción asociada a este usuario');
+    }
+    return candidate.id;
+  }
+
+  private normalizeRefundReason(reason?: string) {
+    const r = String(reason || '').trim();
+    if (r === 'duplicate' || r === 'fraudulent' || r === 'requested_by_customer') return r;
+    return 'requested_by_customer';
+  }
+
   // -----------------------------
   // MOBILE — PaymentSheet TipJar (monto fijo o libre)
   // -----------------------------
@@ -617,5 +647,171 @@ export class StripeController {
     }
 
     return { received: true };
+  }
+
+  // -----------------------------
+  // SUBSCRIPTION — Cancelar renovación (no cancela inmediato)
+  // -----------------------------
+  @UseGuards(JwtAuthGuard)
+  @Post('subscription/cancel-renewal')
+  async cancelSubscriptionRenewal(@Req() req: any, @Body() body: { subscriptionId?: string }) {
+    const authId = this.getAuthUserId(req);
+    const user = await this.findUserByAuthId(authId);
+
+    const subId = await this.resolveSubscriptionIdForUser(user, body?.subscriptionId);
+    this.logger.log(`[cancelSubscriptionRenewal] user=${user._id} subId=${subId}`);
+
+    const sub: any = await this.stripeSvc.stripe.subscriptions.update(subId, {
+      cancel_at_period_end: true,
+    });
+
+    const premiumUntil = sub?.current_period_end ? new Date(sub.current_period_end * 1000) : undefined;
+    await this.patchUser(user, {
+      premiumSubscriptionId: sub.id,
+      premiumSubscriptionStatus: sub.status,
+      ...(premiumUntil ? { premiumUntil } : {}),
+    });
+
+    return {
+      subscriptionId: sub.id,
+      status: sub.status,
+      cancel_at_period_end: sub.cancel_at_period_end,
+      current_period_end: sub.current_period_end,
+    };
+  }
+
+  // -----------------------------
+  // SUBSCRIPTION — Reactivar renovación
+  // -----------------------------
+  @UseGuards(JwtAuthGuard)
+  @Post('subscription/resume-renewal')
+  async resumeSubscriptionRenewal(@Req() req: any, @Body() body: { subscriptionId?: string }) {
+    const authId = this.getAuthUserId(req);
+    const user = await this.findUserByAuthId(authId);
+
+    const subId = await this.resolveSubscriptionIdForUser(user, body?.subscriptionId);
+    this.logger.log(`[resumeSubscriptionRenewal] user=${user._id} subId=${subId}`);
+
+    const sub: any = await this.stripeSvc.stripe.subscriptions.update(subId, {
+      cancel_at_period_end: false,
+    });
+
+    const premiumUntil = sub?.current_period_end ? new Date(sub.current_period_end * 1000) : undefined;
+    await this.patchUser(user, {
+      premiumSubscriptionId: sub.id,
+      premiumSubscriptionStatus: sub.status,
+      ...(premiumUntil ? { premiumUntil } : {}),
+    });
+
+    return {
+      subscriptionId: sub.id,
+      status: sub.status,
+      cancel_at_period_end: sub.cancel_at_period_end,
+      current_period_end: sub.current_period_end,
+    };
+  }
+
+  // -----------------------------
+  // BILLING PORTAL — Dejar que Stripe maneje cancelación/métodos de pago
+  // -----------------------------
+  @UseGuards(JwtAuthGuard)
+  @Post('billing-portal/session')
+  async createBillingPortalSession(@Req() req: any, @Body() body: { returnUrl?: string }) {
+    const authId = this.getAuthUserId(req);
+    const user = await this.findUserByAuthId(authId);
+    if (!user?.stripeCustomerId) throw new BadRequestException('El usuario no tiene Stripe customerId');
+
+    const returnUrl = body?.returnUrl || `${process.env.FRONTEND_WEB_URL}/billing`;
+    const session = await this.stripeSvc.stripe.billingPortal.sessions.create({
+      customer: user.stripeCustomerId,
+      return_url: returnUrl,
+    });
+
+    return { url: session.url };
+  }
+
+  // -----------------------------
+  // ADMIN — Reembolso (refund)
+  // -----------------------------
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Post('admin/refund')
+  async adminRefund(
+    @Body()
+    body: {
+      paymentIntentId?: string;
+      chargeId?: string;
+      invoiceId?: string;
+      amountMXN?: number;
+      reason?: 'duplicate' | 'fraudulent' | 'requested_by_customer' | string;
+    },
+  ) {
+    const reason = this.normalizeRefundReason(body?.reason);
+
+    let paymentIntentId = body?.paymentIntentId;
+    if (!paymentIntentId && body?.invoiceId) {
+      const invoice: any = await this.stripeSvc.stripe.invoices.retrieve(body.invoiceId, {
+        expand: ['payment_intent'],
+      });
+      const pi = invoice?.payment_intent;
+      paymentIntentId = typeof pi === 'string' ? pi : pi?.id;
+      if (!paymentIntentId) {
+        throw new BadRequestException('No se pudo resolver payment_intent desde el invoiceId');
+      }
+    }
+
+    const params: any = {
+      reason,
+    };
+
+    if (typeof body?.amountMXN === 'number') {
+      if (body.amountMXN <= 0) throw new BadRequestException('amountMXN debe ser > 0');
+      params.amount = Math.round(body.amountMXN * 100);
+    }
+
+    if (paymentIntentId) {
+      params.payment_intent = paymentIntentId;
+    } else if (body?.chargeId) {
+      params.charge = body.chargeId;
+    } else {
+      throw new BadRequestException('Debes enviar paymentIntentId o invoiceId o chargeId');
+    }
+
+    const refund: any = await this.stripeSvc.stripe.refunds.create(params);
+    return {
+      refundId: refund.id,
+      status: refund.status,
+      amount: refund.amount,
+      currency: refund.currency,
+      reason: refund.reason,
+    };
+  }
+
+  // -----------------------------
+  // ADMIN — Cancelar suscripción inmediatamente
+  // -----------------------------
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Post('admin/subscription/cancel-now')
+  async adminCancelSubscriptionNow(@Body() body: { subscriptionId: string; userMongoId?: string }) {
+    if (!body?.subscriptionId) throw new BadRequestException('subscriptionId es requerido');
+
+    const sub: any = await this.stripeSvc.stripe.subscriptions.cancel(body.subscriptionId);
+
+    if (body?.userMongoId) {
+      const user = await this.userModel.findById(body.userMongoId);
+      if (user) {
+        await this.patchUser(user, {
+          premiumSubscriptionId: sub.id,
+          premiumSubscriptionStatus: sub.status,
+        });
+      }
+    }
+
+    return {
+      subscriptionId: sub.id,
+      status: sub.status,
+      canceled_at: sub.canceled_at,
+    };
   }
 }
