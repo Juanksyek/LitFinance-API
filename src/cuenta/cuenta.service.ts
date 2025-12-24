@@ -33,11 +33,11 @@ export class CuentaService {
     }
     // Buscar usuario para extraer premiumSubscriptionStatus y premiumUntil
     const usuario = await this.userModel.findOne({ id: userId });
-    return {
-      ...cuenta.toObject(),
+    const cuentaObj = cuenta.toObject();
+    return Object.assign({}, cuentaObj, {
       premiumSubscriptionStatus: usuario?.premiumSubscriptionStatus || null,
       premiumUntil: usuario?.premiumUntil || null,
-    };
+    });
   }
 
   async obtenerVistaPrevia(userId: string, nuevaMoneda: string) {
