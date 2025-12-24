@@ -133,6 +133,39 @@ export class StripeController {
     const user = await this.findUserByAuthId(authId);
     this.logger.log(`Usuario: ${user._id}, email: ${user.email}`);
 
+    // Asegurar customerId y bloquear doble suscripción
+    let customerId = user.stripeCustomerId;
+    if (!customerId) {
+      const customer = await this.stripeSvc.stripe.customers.create({
+        email: user.email,
+        metadata: { userMongoId: String(user._id) },
+      });
+      customerId = customer.id;
+      await this.patchUser(user, { stripeCustomerId: customerId });
+      user.stripeCustomerId = customerId;
+    }
+
+    const subs = await this.stripeSvc.stripe.subscriptions.list({
+      customer: customerId,
+      status: 'all',
+      limit: 10,
+    });
+
+    const blockingStatuses = ['active', 'trialing', 'past_due', 'unpaid'];
+    const hasBlocking = subs.data.some((s: any) => blockingStatuses.includes(s.status));
+    if (hasBlocking) {
+      throw new BadRequestException('Ya tienes una suscripción activa o en proceso');
+    }
+
+    const incompleteSubs = subs.data.filter((s: any) => ['incomplete', 'incomplete_expired'].includes(s.status));
+    for (const s of incompleteSubs) {
+      try {
+        await this.stripeSvc.stripe.subscriptions.cancel(s.id);
+      } catch {
+        // ignore
+      }
+    }
+
     const session = await this.stripeSvc.stripe.checkout.sessions.create({
       mode: 'subscription',
       line_items: [{ price: body.priceId, quantity: 1 }],
@@ -140,7 +173,7 @@ export class StripeController {
       metadata: { userMongoId: String(user._id), flow: 'subscription_web' },
       success_url: `${process.env.FRONTEND_WEB_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.FRONTEND_WEB_URL}/billing/cancel`,
-      customer_email: user.email,
+      customer: customerId,
     });
     
     this.logger.log(`Session creada: ${session.id}, url: ${session.url}`);
@@ -349,7 +382,7 @@ export class StripeController {
         stripeCustomerId: customerId,
         premiumSubscriptionId: subscription.id,
         premiumSubscriptionStatus: subscription.status,
-        premiumUntil: null // Se puede actualizar por webhook si aplica
+        premiumUntil: user.premiumUntil || null // No borrar premiumUntil (donaciones). Webhook/sync lo ajusta.
       });
 
       return {
@@ -397,7 +430,7 @@ export class StripeController {
         stripeCustomerId: customerId,
         premiumSubscriptionId: subscription.id,
         premiumSubscriptionStatus: subscription.status,
-        premiumUntil: null // Se puede actualizar por webhook si aplica
+        premiumUntil: user.premiumUntil || null // No borrar premiumUntil (donaciones). Webhook/sync lo ajusta.
       });
 
       return {
@@ -424,6 +457,86 @@ export class StripeController {
 
   private async patchUser(user: any, updates: any) {
     await this.userModel.updateOne({ _id: user._id }, { $set: updates });
+  }
+
+  private addDays(base: Date, days: number) {
+    const next = new Date(base);
+    next.setDate(next.getDate() + days);
+    return next;
+  }
+
+  private async resolveCurrentSubscriptionForUser(user: any): Promise<any | null> {
+    // Primero: si ya tenemos subscriptionId real, intenta recuperar esa
+    if (
+      user?.premiumSubscriptionId &&
+      typeof user.premiumSubscriptionId === 'string' &&
+      user.premiumSubscriptionId.length > 0 &&
+      user.premiumSubscriptionId !== 'tipjar'
+    ) {
+      try {
+        return await this.stripeSvc.stripe.subscriptions.retrieve(user.premiumSubscriptionId);
+      } catch {
+        // ignore
+      }
+    }
+
+    // Fallback: lista las suscripciones del customer
+    if (!user?.stripeCustomerId) return null;
+    const subs = await this.stripeSvc.stripe.subscriptions.list({
+      customer: user.stripeCustomerId,
+      status: 'all',
+      limit: 10,
+    });
+
+    const priority = ['active', 'trialing', 'past_due', 'unpaid', 'incomplete'];
+    for (const st of priority) {
+      const found = subs.data.find((s: any) => s.status === st);
+      if (found) return found;
+    }
+    return subs.data[0] || null;
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('subscription/sync')
+  async syncSubscription(@Req() req: any) {
+    const authId = this.getAuthUserId(req);
+    const user = await this.findUserByAuthId(authId);
+
+    const sub: any = await this.resolveCurrentSubscriptionForUser(user);
+    const bonusDays = Number((user as any).premiumBonusDays || 0);
+
+    if (!sub) {
+      const currentPremiumUntil = user.premiumUntil ? new Date(user.premiumUntil) : null;
+      const derivedStatus = currentPremiumUntil && currentPremiumUntil.getTime() > Date.now() ? 'active' : 'expired';
+      await this.patchUser(user, {
+        premiumSubscriptionStatus: user.premiumSubscriptionStatus || derivedStatus,
+        premiumUntil: currentPremiumUntil,
+      });
+      return {
+        stripeCustomerId: user.stripeCustomerId || null,
+        premiumSubscriptionId: user.premiumSubscriptionId || null,
+        premiumSubscriptionStatus: user.premiumSubscriptionStatus || derivedStatus,
+        premiumUntil: currentPremiumUntil,
+        premiumBonusDays: bonusDays,
+      };
+    }
+
+    const currentPeriodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000) : null;
+    const effectiveUntil = currentPeriodEnd ? this.addDays(currentPeriodEnd, bonusDays) : (user.premiumUntil || null);
+
+    await this.patchUser(user, {
+      premiumSubscriptionId: sub.id,
+      premiumSubscriptionStatus: sub.status,
+      premiumUntil: effectiveUntil,
+    });
+
+    return {
+      stripeCustomerId: user.stripeCustomerId || null,
+      premiumSubscriptionId: sub.id,
+      premiumSubscriptionStatus: sub.status,
+      premiumUntil: effectiveUntil,
+      premiumBonusDays: bonusDays,
+    };
   }
 
   private async resolveSubscriptionIdForUser(user: any, subscriptionId?: string) {
@@ -538,30 +651,70 @@ export class StripeController {
         const session: any = event.data.object;
         const userMongoId = session?.metadata?.userMongoId;
         this.logger.log(`[checkout.session.completed] userMongoId: ${userMongoId}`);
-        if (session.mode === 'payment' && userMongoId) {
+        if (!userMongoId) break;
+
+        // TipJar web (payment)
+        if (session.mode === 'payment') {
           const amount = (session.amount_total || 0) / 100;
           const days = this.stripeSvc.giftDaysForJar(amount);
-          this.logger.log(`[checkout.session.completed] Monto: $${amount} MXN, Días a regalar: ${days}`);
+          this.logger.log(`[checkout.session.completed] (tipjar_web) Monto: $${amount} MXN, Días a regalar: ${days}`);
+
           if (days > 0) {
             const user = await this.userModel.findById(userMongoId);
-            if (user) {
-              // Si el usuario NO tiene suscripción activa, actualiza premium por donación
-              if (!user.premiumSubscriptionId || user.premiumSubscriptionStatus === 'canceled' || user.premiumSubscriptionStatus === 'expired') {
-                const next = this.stripeSvc.extendPremiumUntil(user.premiumUntil || null, days);
-                const status = next.getTime() > Date.now() ? 'active' : 'expired';
-                this.logger.log(`[checkout.session.completed] Actualizando premiumUntil a: ${next}, status: ${status}`);
-                await this.patchUser(user, {
-                  premiumUntil: next,
-                  premiumSubscriptionStatus: status,
-                  premiumSubscriptionId: 'tipjar'
-                });
-              } else {
-                this.logger.log(`[checkout.session.completed] No se actualiza premium por donación porque hay suscripción activa.`);
-              }
-            } else {
+            if (!user) {
               this.logger.warn(`[checkout.session.completed] Usuario no encontrado: ${userMongoId}`);
+              break;
+            }
+
+            const nextBonusDays = Number((user as any).premiumBonusDays || 0) + days;
+            const currentPremiumUntil = user.premiumUntil ? new Date(user.premiumUntil) : null;
+
+            const sub: any = await this.resolveCurrentSubscriptionForUser(user);
+            if (sub?.current_period_end) {
+              const periodEnd = new Date(sub.current_period_end * 1000);
+              const effectiveUntil = this.addDays(periodEnd, nextBonusDays);
+              await this.patchUser(user, {
+                premiumBonusDays: nextBonusDays,
+                premiumSubscriptionId: sub.id,
+                premiumSubscriptionStatus: sub.status,
+                premiumUntil: effectiveUntil,
+              });
+            } else {
+              const effectiveUntil = this.stripeSvc.extendPremiumUntil(currentPremiumUntil, days);
+              const status = effectiveUntil.getTime() > Date.now() ? 'active' : 'expired';
+              await this.patchUser(user, {
+                premiumBonusDays: nextBonusDays,
+                premiumSubscriptionId: (user as any).premiumSubscriptionId || 'tipjar',
+                premiumSubscriptionStatus: (user as any).premiumSubscriptionStatus || status,
+                premiumUntil: effectiveUntil,
+              });
             }
           }
+          break;
+        }
+
+        // Checkout web de suscripción
+        if (session.mode === 'subscription') {
+          const subscriptionId = session.subscription;
+          if (!subscriptionId) break;
+
+          const user = await this.userModel.findById(userMongoId);
+          if (!user) {
+            this.logger.warn(`[checkout.session.completed] Usuario no encontrado: ${userMongoId}`);
+            break;
+          }
+
+          const sub: any = await this.stripeSvc.stripe.subscriptions.retrieve(subscriptionId);
+          const bonusDays = Number((user as any).premiumBonusDays || 0);
+          const periodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000) : null;
+          const effectiveUntil = periodEnd ? this.addDays(periodEnd, bonusDays) : (user.premiumUntil || null);
+
+          await this.patchUser(user, {
+            premiumSubscriptionId: sub.id,
+            premiumSubscriptionStatus: sub.status,
+            premiumUntil: effectiveUntil,
+          });
+          break;
         }
         break;
       }
@@ -578,24 +731,66 @@ export class StripeController {
           if (days > 0 && userMongoId) {
             const user = await this.userModel.findById(userMongoId);
             if (user) {
-              // Si el usuario NO tiene suscripción activa, actualiza premium por donación
-              if (!user.premiumSubscriptionId || user.premiumSubscriptionStatus === 'canceled' || user.premiumSubscriptionStatus === 'expired') {
-                const next = this.stripeSvc.extendPremiumUntil(user.premiumUntil || null, days);
-                const status = next.getTime() > Date.now() ? 'active' : 'expired';
-                this.logger.log(`[payment_intent.succeeded] Actualizando premiumUntil a: ${next}, status: ${status}`);
+              const nextBonusDays = Number((user as any).premiumBonusDays || 0) + days;
+              const currentPremiumUntil = user.premiumUntil ? new Date(user.premiumUntil) : null;
+
+              const sub: any = await this.resolveCurrentSubscriptionForUser(user);
+              if (sub?.current_period_end) {
+                const periodEnd = new Date(sub.current_period_end * 1000);
+                const effectiveUntil = this.addDays(periodEnd, nextBonusDays);
                 await this.patchUser(user, {
-                  premiumUntil: next,
-                  premiumSubscriptionStatus: status,
-                  premiumSubscriptionId: 'tipjar'
+                  premiumBonusDays: nextBonusDays,
+                  premiumSubscriptionId: sub.id,
+                  premiumSubscriptionStatus: sub.status,
+                  premiumUntil: effectiveUntil,
                 });
               } else {
-                this.logger.log(`[payment_intent.succeeded] No se actualiza premium por donación porque hay suscripción activa.`);
+                const effectiveUntil = this.stripeSvc.extendPremiumUntil(currentPremiumUntil, days);
+                const status = effectiveUntil.getTime() > Date.now() ? 'active' : 'expired';
+                await this.patchUser(user, {
+                  premiumBonusDays: nextBonusDays,
+                  premiumSubscriptionId: (user as any).premiumSubscriptionId || 'tipjar',
+                  premiumSubscriptionStatus: (user as any).premiumSubscriptionStatus || status,
+                  premiumUntil: effectiveUntil,
+                });
               }
             } else {
               this.logger.warn(`[payment_intent.succeeded] Usuario no encontrado: ${userMongoId}`);
             }
           }
         }
+        break;
+      }
+
+      // Suscripción: invoice.payment_succeeded (más común en varios flujos)
+      case 'invoice.payment_succeeded': {
+        const invoice: any = event.data.object;
+        const customerId = invoice.customer;
+        const subscriptionId = invoice.subscription;
+        this.logger.log(`[invoice.payment_succeeded] customerId: ${customerId}, subscriptionId: ${subscriptionId}`);
+
+        if (!subscriptionId) break;
+
+        const subscriptionResponse = await this.stripeSvc.stripe.subscriptions.retrieve(subscriptionId);
+        const subscription = (subscriptionResponse as any).current_period_end !== undefined
+          ? subscriptionResponse
+          : (subscriptionResponse as any).data || subscriptionResponse;
+
+        const user = await this.findByStripeCustomerId(customerId);
+        if (!user) {
+          this.logger.warn(`[invoice.payment_succeeded] Usuario no encontrado para customerId: ${customerId}`);
+          break;
+        }
+
+        const bonusDays = Number((user as any).premiumBonusDays || 0);
+        const periodEnd = subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null;
+        const effectiveUntil = periodEnd ? this.addDays(periodEnd, bonusDays) : (user.premiumUntil || null);
+
+        await this.patchUser(user, {
+          premiumSubscriptionId: subscriptionId,
+          premiumSubscriptionStatus: subscription.status || 'active',
+          premiumUntil: effectiveUntil,
+        });
         break;
       }
 
@@ -616,14 +811,19 @@ export class StripeController {
           
           if (user) {
             // Calcular premiumUntil basado en el período de la suscripción
+            const bonusDays = Number((user as any).premiumBonusDays || 0);
             const currentPeriodEnd = new Date(subscription.current_period_end * 1000);
+            const effectiveUntil = this.addDays(currentPeriodEnd, bonusDays);
             
-            this.logger.log(`[invoice.paid] Actualizando usuario: subscriptionId=${subscriptionId}, status=active, premiumUntil=${currentPeriodEnd.toISOString()}`);
+            this.logger.log(
+              `[invoice.paid] Actualizando usuario: subscriptionId=${subscriptionId}, status=${subscription.status || 'active'}, ` +
+              `periodEnd=${currentPeriodEnd.toISOString()}, bonusDays=${bonusDays}, premiumUntil=${effectiveUntil.toISOString()}`,
+            );
             // Siempre sobrescribe los campos premium con la suscripción
             await this.patchUser(user, {
               premiumSubscriptionId: subscriptionId,
-              premiumSubscriptionStatus: 'active',
-              premiumUntil: currentPeriodEnd,
+              premiumSubscriptionStatus: subscription.status || 'active',
+              premiumUntil: effectiveUntil,
             });
           } else {
             this.logger.warn(`[invoice.paid] Usuario no encontrado para customerId: ${customerId}`);
@@ -640,12 +840,14 @@ export class StripeController {
         this.logger.log(`[customer.subscription.updated] customerId: ${customerId}, subId: ${sub.id}, status: ${sub.status}, current_period_end: ${currentPeriodEnd.toISOString()}`);
         const user = await this.findByStripeCustomerId(customerId);
         if (user) {
+          const bonusDays = Number((user as any).premiumBonusDays || 0);
+          const effectiveUntil = this.addDays(currentPeriodEnd, bonusDays);
           this.logger.log(`[customer.subscription.updated] Actualizando usuario`);
           // Siempre sobrescribe los campos premium con la suscripción
           await this.patchUser(user, {
             premiumSubscriptionId: sub.id,
             premiumSubscriptionStatus: sub.status,
-            premiumUntil: currentPeriodEnd,
+            premiumUntil: effectiveUntil,
           });
         } else {
           this.logger.warn(`[customer.subscription.updated] Usuario no encontrado para customerId: ${customerId}`);

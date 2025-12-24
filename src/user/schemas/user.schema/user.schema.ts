@@ -17,6 +17,9 @@ export class User {
   @Prop({ type: String, required: true })
   ocupacion: string;
 
+  @Prop({ type: Number, default: 0 })
+  premiumBonusDays?: number;
+
   @Prop({ required: true, unique: true })
   email: string;
 
