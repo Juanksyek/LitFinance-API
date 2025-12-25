@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, Post, Req, BadRequestException, UseGuards, Logger } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, Req, BadRequestException, UseGuards, Logger } from '@nestjs/common';
 import { StripeService } from './stripe.service';
 import type { Request } from 'express';
 import { InjectModel } from '@nestjs/mongoose';
@@ -626,6 +626,11 @@ export class StripeController {
   // -----------------------------
   // WEBHOOK (confirmación real)
   // -----------------------------
+  @Get('webhook')
+  webhookHealth() {
+    return { ok: true };
+  }
+
   @Post('webhook')
   async webhook(@Req() req: Request, @Headers('stripe-signature') sig: string) {
     let event: any;
@@ -633,8 +638,12 @@ export class StripeController {
     this.logger.log('--- Stripe Webhook recibido ---');
     this.logger.log('Headers:', JSON.stringify(req.headers));
     try {
+      const payload: any = (req as any).rawBody ?? (req as any).body;
+      if (!payload) {
+        throw new Error('Missing raw payload (rawBody/body)');
+      }
       event = this.stripeSvc.stripe.webhooks.constructEvent(
-        (req as any).rawBody,
+        payload,
         sig,
         process.env.STRIPE_WEBHOOK_SECRET!,
       );
