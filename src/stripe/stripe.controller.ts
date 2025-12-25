@@ -659,10 +659,16 @@ export class StripeController {
       if (!Buffer.isBuffer(payload)) {
         payload = Buffer.from(payload);
       }
+
+      const webhookSecret = String(process.env.STRIPE_WEBHOOK_SECRET || '').trim();
+      if (!webhookSecret) {
+        throw new Error('Missing STRIPE_WEBHOOK_SECRET');
+      }
+
       event = this.stripeSvc.stripe.webhooks.constructEvent(
         payload,
         sig,
-        process.env.STRIPE_WEBHOOK_SECRET!,
+        webhookSecret,
       );
       this.logger.log(`Evento recibido: ${event.type}`);
       this.logger.debug(JSON.stringify(event, null, 2));
