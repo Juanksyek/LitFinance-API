@@ -651,9 +651,13 @@ export class StripeController {
       this.logger.log(`[DEBUG] req.rawBody.slice(0,32): ${(req as any).rawBody.slice(0,32).toString('hex')}`);
     }
     try {
-      const payload: any = (req as any).rawBody ?? (req as any).body;
+      let payload: any = (req as any).rawBody ?? (req as any).body;
       if (!payload) {
         throw new Error('Missing raw payload (rawBody/body)');
+      }
+      // Forzar que sea Buffer
+      if (!Buffer.isBuffer(payload)) {
+        payload = Buffer.from(payload);
       }
       event = this.stripeSvc.stripe.webhooks.constructEvent(
         payload,
