@@ -7,8 +7,8 @@ async function bootstrap() {
   // Nest's default body parser would consume it before we can validate the signature.
   const app = await NestFactory.create(AppModule, { bodyParser: false });
 
-  // ✅ Stripe webhook requiere raw body (must be registered BEFORE json parser)
-  app.use('/stripe/webhook', bodyParser.raw({ type: 'application/json' }));
+  // Stripe webhook requiere raw body (must be registered BEFORE json parser)
+  app.use('/stripe/webhook', bodyParser.raw({ type: '*/*' }));
 
   // Re-enable standard parsers for the rest of the API
   app.use(bodyParser.json({ limit: '2mb' }));
