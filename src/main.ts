@@ -7,12 +7,23 @@ async function bootstrap() {
   // Nest's default body parser would consume it before we can validate the signature.
   const app = await NestFactory.create(AppModule, { bodyParser: false });
 
-  // Stripe webhook requiere raw body (must be registered BEFORE json parser)
-  app.use('/stripe/webhook', bodyParser.raw({ type: '*/*' }));
 
-  // Re-enable standard parsers for the rest of the API
-  app.use(bodyParser.json({ limit: '2mb' }));
-  app.use(bodyParser.urlencoded({ extended: true, limit: '2mb' }));
+  // 1) Webhook: raw SIEMPRE (Stripe manda application/json; charset=utf-8)
+  app.use('/stripe/webhook', bodyParser.raw({ type: 'application/json' }));
+
+  // 2) Parsers normales para TODO MENOS el webhook
+  const jsonParser = bodyParser.json({ limit: '2mb' });
+  const urlParser = bodyParser.urlencoded({ extended: true, limit: '2mb' });
+
+  app.use((req, res, next) => {
+    if (req.originalUrl.startsWith('/stripe/webhook')) return next();
+    return jsonParser(req, res, next);
+  });
+
+  app.use((req, res, next) => {
+    if (req.originalUrl.startsWith('/stripe/webhook')) return next();
+    return urlParser(req, res, next);
+  });
 
   app.enableCors({
     origin: (origin, callback) => {
@@ -22,6 +33,7 @@ async function bootstrap() {
         'https://thelitfinance.com',
         'https://www.thelitfinance.com'
       ];
+      
       
       // Esquemas de apps móviles comunes
       const mobileSchemes = [
