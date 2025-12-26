@@ -632,50 +632,29 @@ export class StripeController {
   }
 
   @Post('webhook')
+
   async webhook(@Req() req: Request, @Headers('stripe-signature') sig: string) {
+    const webhookSecret = String(process.env.STRIPE_WEBHOOK_SECRET || '').trim();
+    if (!webhookSecret) throw new BadRequestException('Missing STRIPE_WEBHOOK_SECRET');
+
+    this.logger.log(`[webhook] originalUrl=${(req as any).originalUrl}`);
+    this.logger.log(`[webhook] isBuffer=${Buffer.isBuffer((req as any).body)} len=${(req as any).body?.length}`);
+
+    const payload = (req as any).body;
+    if (!Buffer.isBuffer(payload)) {
+      this.logger.error(`[webhook] Body NO es Buffer. typeof=${typeof payload}`);
+      throw new BadRequestException('Webhook Error: Expected raw body buffer');
+    }
+
     let event: any;
-
-    this.logger.log('--- Stripe Webhook recibido ---');
-    this.logger.log('Headers:', JSON.stringify(req.headers));
-    // Depuración: loguear tipo y contenido del body
-    this.logger.log(`[DEBUG] typeof req.body: ${typeof (req as any).body}`);
-    this.logger.log(`[DEBUG] Buffer.isBuffer(req.body): ${Buffer.isBuffer((req as any).body)}`);
-    if (Buffer.isBuffer((req as any).body)) {
-      this.logger.log(`[DEBUG] req.body.length: ${(req as any).body.length}`);
-      this.logger.log(`[DEBUG] req.body.slice(0,32): ${(req as any).body.slice(0,32).toString('hex')}`);
-    }
-    this.logger.log(`[DEBUG] typeof req.rawBody: ${typeof (req as any).rawBody}`);
-    this.logger.log(`[DEBUG] Buffer.isBuffer(req.rawBody): ${Buffer.isBuffer((req as any).rawBody)}`);
-    if (Buffer.isBuffer((req as any).rawBody)) {
-      this.logger.log(`[DEBUG] req.rawBody.length: ${(req as any).rawBody.length}`);
-      this.logger.log(`[DEBUG] req.rawBody.slice(0,32): ${(req as any).rawBody.slice(0,32).toString('hex')}`);
-    }
     try {
-      let payload: any = (req as any).rawBody ?? (req as any).body;
-      if (!payload) {
-        throw new Error('Missing raw payload (rawBody/body)');
-      }
-      // Forzar que sea Buffer
-      if (!Buffer.isBuffer(payload)) {
-        payload = Buffer.from(payload);
-      }
-
-      const webhookSecret = String(process.env.STRIPE_WEBHOOK_SECRET || '').trim();
-      if (!webhookSecret) {
-        throw new Error('Missing STRIPE_WEBHOOK_SECRET');
-      }
-
-      event = this.stripeSvc.stripe.webhooks.constructEvent(
-        payload,
-        sig,
-        webhookSecret,
-      );
-      this.logger.log(`Evento recibido: ${event.type}`);
-      this.logger.debug(JSON.stringify(event, null, 2));
+      event = this.stripeSvc.stripe.webhooks.constructEvent(payload, sig, webhookSecret);
     } catch (err: any) {
       this.logger.error('Error validando firma de Stripe:', err.message);
       throw new BadRequestException(`Webhook Error: ${err.message}`);
     }
+
+    this.logger.log(`Evento recibido: ${event.type}`);
 
     switch (event.type) {
       // WEB checkout: jar
