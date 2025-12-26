@@ -1,12 +1,20 @@
 import { Body, Controller, Get, Headers, Post, Req, BadRequestException, UseGuards, Logger } from '@nestjs/common';
 import { StripeService } from './stripe.service';
 import type { Request } from 'express';
+import * as crypto from 'crypto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { User, UserDocument } from '../user/schemas/user.schema/user.schema';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
+
+function parseStripeSignature(sigHeader: string): { t?: string; v1s: string[] } {
+  const parts = sigHeader.split(',').map(s => s.trim());
+  const t = parts.find(p => p.startsWith('t='))?.slice(2);
+  const v1s = parts.filter(p => p.startsWith('v1=')).map(p => p.slice(3));
+  return { t, v1s };
+}
 
 @Controller('stripe')
 export class StripeController {
@@ -640,15 +648,36 @@ export class StripeController {
     this.logger.log(`[webhook] originalUrl=${(req as any).originalUrl}`);
     this.logger.log(`[webhook] isBuffer=${Buffer.isBuffer((req as any).body)} len=${(req as any).body?.length}`);
 
+    const sigHeader = sig;
+    if (!sigHeader || Array.isArray(sigHeader as any)) {
+      throw new BadRequestException('Missing stripe-signature');
+    }
+
     const payload = (req as any).body;
     if (!Buffer.isBuffer(payload)) {
       this.logger.error(`[webhook] Body NO es Buffer. typeof=${typeof payload}`);
       throw new BadRequestException('Webhook Error: Expected raw body buffer');
     }
 
+    const { t, v1s } = parseStripeSignature(sigHeader);
+    this.logger.log(
+      `[webhook] sig t=${t} v1_count=${v1s.length} v1_first=${v1s[0]?.slice(0, 16)}... ` +
+        `secret_prefix=${webhookSecret.slice(0, 6)} len=${webhookSecret.length}`,
+    );
+
+    if (!t || v1s.length === 0) {
+      throw new BadRequestException('Invalid stripe-signature header');
+    }
+
+    // HMAC esperado con bytes exactos (sin toString del payload)
+    const signedPayload = Buffer.concat([Buffer.from(`${t}.`, 'utf8'), payload]);
+    const expected = crypto.createHmac('sha256', webhookSecret).update(signedPayload).digest('hex');
+    const matches = v1s.includes(expected);
+    this.logger.log(`[webhook] expected_v1=${expected.slice(0, 16)}... matches=${matches}`);
+
     let event: any;
     try {
-      event = this.stripeSvc.stripe.webhooks.constructEvent(payload, sig, webhookSecret);
+      event = this.stripeSvc.stripe.webhooks.constructEvent(payload, sigHeader, webhookSecret);
     } catch (err: any) {
       this.logger.error('Error validando firma de Stripe:', err.message);
       throw new BadRequestException(`Webhook Error: ${err.message}`);
