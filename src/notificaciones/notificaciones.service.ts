@@ -31,7 +31,8 @@ export class NotificacionesService {
     const user = await this.userModel.findOne({ id: userId });
     if (!user) throw new Error('Usuario no encontrado');
 
-    // Agregar token si no existe
+    // [expoPushTokens: READ] validar si ya existe
+    // [expoPushTokens: WRITE] agregar token al array
     if (!user.expoPushTokens.includes(expoPushToken)) {
       user.expoPushTokens.push(expoPushToken);
       await user.save();
@@ -46,6 +47,7 @@ export class NotificacionesService {
     const user = await this.userModel.findOne({ id: userId });
     if (!user) throw new Error('Usuario no encontrado');
 
+    // [expoPushTokens: WRITE] filtrar/eliminar token
     user.expoPushTokens = user.expoPushTokens.filter(token => token !== expoPushToken);
     await user.save();
 
@@ -61,11 +63,14 @@ export class NotificacionesService {
     data?: Record<string, any>
   ): Promise<{ enviado: boolean; tickets?: ExpoPushTicket[] }> {
     const user = await this.userModel.findOne({ id: userId });
+
+    // [expoPushTokens: READ] verificar existencia y longitud
     if (!user || !user.expoPushTokens || user.expoPushTokens.length === 0) {
       this.logger.warn(`⚠️ Usuario ${userId} no tiene tokens EXPO registrados`);
       return { enviado: false };
     }
 
+    // [expoPushTokens: READ] construir mensajes a partir de tokens
     const messages: ExpoPushMessage[] = user.expoPushTokens
       .filter(token => Expo.isExpoPushToken(token))
       .map(token => ({
@@ -113,7 +118,7 @@ export class NotificacionesService {
 
     switch (filtro) {
       case 'all':
-        // Todos los usuarios con tokens registrados
+        // [expoPushTokens: DB QUERY] usuarios con tokens registrados
         usuarios = await this.userModel.find({
           expoPushTokens: { $exists: true, $ne: [] },
         });
@@ -124,6 +129,7 @@ export class NotificacionesService {
         // Usuarios con actividad en los últimos 7 días
         const hace7Dias = new Date();
         hace7Dias.setDate(hace7Dias.getDate() - 7);
+        // [expoPushTokens: DB QUERY] + filtro de actividad
         usuarios = await this.userModel.find({
           lastActivityAt: { $gte: hace7Dias },
           expoPushTokens: { $exists: true, $ne: [] },
@@ -135,6 +141,7 @@ export class NotificacionesService {
         // Usuarios sin actividad por más de 7 días
         const hace7DiasInactivos = new Date();
         hace7DiasInactivos.setDate(hace7DiasInactivos.getDate() - 7);
+        // [expoPushTokens: DB QUERY] + filtro de inactividad
         usuarios = await this.userModel.find({
           lastActivityAt: { $lt: hace7DiasInactivos },
           expoPushTokens: { $exists: true, $ne: [] },
@@ -143,6 +150,7 @@ export class NotificacionesService {
         break;
 
       default:
+        // [expoPushTokens: DB QUERY]
         usuarios = await this.userModel.find({
           expoPushTokens: { $exists: true, $ne: [] },
         });
@@ -171,6 +179,7 @@ export class NotificacionesService {
 
     tickets.forEach((ticket, index) => {
       if (ticket.status === 'error') {
+        // [expoPushTokens: READ] localizar token asociado al ticket
         const errorTicket = ticket as any;
         if (
           errorTicket.details?.error === 'DeviceNotRegistered' ||
@@ -183,6 +192,7 @@ export class NotificacionesService {
     });
 
     if (tokensInvalidos.length > 0) {
+      // [expoPushTokens: WRITE] remover tokens inválidos
       user.expoPushTokens = user.expoPushTokens.filter(token => !tokensInvalidos.includes(token));
       await user.save();
       this.logger.log(`🧹 Tokens inválidos eliminados para usuario ${user.id}: ${tokensInvalidos.length}`);
@@ -194,6 +204,7 @@ export class NotificacionesService {
     const tresDiasAtras = new Date();
     tresDiasAtras.setDate(tresDiasAtras.getDate() - 3);
 
+    // [expoPushTokens: DB QUERY]
     const usuariosInactivos = await this.userModel.find({
       lastActivityAt: { $lt: tresDiasAtras },
       expoPushTokens: { $exists: true, $ne: [] },
