@@ -98,4 +98,4 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
 
 Juan Carlos Flores Ramírez 
-1 de noviembre del 2025
+28 de diciembre del 2025
