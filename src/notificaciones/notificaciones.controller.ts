@@ -62,6 +62,8 @@ export class NotificacionesController {
   }
 
   // Forzar notificación de inactividad (para pruebas)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   @Post('notificar-inactivos')
   async notificarInactivos() {
     return this.notificacionesService.notificarUsuariosInactivos();
