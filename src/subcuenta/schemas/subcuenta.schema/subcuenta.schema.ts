@@ -29,6 +29,11 @@ export class Subcuenta {
   @Prop({ default: false })
   afectaCuenta: boolean;
 
+  // Define si el saldo inicial fue "nuevo" (sumó a la cuenta) o "apartado" (proviene del saldo existente).
+  // Se usa para evitar inflar/deflactar el saldo de la cuenta al crear/eliminar la subcuenta.
+  @Prop({ default: 'nuevo' })
+  origenSaldo?: 'nuevo' | 'cuenta_principal';
+
   @Prop({ required: true })
   userId: string;
 
