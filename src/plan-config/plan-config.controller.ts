@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   Logger,
 } from '@nestjs/common';
@@ -83,8 +84,15 @@ export class PlanConfigController {
   async canPerformAction(
     @Param('planType') planType: string,
     @Param('action') action: 'transaction' | 'recurrente' | 'subcuenta' | 'grafica',
+    @Query('currentCount') currentCount?: string,
   ) {
     this.logger.log(`GET /plan-config/${planType}/can-perform/${action}`);
-    return this.planConfigService.canPerformAction('', planType, action);
+    const parsedCurrentCount = currentCount !== undefined ? Number(currentCount) : undefined;
+    return this.planConfigService.canPerformAction(
+      '',
+      planType,
+      action,
+      Number.isFinite(parsedCurrentCount) ? parsedCurrentCount : undefined,
+    );
   }
 }
