@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, NotFoundException, InternalServerErrorException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Subcuenta, SubcuentaDocument } from './schemas/subcuenta.schema/subcuenta.schema';
@@ -42,18 +42,19 @@ export class SubcuentaService {
       userId,
       subCuentaId,
       cuentaId: cuentaPrincipalId,
+      origenSaldo: dto.usarSaldoCuentaPrincipal ? 'cuenta_principal' : 'nuevo',
     };
   
     const subcuenta = new this.subcuentaModel(payload);
     subcuenta.set('subsubCuentaId', await generateUniqueId(this.subcuentaModel));
   
-    // Si afecta cuenta y las monedas difieren, calcular conversión
+    // Si afecta cuenta y existe cuenta principal, calcular conversión
     if (dto.afectaCuenta && cuentaPrincipalId) {
       const cuenta = await this.cuentaModel.findOne({ id: cuentaPrincipalId, userId });
       if (!cuenta) throw new NotFoundException('Cuenta principal no encontrada');
-    
+
       let cantidadAjustada = dto.cantidad;
-    
+
       if (dto.moneda && dto.moneda !== cuenta.moneda) {
         const conversion = await this.conversionService.convertir(
           dto.cantidad,
@@ -61,30 +62,56 @@ export class SubcuentaService {
           cuenta.moneda,
         );
         cantidadAjustada = conversion.montoConvertido;
-        
+
         // Guardar metadata de conversión en la subcuenta
         subcuenta.montoConvertido = conversion.montoConvertido;
         subcuenta.tasaConversion = conversion.tasaConversion;
         subcuenta.fechaConversion = conversion.fechaConversion;
       }
-    
-      await this.cuentaModel.findOneAndUpdate(
-        { id: cuentaPrincipalId, userId },
-        { $inc: { cantidad: cantidadAjustada } },
-      );
-    
+
       const tipo = dto.tipoHistorialCuenta || 'ajuste_subcuenta';
-      const descripcion = dto.descripcionHistorialCuenta || 'Subcuenta creada con afectación';
-    
-      await this.cuentaHistorialService.registrarMovimiento({
-        userId,
-        cuentaId: cuentaPrincipalId,
-        monto: cantidadAjustada,
-        tipo,
-        descripcion,
-        fecha: new Date().toISOString(),
-        subcuentaId: subCuentaId,
-      });
+
+      // Modo "apartado": valida que exista saldo suficiente, pero NO modifica el saldo de la cuenta
+      // (evita inflar el saldo total al crear subcuentas con saldo ya existente)
+      if (dto.usarSaldoCuentaPrincipal) {
+        if (cuenta.cantidad < cantidadAjustada) {
+          throw new BadRequestException(
+            `Saldo insuficiente en la cuenta principal para apartar ${cantidadAjustada}. Disponible: ${cuenta.cantidad}`,
+          );
+        }
+
+        const descripcion =
+          dto.descripcionHistorialCuenta ||
+          `Subcuenta creada como apartado (monto: ${cantidadAjustada} ${cuenta.moneda})`;
+
+        await this.cuentaHistorialService.registrarMovimiento({
+          userId,
+          cuentaId: cuentaPrincipalId,
+          monto: 0,
+          tipo,
+          descripcion,
+          fecha: new Date().toISOString(),
+          subcuentaId: subCuentaId,
+        });
+      } else {
+        // Modo "nuevo saldo": conserva comportamiento actual (la creación suma al saldo de la cuenta)
+        await this.cuentaModel.findOneAndUpdate(
+          { id: cuentaPrincipalId, userId },
+          { $inc: { cantidad: cantidadAjustada } },
+        );
+
+        const descripcion = dto.descripcionHistorialCuenta || 'Subcuenta creada con afectación';
+
+        await this.cuentaHistorialService.registrarMovimiento({
+          userId,
+          cuentaId: cuentaPrincipalId,
+          monto: cantidadAjustada,
+          tipo,
+          descripcion,
+          fecha: new Date().toISOString(),
+          subcuentaId: subCuentaId,
+        });
+      }
     }
 
     const creada = await subcuenta.save();
@@ -190,7 +217,7 @@ export class SubcuentaService {
       if (!sub || sub.userId !== userId) {
         throw new NotFoundException('Subcuenta no encontrada o no pertenece al usuario');
       }      
-      if (sub.afectaCuenta && sub.cuentaId) {
+      if (sub.afectaCuenta && sub.cuentaId && sub.origenSaldo !== 'cuenta_principal') {
         const cuenta = await this.cuentaModel.findOne({ id: sub.cuentaId, userId });
   
         if (cuenta) {
