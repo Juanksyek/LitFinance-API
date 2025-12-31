@@ -26,6 +26,13 @@ export class CreateSubcuentaDto {
 
   @IsBoolean()
   afectaCuenta: boolean;
+
+  // Si es true, la subcuenta se crea como "apartado" usando saldo ya existente
+  // en la cuenta principal (no suma saldo extra a la cuenta).
+  // Si es false/undefined, se mantiene el comportamiento actual.
+  @IsOptional()
+  @IsBoolean()
+  usarSaldoCuentaPrincipal?: boolean;
   
   @IsOptional()
   @IsNumber()
