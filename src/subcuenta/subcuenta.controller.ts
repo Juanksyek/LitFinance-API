@@ -56,6 +56,26 @@ export class SubcuentaController {
     return this.subcuentaService.obtenerHistorial(id, req.user.id);
   }
 
+  // Movimientos financieros de una subcuenta (transacciones + recurrentes ejecutados)
+  @Get(':id/movimientos')
+  async obtenerMovimientos(
+    @Param('id') id: string,
+    @Req() req,
+    @Query('page') page = 1,
+    @Query('limit') limit = 20,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.subcuentaService.obtenerMovimientosFinancieros(id, req.user.id, {
+      page: Number(page),
+      limit: Number(limit),
+      desde,
+      hasta,
+      search,
+    });
+  }
+
   @Get('historial')
   async historialGeneral(@Req() req) {
     return this.subcuentaService.obtenerHistorial(null, req.user.id);
