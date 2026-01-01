@@ -12,6 +12,8 @@ import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.ser
 import { generateUniqueId } from '../utils/generate-id';
 import { ConversionService } from '../utils/services/conversion.service';
 import { UserService } from '../user/user.service';
+import { Transaction, TransactionDocument } from '../transactions/schemas/transaction.schema/transaction.schema';
+import { HistorialRecurrente, HistorialRecurrenteDocument } from '../recurrentes/schemas/historial-recurrente.schema';
 
 @Injectable()
 export class SubcuentaService {
@@ -20,10 +22,121 @@ export class SubcuentaService {
     @InjectCuentaModel(Cuenta.name) private cuentaModel: Model<Cuenta>,
     private readonly monedaService: MonedaService,
     @InjectModel(SubcuentaHistorial.name) private historialModel: Model<SubcuentaHistorialDocument>,
+    @InjectModel(Transaction.name) private readonly transactionModel: Model<TransactionDocument>,
+    @InjectModel(HistorialRecurrente.name) private readonly historialRecurrenteModel: Model<HistorialRecurrenteDocument>,
     private readonly cuentaHistorialService: CuentaHistorialService,
     private readonly conversionService: ConversionService,
     private readonly userService: UserService,
   ) {}
+
+  async obtenerMovimientosFinancieros(
+    subCuentaId: string,
+    userId: string,
+    opts?: {
+      page?: number;
+      limit?: number;
+      desde?: string;
+      hasta?: string;
+      search?: string;
+    },
+  ) {
+    const page = Math.max(1, Number(opts?.page ?? 1));
+    const limit = Math.min(100, Math.max(1, Number(opts?.limit ?? 20)));
+    const search = (opts?.search ?? '').trim();
+
+    // Validar que la subcuenta exista y pertenezca al usuario
+    const sub = await this.subcuentaModel.findOne({ subCuentaId, userId }).lean();
+    if (!sub) throw new NotFoundException('Subcuenta no encontrada');
+
+    const desdeDate = opts?.desde ? new Date(opts.desde) : null;
+    const hastaDate = opts?.hasta ? new Date(opts.hasta) : null;
+
+    const txQuery: any = { userId, subCuentaId };
+    if (desdeDate || hastaDate) {
+      txQuery.createdAt = {};
+      if (desdeDate) txQuery.createdAt.$gte = desdeDate;
+      if (hastaDate) txQuery.createdAt.$lte = hastaDate;
+    }
+    if (search) {
+      txQuery.$or = [
+        { concepto: { $regex: search, $options: 'i' } },
+        { motivo: { $regex: search, $options: 'i' } },
+        { tipo: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const recQuery: any = { userId, subcuentaId: subCuentaId, estado: 'exitoso' };
+    if (desdeDate || hastaDate) {
+      recQuery.fecha = {};
+      if (desdeDate) recQuery.fecha.$gte = desdeDate;
+      if (hastaDate) recQuery.fecha.$lte = hastaDate;
+    }
+    if (search) {
+      recQuery.$or = [
+        { nombreRecurrente: { $regex: search, $options: 'i' } },
+        { 'plataforma.nombre': { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const [txs, recs] = await Promise.all([
+      this.transactionModel.find(txQuery).sort({ createdAt: -1 }).lean(),
+      this.historialRecurrenteModel.find(recQuery).sort({ fecha: -1 }).lean(),
+    ]);
+
+    const movimientosTx = txs.map((t: any) => ({
+      source: 'transaccion' as const,
+      tipo: t.tipo,
+      transaccionId: t.transaccionId,
+      subcuentaId: t.subCuentaId,
+      cuentaId: t.cuentaId ?? null,
+      afectaCuenta: !!t.afectaCuenta,
+      concepto: t.concepto,
+      motivo: t.motivo ?? null,
+      moneda: t.moneda,
+      monto: t.tipo === 'egreso' ? -Math.abs(t.monto) : Math.abs(t.monto),
+      montoOriginal: t.monto,
+      montoConvertido: t.montoConvertido ?? null,
+      tasaConversion: t.tasaConversion ?? null,
+      fecha: (t.createdAt ? new Date(t.createdAt) : new Date()).toISOString(),
+      createdAt: t.createdAt ?? null,
+      updatedAt: t.updatedAt ?? null,
+    }));
+
+    const movimientosRec = recs.map((r: any) => ({
+      source: 'recurrente' as const,
+      tipo: 'recurrente' as const,
+      recurrenteId: r.recurrenteId,
+      subcuentaId: r.subcuentaId ?? null,
+      cuentaId: r.cuentaId ?? null,
+      afectaCuentaPrincipal: !!r.afectaCuentaPrincipal,
+      nombreRecurrente: r.nombreRecurrente,
+      plataforma: r.plataforma ?? null,
+      moneda: r.moneda,
+      monto: -(r.montoConvertido ?? r.monto),
+      montoOriginal: r.monto,
+      montoConvertido: r.montoConvertido ?? null,
+      tasaConversion: r.tasaConversion ?? null,
+      fecha: (r.fecha ? new Date(r.fecha) : new Date()).toISOString(),
+      estado: r.estado,
+    }));
+
+    const todos = [...movimientosTx, ...movimientosRec].sort(
+      (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime(),
+    );
+
+    const total = todos.length;
+    const start = (page - 1) * limit;
+    const end = start + limit;
+
+    return {
+      subcuenta: { id: sub.subCuentaId, nombre: sub.nombre, moneda: sub.moneda },
+      total,
+      page,
+      limit,
+      hasNextPage: end < total,
+      data: todos.slice(start, end),
+    };
+  }
 
   async crear(dto: CreateSubcuentaDto, userId: string) {
   

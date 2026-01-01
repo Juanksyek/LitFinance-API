@@ -10,6 +10,8 @@ import { MonedaModule } from '../moneda/moneda.module';
 import { CuentaHistorialModule } from '../cuenta-historial/cuenta-historial.module';
 import { UtilsModule } from '../utils/utils.module';
 import { UserModule } from '../user/user.module';
+import { Transaction, TransactionSchema } from '../transactions/schemas/transaction.schema/transaction.schema';
+import { HistorialRecurrente, HistorialRecurrenteSchema } from '../recurrentes/schemas/historial-recurrente.schema';
 
 @Module({
   imports: [
@@ -17,6 +19,8 @@ import { UserModule } from '../user/user.module';
       { name: SubcuentaHistorial.name, schema: SubcuentaHistorialSchema },
       { name: Subcuenta.name, schema: SubcuentaSchema },
       { name: Cuenta.name, schema: CuentaSchema },
+      { name: Transaction.name, schema: TransactionSchema },
+      { name: HistorialRecurrente.name, schema: HistorialRecurrenteSchema },
     ]),
     forwardRef(() => CuentaModule),
     MonedaModule,
