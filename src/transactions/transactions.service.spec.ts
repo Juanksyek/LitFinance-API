@@ -3,6 +3,8 @@ import { TransactionsService } from './transactions.service';
 import { getModelToken } from '@nestjs/mongoose';
 import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.service';
 import { NotFoundException } from '@nestjs/common';
+import { ConversionService } from '../utils/services/conversion.service';
+import { UserService } from '../user/user.service';
 
 describe('TransactionsService', () => {
   let service: TransactionsService;
@@ -50,6 +52,7 @@ describe('TransactionsService', () => {
 
   const mockUserService = {
     findById: jest.fn(),
+    getProfile: jest.fn().mockResolvedValue({ monedaPrincipal: 'MXN' }),
   };
 
   beforeEach(async () => {
@@ -61,8 +64,8 @@ describe('TransactionsService', () => {
         { provide: getModelToken('Cuenta'), useValue: mockCuentaModel },
         { provide: getModelToken('Subcuenta'), useValue: mockSubcuentaModel },
         { provide: CuentaHistorialService, useValue: mockHistorialService },
-        { provide: 'ConversionService', useValue: mockConversionService },
-        { provide: 'UserService', useValue: mockUserService },
+        { provide: ConversionService, useValue: mockConversionService },
+        { provide: UserService, useValue: mockUserService },
       ],
     }).compile();
 

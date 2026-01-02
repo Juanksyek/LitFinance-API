@@ -31,8 +31,24 @@ export class TransactionsService {
     const user = await this.userService.getProfile(userId);
     const monedaPrincipal = user.monedaPrincipal || 'MXN';
 
-    // Asegurar que la transacción tenga moneda (por defecto la del usuario)
-    const monedaTransaccion = dto.moneda || monedaPrincipal;
+    // Si la transacción pertenece a una subcuenta y no trae moneda, usar la moneda de la subcuenta
+    let subcuentaRef: any = null;
+    if (dto.subCuentaId) {
+      subcuentaRef = await this.subcuentaModel.findOne({ subCuentaId: dto.subCuentaId, userId });
+      if (!subcuentaRef) throw new NotFoundException('Subcuenta no encontrada');
+    }
+
+    const monedaTransaccion = dto.moneda || subcuentaRef?.moneda || monedaPrincipal;
+
+    // Determinar moneda destino para montoConvertido (si afecta cuenta: moneda de la cuenta; si no: monedaPrincipal)
+    let monedaDestinoConversion = monedaPrincipal;
+    if (dto.afectaCuenta) {
+      const cuentaIdDestino = dto.cuentaId || subcuentaRef?.cuentaId;
+      if (cuentaIdDestino) {
+        const cuenta = await this.cuentaModel.findOne({ id: cuentaIdDestino, userId });
+        if (cuenta?.moneda) monedaDestinoConversion = cuenta.moneda;
+      }
+    }
   
     const payload: any = {
       ...dto,
@@ -41,16 +57,19 @@ export class TransactionsService {
       moneda: monedaTransaccion,
     };
 
-    // Si la moneda de la transacción difiere de monedaPrincipal, convertir
-    if (monedaTransaccion !== monedaPrincipal) {
+    // Si la moneda de la transacción difiere de la moneda destino, convertir
+    if (monedaTransaccion !== monedaDestinoConversion) {
       const conversion = await this.conversionService.convertir(
         dto.monto,
         monedaTransaccion,
-        monedaPrincipal,
+        monedaDestinoConversion,
       );
       payload.montoConvertido = conversion.montoConvertido;
+      payload.monedaConvertida = monedaDestinoConversion;
       payload.tasaConversion = conversion.tasaConversion;
       payload.fechaConversion = conversion.fechaConversion;
+    } else {
+      payload.monedaConvertida = monedaDestinoConversion;
     }
 
     const nueva = new this.transactionModel(payload);
@@ -61,19 +80,6 @@ export class TransactionsService {
       motivo: dto.motivo,
       concepto: dto.concepto
     });
-
-    if (dto.afectaCuenta && dto.cuentaId) {
-      await this.historialService.registrarMovimiento({
-        userId: dto.userId ?? userId,
-        cuentaId: dto.cuentaId,
-        monto: dto.monto,
-        tipo: dto.tipo,
-        descripcion: `Transacción manual de tipo ${dto.tipo}`,
-        fecha: new Date().toISOString(),
-        conceptoId: dto.concepto,
-        motivo: dto.motivo,
-      });
-    }
   
     return {
       transaccion: guardada,
@@ -230,14 +236,29 @@ export class TransactionsService {
   async aplicarTransaccion(t: Transaction): Promise<any> {
     let subcuentaResult: { subCuentaId: string } | null = null;
     let historialResult: { cuentaId: string } | null = null;
-  
-    const montoAjustado = t.tipo === 'ingreso' ? t.monto : -t.monto;
+
+    const signo = t.tipo === 'ingreso' ? 1 : -1;
+    const montoOriginalFirmado = signo * Math.abs(t.monto);
   
     if (t.subCuentaId) {
       const subcuenta = await this.subcuentaModel.findOne({ subCuentaId: t.subCuentaId, userId: t.userId });
       if (!subcuenta) throw new NotFoundException('Subcuenta no encontrada');
+
+      // Ajuste en subcuenta: convertir a moneda de la subcuenta si aplica
+      let montoSubcuenta = Math.abs(t.monto);
+      let conversionSubcuenta: any = null;
+      if (t.moneda && subcuenta.moneda && t.moneda !== subcuenta.moneda) {
+        conversionSubcuenta = await this.conversionService.convertir(
+          Math.abs(t.monto),
+          t.moneda,
+          subcuenta.moneda,
+        );
+        montoSubcuenta = conversionSubcuenta.montoConvertido;
+      }
+
+      const montoAjustadoSubcuenta = signo * montoSubcuenta;
   
-      if (t.tipo === 'egreso' && subcuenta.cantidad + montoAjustado < 0) {
+      if (t.tipo === 'egreso' && subcuenta.cantidad + montoAjustadoSubcuenta < 0) {
         throw new BadRequestException(
           `No puede retirar más de ${subcuenta.cantidad} desde la subcuenta "${subcuenta.nombre}".`
         );
@@ -245,7 +266,7 @@ export class TransactionsService {
   
       await this.subcuentaModel.updateOne(
         { subCuentaId: t.subCuentaId, userId: t.userId },
-        { $inc: { cantidad: montoAjustado } }
+        { $inc: { cantidad: montoAjustadoSubcuenta } }
       );
   
       subcuentaResult = { subCuentaId: t.subCuentaId };
@@ -253,8 +274,35 @@ export class TransactionsService {
       if (t.afectaCuenta && subcuenta.cuentaId) {
         const cuenta = await this.cuentaModel.findOne({ id: subcuenta.cuentaId, userId: t.userId });
         if (!cuenta) throw new NotFoundException('Cuenta principal no encontrada');
+
+        // Ajuste en cuenta: convertir a moneda de la cuenta si aplica
+        let montoCuenta = Math.abs(t.monto);
+        let conversionCuenta: any = null;
+        if (t.moneda && cuenta.moneda && t.moneda !== cuenta.moneda) {
+          conversionCuenta = await this.conversionService.convertir(
+            Math.abs(t.monto),
+            t.moneda,
+            cuenta.moneda,
+          );
+          montoCuenta = conversionCuenta.montoConvertido;
+
+          // Persistir conversión para listados (montoConvertido siempre en moneda de cuenta cuando afectaCuenta)
+          await this.transactionModel.updateOne(
+            { transaccionId: (t as any).transaccionId },
+            {
+              $set: {
+                montoConvertido: conversionCuenta.montoConvertido,
+                monedaConvertida: cuenta.moneda,
+                tasaConversion: conversionCuenta.tasaConversion,
+                fechaConversion: conversionCuenta.fechaConversion,
+              },
+            },
+          );
+        }
+
+        const montoAjustadoCuenta = signo * montoCuenta;
   
-        if (t.tipo === 'egreso' && cuenta.cantidad + montoAjustado < 0) {
+        if (t.tipo === 'egreso' && cuenta.cantidad + montoAjustadoCuenta < 0) {
           throw new BadRequestException(
             `No puede retirar más de ${cuenta.cantidad} desde la cuenta principal, ya que parte del saldo está reservado en subcuentas.`
           );
@@ -262,26 +310,68 @@ export class TransactionsService {
   
         await this.cuentaModel.updateOne(
           { id: subcuenta.cuentaId, userId: t.userId },
-          { $inc: { cantidad: montoAjustado } }
+          { $inc: { cantidad: montoAjustadoCuenta } }
         );
   
         await this.historialService.registrarMovimiento({
           userId: t.userId,
           cuentaId: subcuenta.cuentaId,
-          monto: montoAjustado,
+          monto: montoAjustadoCuenta,
           tipo: t.tipo,
           descripcion: `Transacción de tipo ${t.tipo} aplicada desde la subcuenta "${subcuenta.nombre}"`,
           fecha: new Date().toISOString(),
           subcuentaId: t.subCuentaId,
           motivo: t.motivo,
+          conceptoId: (t as any).concepto,
+          metadata: {
+            monedaOrigen: t.moneda,
+            montoOriginal: montoOriginalFirmado,
+            monedaDestino: cuenta.moneda,
+            montoDestino: montoAjustadoCuenta,
+            tasaConversion: conversionCuenta?.tasaConversion ?? null,
+            fechaConversion: conversionCuenta?.fechaConversion ?? null,
+            conversionSubcuenta: conversionSubcuenta
+              ? {
+                  monedaDestino: subcuenta.moneda,
+                  montoDestino: montoAjustadoSubcuenta,
+                  tasaConversion: conversionSubcuenta.tasaConversion,
+                  fechaConversion: conversionSubcuenta.fechaConversion,
+                }
+              : null,
+          },
         });
         historialResult = { cuentaId: subcuenta.cuentaId };
       }
     } else if (t.afectaCuenta && t.cuentaId) {
       const cuenta = await this.cuentaModel.findOne({ id: t.cuentaId, userId: t.userId });
       if (!cuenta) throw new NotFoundException('Cuenta principal no encontrada');
+
+      let montoCuenta = Math.abs(t.monto);
+      let conversionCuenta: any = null;
+      if (t.moneda && cuenta.moneda && t.moneda !== cuenta.moneda) {
+        conversionCuenta = await this.conversionService.convertir(
+          Math.abs(t.monto),
+          t.moneda,
+          cuenta.moneda,
+        );
+        montoCuenta = conversionCuenta.montoConvertido;
+
+        await this.transactionModel.updateOne(
+          { transaccionId: (t as any).transaccionId },
+          {
+            $set: {
+              montoConvertido: conversionCuenta.montoConvertido,
+              monedaConvertida: cuenta.moneda,
+              tasaConversion: conversionCuenta.tasaConversion,
+              fechaConversion: conversionCuenta.fechaConversion,
+            },
+          },
+        );
+      }
+
+      const montoAjustadoCuenta = signo * montoCuenta;
   
-      if (t.tipo === 'egreso' && cuenta.cantidad + montoAjustado < 0) {
+      if (t.tipo === 'egreso' && cuenta.cantidad + montoAjustadoCuenta < 0) {
         throw new BadRequestException(
           `No puede retirar más de ${cuenta.cantidad} desde la cuenta principal.`
         );
@@ -289,17 +379,26 @@ export class TransactionsService {
   
       await this.cuentaModel.updateOne(
         { id: t.cuentaId, userId: t.userId },
-        { $inc: { cantidad: montoAjustado } }
+        { $inc: { cantidad: montoAjustadoCuenta } }
       );
   
       await this.historialService.registrarMovimiento({
         userId: t.userId,
         cuentaId: t.cuentaId,
-        monto: montoAjustado,
+        monto: montoAjustadoCuenta,
         tipo: t.tipo,
         descripcion: `Transacción de tipo ${t.tipo} aplicada`,
         fecha: new Date().toISOString(),
         motivo: t.motivo,
+        conceptoId: (t as any).concepto,
+        metadata: {
+          monedaOrigen: t.moneda,
+          montoOriginal: montoOriginalFirmado,
+          monedaDestino: cuenta.moneda,
+          montoDestino: montoAjustadoCuenta,
+          tasaConversion: conversionCuenta?.tasaConversion ?? null,
+          fechaConversion: conversionCuenta?.fechaConversion ?? null,
+        },
       });
       historialResult = { cuentaId: t.cuentaId };
     }
