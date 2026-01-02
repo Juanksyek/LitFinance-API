@@ -18,6 +18,27 @@ export class HistorialRecurrente {
   montoConvertido?: number;
 
   @Prop()
+  monedaConvertida?: string;
+
+  @Prop()
+  montoConvertidoCuenta?: number;
+
+  @Prop()
+  monedaConvertidaCuenta?: string;
+
+  @Prop()
+  tasaConversionCuenta?: number;
+
+  @Prop()
+  montoConvertidoSubcuenta?: number;
+
+  @Prop()
+  monedaConvertidaSubcuenta?: string;
+
+  @Prop()
+  tasaConversionSubcuenta?: number;
+
+  @Prop()
   tasaConversion?: number;
 
   @Prop()
