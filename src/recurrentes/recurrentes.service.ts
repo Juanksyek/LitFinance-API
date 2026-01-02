@@ -292,8 +292,11 @@ export class RecurrentesService {
 
         let montoConvertidoSubcuenta = r.monto;
         let tasaConversionSubcuenta = 1;
+        let monedaDestinoSubcuenta: string | null = null;
+
         let montoConvertidoCuenta = r.monto;
         let tasaConversionCuenta = 1;
+        let monedaDestinoCuenta: string | null = null;
 
         // DESCUENTO REAL DE SALDOS CON CONVERSIÓN AUTOMÁTICA
         if (r.afectaSubcuenta && r.subcuentaId) {
@@ -306,6 +309,8 @@ export class RecurrentesService {
           if (!subcuenta) {
             throw new NotFoundException(`Subcuenta ${r.subcuentaId} no encontrada`);
           }
+
+          monedaDestinoSubcuenta = subcuenta.moneda;
 
           // CONVERSIÓN: Solo si la moneda del recurrente es diferente a la de la subcuenta
           if (r.moneda !== subcuenta.moneda) {
@@ -343,6 +348,8 @@ export class RecurrentesService {
             throw new NotFoundException('Cuenta principal no encontrada');
           }
 
+          monedaDestinoCuenta = cuentaDoc.moneda;
+
           // CONVERSIÓN: Solo si la moneda del recurrente es diferente a la de la cuenta
           if (r.moneda !== cuentaDoc.moneda) {
             const conversion = await this.conversionService.convertir(
@@ -368,10 +375,10 @@ export class RecurrentesService {
           );
         }
 
-        // Guardar conversión en el documento recurrente para referencia
-        const montoConvertido = r.afectaSubcuenta ? montoConvertidoSubcuenta : montoConvertidoCuenta;
-        const tasaConversion = r.afectaSubcuenta ? tasaConversionSubcuenta : tasaConversionCuenta;
-        
+        // Guardar conversión en el documento recurrente para referencia (mantener compatibilidad)
+        const montoConvertido = r.afectaCuentaPrincipal ? montoConvertidoCuenta : montoConvertidoSubcuenta;
+        const tasaConversion = r.afectaCuentaPrincipal ? tasaConversionCuenta : tasaConversionSubcuenta;
+
         r.montoConvertido = montoConvertido;
         r.tasaConversion = tasaConversion;
         r.fechaConversion = new Date();
@@ -379,13 +386,21 @@ export class RecurrentesService {
         // Registrar en historial de recurrentes
         const montoFinalConvertido = r.afectaSubcuenta ? montoConvertidoSubcuenta : montoConvertidoCuenta;
         const tasaFinalConversion = r.afectaSubcuenta ? tasaConversionSubcuenta : tasaConversionCuenta;
+        const monedaFinalConvertida = r.afectaSubcuenta ? monedaDestinoSubcuenta : monedaDestinoCuenta;
         
         await this.historialModel.create({
           recurrenteId: r.recurrenteId,
           monto: r.monto,
           moneda: r.moneda,
           montoConvertido: montoFinalConvertido,
+          monedaConvertida: monedaFinalConvertida,
           tasaConversion: tasaFinalConversion,
+          montoConvertidoCuenta: r.afectaCuentaPrincipal ? montoConvertidoCuenta : null,
+          monedaConvertidaCuenta: r.afectaCuentaPrincipal ? monedaDestinoCuenta : null,
+          tasaConversionCuenta: r.afectaCuentaPrincipal ? tasaConversionCuenta : null,
+          montoConvertidoSubcuenta: r.afectaSubcuenta ? montoConvertidoSubcuenta : null,
+          monedaConvertidaSubcuenta: r.afectaSubcuenta ? monedaDestinoSubcuenta : null,
+          tasaConversionSubcuenta: r.afectaSubcuenta ? tasaConversionSubcuenta : null,
           cuentaId: cuenta.id,
           subcuentaId: r.subcuentaId,
           afectaCuentaPrincipal: r.afectaCuentaPrincipal,
@@ -402,7 +417,7 @@ export class RecurrentesService {
           userId: r.userId,
           tipo: 'recurrente',
           descripcion: `Cargo recurrente: ${r.nombre} (${r.plataforma.nombre})`,
-          monto: -montoFinalConvertido,
+          monto: -(r.afectaCuentaPrincipal ? montoConvertidoCuenta : montoFinalConvertido),
           fecha: new Date().toISOString(),
           conceptoId: undefined,
           subcuentaId: r.subcuentaId,
@@ -410,12 +425,48 @@ export class RecurrentesService {
             recurrenteId: r.recurrenteId,
             monedaOrigen: r.moneda,
             montoOriginal: r.monto,
-            tasaConversion,
+            conversionCuenta: r.afectaCuentaPrincipal
+              ? {
+                  monedaDestino: monedaDestinoCuenta,
+                  montoDestino: -montoConvertidoCuenta,
+                  tasaConversion: tasaConversionCuenta,
+                }
+              : null,
+            conversionSubcuenta: r.afectaSubcuenta
+              ? {
+                  monedaDestino: monedaDestinoSubcuenta,
+                  montoDestino: -montoConvertidoSubcuenta,
+                  tasaConversion: tasaConversionSubcuenta,
+                }
+              : null,
             plataforma: r.plataforma.nombre,
             afectaCuentaPrincipal: r.afectaCuentaPrincipal,
             afectaSubcuenta: r.afectaSubcuenta,
           },
         });
+
+        // Notificación de cobro (incluye concepto/título/monto)
+        const tituloNotificacion = `Pago recurrente: ${r.nombre}`;
+        const lineaMonto = r.afectaCuentaPrincipal && monedaDestinoCuenta && r.moneda !== monedaDestinoCuenta
+          ? `${r.monto} ${r.moneda} → ${montoConvertidoCuenta} ${monedaDestinoCuenta}`
+          : `${r.monto} ${r.moneda}`;
+        const mensajeNotificacion = `${lineaMonto}${r.plataforma?.nombre ? ` • ${r.plataforma.nombre}` : ''}`;
+
+        await this.notificacionesService.enviarNotificacionPush(
+          r.userId,
+          tituloNotificacion,
+          mensajeNotificacion,
+          {
+            tipo: 'recurrente_cobrado',
+            recurrenteId: r.recurrenteId,
+            concepto: r.nombre,
+            monto: r.monto,
+            moneda: r.moneda,
+            montoConvertidoCuenta: r.afectaCuentaPrincipal ? montoConvertidoCuenta : null,
+            monedaCuenta: r.afectaCuentaPrincipal ? monedaDestinoCuenta : null,
+            subcuentaId: r.subcuentaId ?? null,
+          },
+        );
 
         // Actualizar próxima ejecución
         if (r.frecuenciaTipo && r.frecuenciaValor) {
