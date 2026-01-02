@@ -42,6 +42,9 @@ export class Transaction {
   montoConvertido?: number; // Monto en monedaPrincipal del usuario
 
   @Prop()
+  monedaConvertida?: string; // Moneda destino usada para montoConvertido
+
+  @Prop()
   tasaConversion?: number; // Tasa de conversión usada
 
   @Prop()
