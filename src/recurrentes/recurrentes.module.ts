@@ -17,6 +17,7 @@ import { CuentaHistorialModule } from 'src/cuenta-historial/cuenta-historial.mod
 import { UtilsModule } from 'src/utils/utils.module';
 import { UserModule } from 'src/user/user.module';
 import { SubcuentaModule } from 'src/subcuenta/subcuenta.module';
+import { PlanConfigModule } from '../plan-config/plan-config.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { SubcuentaModule } from 'src/subcuenta/subcuenta.module';
     CuentaHistorialModule,
     UtilsModule,
     forwardRef(() => UserModule),
+    PlanConfigModule,
   ],
   controllers: [RecurrentesController],
   providers: [RecurrentesService, RecurrentesCronService, RecurrentesTestService],

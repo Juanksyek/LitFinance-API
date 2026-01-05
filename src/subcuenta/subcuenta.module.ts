@@ -12,6 +12,7 @@ import { UtilsModule } from '../utils/utils.module';
 import { UserModule } from '../user/user.module';
 import { Transaction, TransactionSchema } from '../transactions/schemas/transaction.schema/transaction.schema';
 import { HistorialRecurrente, HistorialRecurrenteSchema } from '../recurrentes/schemas/historial-recurrente.schema';
+import { PlanConfigModule } from '../plan-config/plan-config.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { HistorialRecurrente, HistorialRecurrenteSchema } from '../recurrentes/s
     CuentaHistorialModule,
     UtilsModule,
     forwardRef(() => UserModule),
+    PlanConfigModule,
   ],
   controllers: [SubcuentaController],
   providers: [SubcuentaService],

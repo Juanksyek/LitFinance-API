@@ -1,17 +1,44 @@
-import { Controller, Post, Get, Body, Req, UseGuards, Query, Param, Patch, Delete } from '@nestjs/common';
+import { Controller, Post, Get, Body, Req, UseGuards, Query, Param, Patch, Delete, Logger } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { SubcuentaService } from './subcuenta.service';
 import { CreateSubcuentaDto } from './dto/create-subcuenta.dto/create-subcuenta.dto';
 import { UpdateSubcuentaDto } from './dto/update-subcuenta.dto/update-subcuenta.dto';
+import { PlanConfigService } from '../plan-config/plan-config.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('subcuenta')
 export class SubcuentaController {
-  constructor(private readonly subcuentaService: SubcuentaService) {}
+  private readonly logger = new Logger(SubcuentaController.name);
+
+  constructor(
+    private readonly subcuentaService: SubcuentaService,
+    private readonly planConfigService: PlanConfigService,
+  ) {}
 
   @Post()
   async crear(@Req() req, @Body() dto: CreateSubcuentaDto) {
-    return this.subcuentaService.crear(dto, req.user.id);
+    const userId = req.user.id;
+    // Determinar el plan basado en isPremium (todos los usuarios consumen las reglas generales)
+    const userPlanType = req.user.isPremium ? 'premium_plan' : 'free_plan';
+
+    // Obtener el número actual de subcuentas del usuario
+    const subcuentasActuales = await this.subcuentaService.contarSubcuentas(userId);
+
+    // Validar con el plan general (no personalizado)
+    const validation = await this.planConfigService.canPerformAction(
+      userId,
+      userPlanType,
+      'subcuenta',
+      subcuentasActuales,
+    );
+
+    this.logger.log(`[Subcuenta] userId: ${userId} allowed: ${validation.allowed} message: ${validation.message}`);
+
+    if (!validation.allowed) {
+      throw new Error(validation.message || 'No puedes crear más subcuentas con tu plan actual');
+    }
+
+    return this.subcuentaService.crear(dto, userId);
   }
 
   @Get(':userId')

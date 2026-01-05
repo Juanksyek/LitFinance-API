@@ -473,4 +473,8 @@ export class SubcuentaService {
       porcentaje: total > 0 ? (sub.cantidad / total) * 100 : 0,
     }));
   }
+
+  async contarSubcuentas(userId: string): Promise<number> {
+    return this.subcuentaModel.countDocuments({ userId, activa: true });
+  }
 }
