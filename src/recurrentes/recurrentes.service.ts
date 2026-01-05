@@ -684,4 +684,8 @@ export class RecurrentesService {
       throw error;
     }
   }
+
+  async contarRecurrentes(userId: string): Promise<number> {
+    return this.recurrenteModel.countDocuments({ userId, estado: 'activo' });
+  }
 }
