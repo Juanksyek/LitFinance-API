@@ -1,12 +1,17 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import * as bodyParser from 'body-parser';
+import { PlanConfigService } from './plan-config/plan-config.service';
 
 async function bootstrap() {
   // IMPORTANT: Stripe webhook signature verification requires the raw body.
   // Nest's default body parser would consume it before we can validate the signature.
   const app = await NestFactory.create(AppModule, { bodyParser: false });
 
+  // Inicializar planes por defecto
+  const planConfigService = app.get(PlanConfigService);
+  await planConfigService.initializeDefaults();
+  console.log('✅ Planes por defecto inicializados (free_plan y premium_plan)');
 
   // 1) Webhook: raw SIEMPRE (Stripe manda application/json; charset=utf-8)
   app.use('/stripe/webhook', bodyParser.raw({ type: 'application/json' }));
