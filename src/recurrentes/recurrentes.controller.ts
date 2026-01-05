@@ -1,21 +1,44 @@
-import { Controller, Get, Req, Post, Body, Param, Put, Delete, Query, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
+import { Controller, Get, Req, Post, Body, Param, Put, Delete, Query, HttpCode, HttpStatus, UseGuards, Logger } from '@nestjs/common';
 import { RecurrentesService } from './recurrentes.service';
 import { RecurrentesTestService } from './recurrentes-test.service';
 import { CrearRecurrenteDto } from './dto/crear-recurrente.dto';
 import { EditarRecurrenteDto } from './dto/editar-recurrente.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PlanConfigService } from '../plan-config/plan-config.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('recurrentes')
 export class RecurrentesController {
+  private readonly logger = new Logger(RecurrentesController.name);
+
   constructor(
     private readonly recurrentesService: RecurrentesService,
     private readonly recurrentesTestService: RecurrentesTestService,
+    private readonly planConfigService: PlanConfigService,
   ) {}
 
   @Post()
   async crear(@Req() req, @Body() dto: CrearRecurrenteDto) {
     const userId = req.user.id;
+    const userPlanType = req.user.isPremium ? 'premium_plan' : 'free_plan';
+
+    // Obtener el número actual de recurrentes del usuario
+    const recurrentesActuales = await this.recurrentesService.contarRecurrentes(userId);
+
+    // Validar con el plan general (no personalizado)
+    const validation = await this.planConfigService.canPerformAction(
+      userId,
+      userPlanType,
+      'recurrente',
+      recurrentesActuales,
+    );
+
+    this.logger.log(`[Recurrente] userId: ${userId} allowed: ${validation.allowed} message: ${validation.message}`);
+
+    if (!validation.allowed) {
+      throw new Error(validation.message || 'No puedes crear más recurrentes con tu plan actual');
+    }
+
     return this.recurrentesService.crear(dto, userId);
   }
 
