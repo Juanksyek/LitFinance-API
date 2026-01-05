@@ -56,6 +56,10 @@ export class User {
   @Prop({ default: false })
   isPremium: boolean;
 
+  // Tipo de plan del usuario (todos los usuarios consumen las reglas generales del plan)
+  @Prop({ default: 'free_plan' })
+  planType: string; // 'free_plan' o 'premium_plan'
+
   // Moneda base del usuario - INMUTABLE después del registro
   @Prop({ required: true, immutable: true, default: 'MXN' })
   monedaPrincipal: string;
