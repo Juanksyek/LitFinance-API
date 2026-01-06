@@ -7,6 +7,19 @@ import { Moneda, MonedaDocument } from '../moneda/schema/moneda.schema';
 
 @Injectable()
 export class UserService {
+    async syncPremiumStatus(userId: string) {
+      const user = await this.userModel.findOne({ id: userId });
+      if (!user) return;
+      const now = new Date();
+      const isPremium =
+        user.premiumSubscriptionStatus === 'active' &&
+        user.premiumUntil &&
+        new Date(user.premiumUntil) > now;
+      if (user.isPremium !== isPremium) {
+        await this.userModel.updateOne({ id: userId }, { $set: { isPremium } });
+      }
+      return isPremium;
+    }
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(Moneda.name) private readonly monedaModel: Model<MonedaDocument>,
