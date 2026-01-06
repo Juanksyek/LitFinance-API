@@ -27,8 +27,8 @@ export class Recurrente {
     categoria: string;
   };
 
-  @Prop({ required: true, enum: ['dia_semana', 'dia_mes', 'fecha_anual'] })
-  frecuenciaTipo: 'dia_semana' | 'dia_mes' | 'fecha_anual';
+  @Prop({ required: false, enum: ['dia_semana', 'dia_mes', 'fecha_anual', 'fecha_fija'] })
+  frecuenciaTipo?: 'dia_semana' | 'dia_mes' | 'fecha_anual' | 'fecha_fija';
 
   @Prop({ required: true })
   frecuenciaValor: string;
