@@ -447,9 +447,17 @@ export class RecurrentesService {
 
         // Notificación de cobro (incluye concepto/título/monto)
         const tituloNotificacion = `Pago recurrente: ${r.nombre}`;
-        const lineaMonto = r.afectaCuentaPrincipal && monedaDestinoCuenta && r.moneda !== monedaDestinoCuenta
-          ? `${r.monto} ${r.moneda} → ${montoConvertidoCuenta} ${monedaDestinoCuenta}`
-          : `${r.monto} ${r.moneda}`;
+        
+        // Determinar qué conversión mostrar (prioridad: subcuenta > cuenta)
+        let lineaMonto: string;
+        if (r.afectaSubcuenta && monedaDestinoSubcuenta && r.moneda !== monedaDestinoSubcuenta) {
+          lineaMonto = `${r.monto} ${r.moneda} → ${montoConvertidoSubcuenta.toFixed(2)} ${monedaDestinoSubcuenta}`;
+        } else if (r.afectaCuentaPrincipal && monedaDestinoCuenta && r.moneda !== monedaDestinoCuenta) {
+          lineaMonto = `${r.monto} ${r.moneda} → ${montoConvertidoCuenta.toFixed(2)} ${monedaDestinoCuenta}`;
+        } else {
+          lineaMonto = `${r.monto} ${r.moneda}`;
+        }
+        
         const mensajeNotificacion = `${lineaMonto}${r.plataforma?.nombre ? ` • ${r.plataforma.nombre}` : ''}`;
 
         await this.notificacionesService.enviarNotificacionPush(
@@ -464,6 +472,8 @@ export class RecurrentesService {
             moneda: r.moneda,
             montoConvertidoCuenta: r.afectaCuentaPrincipal ? montoConvertidoCuenta : null,
             monedaCuenta: r.afectaCuentaPrincipal ? monedaDestinoCuenta : null,
+            montoConvertidoSubcuenta: r.afectaSubcuenta ? montoConvertidoSubcuenta : null,
+            monedaSubcuenta: r.afectaSubcuenta ? monedaDestinoSubcuenta : null,
             subcuentaId: r.subcuentaId ?? null,
           },
         );
