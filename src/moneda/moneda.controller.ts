@@ -67,4 +67,16 @@ export class MonedaController {
     const { codigoMoneda } = dto;
     return this.monedaService.toggleFavorita(userId, codigoMoneda);
   }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('actualizar-tasas')
+  async actualizarTasas() {
+    return this.monedaService.actualizarTodasLasTasas();
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('actualizar-tasa/:codigo')
+  async actualizarTasaMoneda(@Query('codigo') codigo: string) {
+    return this.monedaService.actualizarTasaMoneda(codigo);
+  }
 }
