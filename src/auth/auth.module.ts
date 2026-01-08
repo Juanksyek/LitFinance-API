@@ -8,10 +8,13 @@ import { EmailModule } from '../email/email.module';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { CuentaModule } from '../cuenta/cuenta.module';
 import { MonedaModule } from '../moneda/moneda.module';
+import { MongooseModule } from '@nestjs/mongoose';
+import { UserSession, UserSessionSchema } from './schemas/user-session.schema';
 
 @Module({
   imports: [
     UserModule,
+    MongooseModule.forFeature([{ name: UserSession.name, schema: UserSessionSchema }]),
     EmailModule,
     CuentaModule,
     MonedaModule,
