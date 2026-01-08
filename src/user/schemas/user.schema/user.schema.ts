@@ -102,8 +102,22 @@ export class User {
   @Prop({ required: false })
   premiumSubscriptionStatus?: string; // 'active' | 'trialing' | 'canceled' | ...
 
+  // Fecha fin del periodo vigente de la suscripción (Stripe current_period_end)
   @Prop({ type: Date, required: false })
-  premiumUntil?: Date; // para Jar (días regalados)
+  premiumSubscriptionUntil?: Date;
+
+  // Jar (donaciones) — tiempo premium independiente a suscripción
+  // - Cuando hay suscripción activa, el Jar se pausa y su tiempo se acumula en jarRemainingMs
+  // - Cuando NO hay suscripción activa, el Jar corre y expira en jarExpiresAt
+  @Prop({ type: Date, required: false })
+  jarExpiresAt?: Date;
+
+  @Prop({ type: Number, required: false })
+  jarRemainingMs?: number;
+
+  // Fecha fin efectiva de premium (derivada: suscripción si aplica, si no Jar)
+  @Prop({ type: Date, required: false })
+  premiumUntil?: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
