@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema/user.schema';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { Moneda, MonedaDocument } from '../moneda/schema/moneda.schema';
+import { reconcileEntitlements } from './premium-entitlements';
 
 @Injectable()
 export class UserService {
@@ -11,14 +12,21 @@ export class UserService {
       const user = await this.userModel.findOne({ id: userId });
       if (!user) return;
       const now = new Date();
-      const isPremium =
-        user.premiumSubscriptionStatus === 'active' &&
-        user.premiumUntil &&
-        new Date(user.premiumUntil) > now;
-      if (user.isPremium !== isPremium) {
-        await this.userModel.updateOne({ id: userId }, { $set: { isPremium } });
-      }
-      return isPremium;
+      const reconciled = reconcileEntitlements(user as any, now);
+      const set: any = {
+        isPremium: reconciled.isPremium,
+        planType: reconciled.planType,
+        premiumUntil: reconciled.premiumUntil,
+        jarExpiresAt: reconciled.jarExpiresAt,
+        jarRemainingMs: reconciled.jarRemainingMs,
+      };
+      if ('premiumSubscriptionId' in reconciled) set.premiumSubscriptionId = reconciled.premiumSubscriptionId;
+      if ('premiumSubscriptionStatus' in reconciled) set.premiumSubscriptionStatus = reconciled.premiumSubscriptionStatus;
+      if ('premiumSubscriptionUntil' in reconciled) set.premiumSubscriptionUntil = reconciled.premiumSubscriptionUntil;
+      if ('premiumBonusDays' in reconciled) set.premiumBonusDays = reconciled.premiumBonusDays;
+
+      await this.userModel.updateOne({ id: userId }, { $set: set });
+      return reconciled.isPremium;
     }
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,

@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
-import { randomBytes, randomInt } from 'crypto';
+import { randomBytes, randomInt, randomUUID } from 'crypto';
 
 import { RegisterAuthDto } from './dto/register-auth.dto';
 import { LoginAuthDto } from './dto/login-auth.dto';
@@ -12,19 +12,83 @@ import { ResetPasswordDto } from './dto/reset-password.dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto/change-password.dto';
 
 import { User, UserDocument } from '../user/schemas/user.schema/user.schema';
+import { reconcileEntitlements } from '../user/premium-entitlements';
 import { Cuenta, CuentaDocument } from '../cuenta/schemas/cuenta.schema/cuenta.schema';
 import { Moneda, MonedaDocument } from '../moneda/schema/moneda.schema';
 import { EmailService } from '../email/email.service';
+import { UserSession, UserSessionDocument } from './schemas/user-session.schema';
+import { RefreshAuthDto } from './dto/refresh-auth.dto';
 
 @Injectable()
 export class AuthService {
     constructor(
         @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-        @InjectModel(Cuenta.name) private readonly cuentaModel: Model<CuentaDocument>,
-        @InjectModel(Moneda.name) private readonly monedaModel: Model<MonedaDocument>,
-        private readonly jwtService: JwtService,
-        private readonly emailService: EmailService,
+                @InjectModel(Cuenta.name) private readonly cuentaModel: Model<CuentaDocument>,
+                @InjectModel(Moneda.name) private readonly monedaModel: Model<MonedaDocument>,
+                @InjectModel(UserSession.name) private readonly sessionModel: Model<UserSessionDocument>,
+                private readonly jwtService: JwtService,
+                private readonly emailService: EmailService,
     ) { }
+
+    // Token settings (env overrides recommended)
+    private readonly ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || 'access_secret';
+    private readonly REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'refresh_secret';
+    private readonly ACCESS_TTL = process.env.JWT_ACCESS_TTL || '15m';
+    private readonly REFRESH_TTL = process.env.JWT_REFRESH_TTL || '30d';
+
+    private refreshExpiresDateFromNow() {
+        const ms = 30 * 24 * 60 * 60 * 1000;
+        return new Date(Date.now() + ms);
+    }
+
+    private async hashRefresh(token: string) {
+        return bcrypt.hash(token, 10);
+    }
+
+    private async compareRefresh(token: string, hash: string) {
+        return bcrypt.compare(token, hash);
+    }
+
+    private async generateTokens(params: {
+        userId: string;
+        email: string;
+        nombre: string;
+        rol: any;
+        cuentaId: string | null;
+        deviceId: string;
+    }) {
+        const jti = (randomUUID && typeof randomUUID === 'function') ? randomUUID() : randomBytes(16).toString('hex');
+
+        const accessPayload = {
+            sub: params.userId,
+            email: params.email,
+            nombre: params.nombre,
+            rol: params.rol,
+            cuentaId: params.cuentaId,
+            jti,
+            deviceId: params.deviceId,
+            typ: 'access',
+        };
+
+        const refreshPayload = {
+            sub: params.userId,
+            jti,
+            deviceId: params.deviceId,
+            typ: 'refresh',
+        };
+
+        const accessToken = await this.jwtService.signAsync(accessPayload, {
+            secret: this.ACCESS_SECRET,
+            expiresIn: this.ACCESS_TTL,
+        });
+
+        const refreshToken = await this.jwtService.signAsync(refreshPayload, {
+            secret: this.REFRESH_SECRET,
+            expiresIn: this.REFRESH_TTL,
+        });
+
+        return { accessToken, refreshToken, jti };
+    }
 
     private async generateUniqueId(): Promise<string> {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -128,7 +192,7 @@ export class AuthService {
     }
 
     async login(dto: LoginAuthDto) {
-        const { email, password } = dto;
+        const { email, password, deviceId } = dto as any;
 
         const user = await this.userModel.findOne({ email });
         if (!user) {
@@ -155,23 +219,52 @@ export class AuthService {
         }
 
         user.lastActivityAt = new Date();
+        // Mantener premium consistente en cada login (Jar vs suscripción)
+        const reconciled = reconcileEntitlements(user as any, new Date());
+        (user as any).isPremium = reconciled.isPremium;
+        (user as any).planType = reconciled.planType;
+        (user as any).premiumUntil = reconciled.premiumUntil;
+        (user as any).jarExpiresAt = reconciled.jarExpiresAt;
+        (user as any).jarRemainingMs = reconciled.jarRemainingMs;
+        if ('premiumBonusDays' in reconciled) (user as any).premiumBonusDays = reconciled.premiumBonusDays;
+        if ('premiumSubscriptionId' in reconciled) (user as any).premiumSubscriptionId = reconciled.premiumSubscriptionId;
+        if ('premiumSubscriptionStatus' in reconciled) (user as any).premiumSubscriptionStatus = reconciled.premiumSubscriptionStatus;
+        if ('premiumSubscriptionUntil' in reconciled) (user as any).premiumSubscriptionUntil = reconciled.premiumSubscriptionUntil;
+
         await user.save();
 
         const cuentaPrincipal = await this.cuentaModel.findOne({ userId: user.id, isPrincipal: true });
 
-        const payload = {
-          sub: user.id,
-          email: user.email,
-          nombre: user.nombreCompleto,
-          rol: user.rol,
-          cuentaId: cuentaPrincipal?.id || null,
-        };
+        const { accessToken, refreshToken, jti } = await this.generateTokens({
+            userId: user.id,
+            email: user.email,
+            nombre: user.nombreCompleto,
+            rol: user.rol,
+            cuentaId: cuentaPrincipal?.id || null,
+            deviceId: deviceId || 'default',
+        });
 
-        const accessToken = await this.jwtService.signAsync(payload);
+        const refreshHash = await this.hashRefresh(refreshToken);
+        const expiresAt = this.refreshExpiresDateFromNow();
+
+        await this.sessionModel.updateOne(
+            { userId: user.id, deviceId: deviceId || 'default' },
+            {
+                $set: {
+                    jti,
+                    refreshHash,
+                    revoked: false,
+                    expiresAt,
+                    lastUsedAt: new Date(),
+                },
+            },
+            { upsert: true },
+        );
 
         return {
             message: 'Login exitoso',
             accessToken,
+            refreshToken,
             user: {
                 id: user.id,
                 email: user.email,
@@ -202,6 +295,79 @@ export class AuthService {
 
         return { success: true, message: 'Cuenta activada correctamente' };
     }
+
+        // ------------------------------
+        // REFRESH: sesión extendida (sliding)
+        // ------------------------------
+        async refreshTokens(dto: RefreshAuthDto) {
+            const { refreshToken, deviceId } = dto as any;
+
+            let decoded: any;
+            try {
+                decoded = await this.jwtService.verifyAsync(refreshToken, { secret: this.REFRESH_SECRET });
+            } catch {
+                throw new UnauthorizedException('Refresh token inválido o expirado');
+            }
+
+            if (decoded?.typ !== 'refresh') {
+                throw new UnauthorizedException('Token inválido');
+            }
+
+            const userId = decoded.sub as string;
+
+            const session = await this.sessionModel.findOne({ userId, deviceId });
+            if (!session || session.revoked) {
+                throw new UnauthorizedException('Sesión no válida');
+            }
+
+            if (session.expiresAt < new Date()) {
+                throw new UnauthorizedException('Sesión expirada');
+            }
+
+            const ok = await this.compareRefresh(refreshToken, session.refreshHash);
+            if (!ok) {
+                session.revoked = true;
+                await session.save();
+                throw new UnauthorizedException('Sesión comprometida. Inicia sesión de nuevo.');
+            }
+
+            const user = await this.userModel.findOne({ id: userId });
+            if (!user) throw new UnauthorizedException('Usuario no válido');
+
+            const cuentaPrincipal = await this.cuentaModel.findOne({ userId: user.id, isPrincipal: true });
+
+            const { accessToken, refreshToken: newRefresh, jti } = await this.generateTokens({
+                userId: user.id,
+                email: user.email,
+                nombre: user.nombreCompleto,
+                rol: user.rol,
+                cuentaId: cuentaPrincipal?.id || null,
+                deviceId,
+            });
+
+            session.jti = jti;
+            session.refreshHash = await this.hashRefresh(newRefresh);
+            session.expiresAt = this.refreshExpiresDateFromNow();
+            session.lastUsedAt = new Date();
+            session.revoked = false;
+            await session.save();
+
+            return {
+                accessToken,
+                refreshToken: newRefresh,
+            };
+        }
+
+        // ------------------------------
+        // LOGOUT: revoca por dispositivo
+        // ------------------------------
+        async logout(userId: string, deviceId: string) {
+            await this.sessionModel.updateOne(
+                { userId, deviceId },
+                { $set: { revoked: true } },
+            );
+            return { message: 'Sesión cerrada' };
+        }
 
     async forgotPassword(dto: ForgotPasswordDto) {
         const user = await this.userModel.findOne({ email: dto.email });

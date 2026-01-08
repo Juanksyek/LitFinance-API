@@ -5,6 +5,7 @@ import * as crypto from 'crypto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { User, UserDocument } from '../user/schemas/user.schema/user.schema';
+import { applyJarCredit, msFromJarDays, reconcileEntitlements } from '../user/premium-entitlements';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -390,7 +391,9 @@ export class StripeController {
         stripeCustomerId: customerId,
         premiumSubscriptionId: subscription.id,
         premiumSubscriptionStatus: subscription.status,
-        premiumUntil: user.premiumUntil || null // No borrar premiumUntil (donaciones). Webhook/sync lo ajusta.
+        premiumSubscriptionUntil: (subscription as any)?.current_period_end
+          ? new Date((subscription as any).current_period_end * 1000)
+          : (user as any).premiumSubscriptionUntil || null,
       });
 
       return {
@@ -438,7 +441,9 @@ export class StripeController {
         stripeCustomerId: customerId,
         premiumSubscriptionId: subscription.id,
         premiumSubscriptionStatus: subscription.status,
-        premiumUntil: user.premiumUntil || null // No borrar premiumUntil (donaciones). Webhook/sync lo ajusta.
+        premiumSubscriptionUntil: (subscription as any)?.current_period_end
+          ? new Date((subscription as any).current_period_end * 1000)
+          : (user as any).premiumSubscriptionUntil || null,
       });
 
       return {
@@ -465,6 +470,35 @@ export class StripeController {
 
   private async patchUser(user: any, updates: any) {
     await this.userModel.updateOne({ _id: user._id }, { $set: updates });
+
+    // Reconciliar premium (Jar vs suscripción) y mantener consistencia fuerte
+    try {
+      const updated = await this.userModel
+        .findById(user._id)
+        .select(
+          'premiumSubscriptionId premiumSubscriptionStatus premiumSubscriptionUntil ' +
+            'jarExpiresAt jarRemainingMs premiumUntil isPremium planType premiumBonusDays',
+        );
+      if (updated) {
+        const now = new Date();
+        const reconciled = reconcileEntitlements(updated as any, now);
+        const set: any = {
+          isPremium: reconciled.isPremium,
+          planType: reconciled.planType,
+          premiumUntil: reconciled.premiumUntil,
+          jarExpiresAt: reconciled.jarExpiresAt,
+          jarRemainingMs: reconciled.jarRemainingMs,
+        };
+        if ('premiumSubscriptionId' in reconciled) set.premiumSubscriptionId = reconciled.premiumSubscriptionId;
+        if ('premiumSubscriptionStatus' in reconciled) set.premiumSubscriptionStatus = reconciled.premiumSubscriptionStatus;
+        if ('premiumSubscriptionUntil' in reconciled) set.premiumSubscriptionUntil = reconciled.premiumSubscriptionUntil;
+        if ('premiumBonusDays' in reconciled) set.premiumBonusDays = reconciled.premiumBonusDays;
+
+        await this.userModel.updateOne({ _id: user._id }, { $set: set });
+      }
+    } catch (err) {
+      this.logger?.warn && this.logger.warn('[patchUser] Error recalculando isPremium: ' + err?.message);
+    }
   }
 
   private addDays(base: Date, days: number) {
@@ -511,39 +545,41 @@ export class StripeController {
     const user = await this.findUserByAuthId(authId);
 
     const sub: any = await this.resolveCurrentSubscriptionForUser(user);
-    const bonusDays = Number((user as any).premiumBonusDays || 0);
 
     if (!sub) {
-      const currentPremiumUntil = user.premiumUntil ? new Date(user.premiumUntil) : null;
-      const derivedStatus = currentPremiumUntil && currentPremiumUntil.getTime() > Date.now() ? 'active' : 'expired';
+      const reconciled = reconcileEntitlements(user as any, new Date());
       await this.patchUser(user, {
-        premiumSubscriptionStatus: user.premiumSubscriptionStatus || derivedStatus,
-        premiumUntil: currentPremiumUntil,
+        jarExpiresAt: reconciled.jarExpiresAt,
+        jarRemainingMs: reconciled.jarRemainingMs,
+        premiumUntil: reconciled.premiumUntil,
+        isPremium: reconciled.isPremium,
+        planType: reconciled.planType,
+        ...(reconciled.premiumBonusDays === 0 ? { premiumBonusDays: 0 } : {}),
+        ...(reconciled.premiumSubscriptionId === null ? { premiumSubscriptionId: null } : {}),
+        ...(reconciled.premiumSubscriptionStatus === null ? { premiumSubscriptionStatus: null } : {}),
+        ...(reconciled.premiumSubscriptionUntil === null ? { premiumSubscriptionUntil: null } : {}),
       });
       return {
         stripeCustomerId: user.stripeCustomerId || null,
         premiumSubscriptionId: user.premiumSubscriptionId || null,
-        premiumSubscriptionStatus: user.premiumSubscriptionStatus || derivedStatus,
-        premiumUntil: currentPremiumUntil,
-        premiumBonusDays: bonusDays,
+        premiumSubscriptionStatus: user.premiumSubscriptionStatus || null,
+        premiumUntil: reconciled.premiumUntil,
+        premiumBonusDays: 0,
       };
     }
-
-    const currentPeriodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000) : null;
-    const effectiveUntil = currentPeriodEnd ? this.addDays(currentPeriodEnd, bonusDays) : (user.premiumUntil || null);
 
     await this.patchUser(user, {
       premiumSubscriptionId: sub.id,
       premiumSubscriptionStatus: sub.status,
-      premiumUntil: effectiveUntil,
+      premiumSubscriptionUntil: sub.current_period_end ? new Date(sub.current_period_end * 1000) : null,
     });
 
     return {
       stripeCustomerId: user.stripeCustomerId || null,
       premiumSubscriptionId: sub.id,
       premiumSubscriptionStatus: sub.status,
-      premiumUntil: effectiveUntil,
-      premiumBonusDays: bonusDays,
+      premiumUntil: sub.current_period_end ? new Date(sub.current_period_end * 1000) : (user as any).premiumUntil || null,
+      premiumBonusDays: 0,
     };
   }
 
@@ -706,29 +742,13 @@ export class StripeController {
               break;
             }
 
-            const nextBonusDays = Number((user as any).premiumBonusDays || 0) + days;
-            const currentPremiumUntil = user.premiumUntil ? new Date(user.premiumUntil) : null;
-
-            const sub: any = await this.resolveCurrentSubscriptionForUser(user);
-            if (sub?.current_period_end) {
-              const periodEnd = new Date(sub.current_period_end * 1000);
-              const effectiveUntil = this.addDays(periodEnd, nextBonusDays);
-              await this.patchUser(user, {
-                premiumBonusDays: nextBonusDays,
-                premiumSubscriptionId: sub.id,
-                premiumSubscriptionStatus: sub.status,
-                premiumUntil: effectiveUntil,
-              });
-            } else {
-              const effectiveUntil = this.stripeSvc.extendPremiumUntil(currentPremiumUntil, days);
-              const status = effectiveUntil.getTime() > Date.now() ? 'active' : 'expired';
-              await this.patchUser(user, {
-                premiumBonusDays: nextBonusDays,
-                premiumSubscriptionId: (user as any).premiumSubscriptionId || 'tipjar',
-                premiumSubscriptionStatus: (user as any).premiumSubscriptionStatus || status,
-                premiumUntil: effectiveUntil,
-              });
-            }
+            const now = new Date();
+            const reconciled = applyJarCredit(user as any, msFromJarDays(days), now);
+            await this.patchUser(user, {
+              jarExpiresAt: reconciled.jarExpiresAt,
+              jarRemainingMs: reconciled.jarRemainingMs,
+              premiumBonusDays: 0,
+            });
           }
           break;
         }
@@ -745,14 +765,12 @@ export class StripeController {
           }
 
           const sub: any = await this.stripeSvc.stripe.subscriptions.retrieve(subscriptionId);
-          const bonusDays = Number((user as any).premiumBonusDays || 0);
-          const periodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000) : null;
-          const effectiveUntil = periodEnd ? this.addDays(periodEnd, bonusDays) : (user.premiumUntil || null);
-
+          const periodEnd =
+            sub.current_period_end ? new Date(sub.current_period_end * 1000) : await this.stripeSvc.resolveSubscriptionPeriodEnd(sub);
           await this.patchUser(user, {
             premiumSubscriptionId: sub.id,
             premiumSubscriptionStatus: sub.status,
-            premiumUntil: effectiveUntil,
+            premiumSubscriptionUntil: periodEnd,
           });
           break;
         }
@@ -771,29 +789,13 @@ export class StripeController {
           if (days > 0 && userMongoId) {
             const user = await this.userModel.findById(userMongoId);
             if (user) {
-              const nextBonusDays = Number((user as any).premiumBonusDays || 0) + days;
-              const currentPremiumUntil = user.premiumUntil ? new Date(user.premiumUntil) : null;
-
-              const sub: any = await this.resolveCurrentSubscriptionForUser(user);
-              if (sub?.current_period_end) {
-                const periodEnd = new Date(sub.current_period_end * 1000);
-                const effectiveUntil = this.addDays(periodEnd, nextBonusDays);
-                await this.patchUser(user, {
-                  premiumBonusDays: nextBonusDays,
-                  premiumSubscriptionId: sub.id,
-                  premiumSubscriptionStatus: sub.status,
-                  premiumUntil: effectiveUntil,
-                });
-              } else {
-                const effectiveUntil = this.stripeSvc.extendPremiumUntil(currentPremiumUntil, days);
-                const status = effectiveUntil.getTime() > Date.now() ? 'active' : 'expired';
-                await this.patchUser(user, {
-                  premiumBonusDays: nextBonusDays,
-                  premiumSubscriptionId: (user as any).premiumSubscriptionId || 'tipjar',
-                  premiumSubscriptionStatus: (user as any).premiumSubscriptionStatus || status,
-                  premiumUntil: effectiveUntil,
-                });
-              }
+              const now = new Date();
+              const reconciled = applyJarCredit(user as any, msFromJarDays(days), now);
+              await this.patchUser(user, {
+                jarExpiresAt: reconciled.jarExpiresAt,
+                jarRemainingMs: reconciled.jarRemainingMs,
+                premiumBonusDays: 0,
+              });
             } else {
               this.logger.warn(`[payment_intent.succeeded] Usuario no encontrado: ${userMongoId}`);
             }
@@ -822,14 +824,11 @@ export class StripeController {
           break;
         }
 
-        const bonusDays = Number((user as any).premiumBonusDays || 0);
-        const periodEnd = subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null;
-        const effectiveUntil = periodEnd ? this.addDays(periodEnd, bonusDays) : (user.premiumUntil || null);
-
+        const periodEnd = subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : await this.stripeSvc.resolveSubscriptionPeriodEnd(subscription);
         await this.patchUser(user, {
           premiumSubscriptionId: subscriptionId,
           premiumSubscriptionStatus: subscription.status || 'active',
-          premiumUntil: effectiveUntil,
+          premiumSubscriptionUntil: periodEnd,
         });
         break;
       }
@@ -850,20 +849,17 @@ export class StripeController {
           const user = await this.findByStripeCustomerId(customerId);
           
           if (user) {
-            // Calcular premiumUntil basado en el período de la suscripción
-            const bonusDays = Number((user as any).premiumBonusDays || 0);
             const currentPeriodEnd = new Date(subscription.current_period_end * 1000);
-            const effectiveUntil = this.addDays(currentPeriodEnd, bonusDays);
             
             this.logger.log(
               `[invoice.paid] Actualizando usuario: subscriptionId=${subscriptionId}, status=${subscription.status || 'active'}, ` +
-              `periodEnd=${currentPeriodEnd.toISOString()}, bonusDays=${bonusDays}, premiumUntil=${effectiveUntil.toISOString()}`,
+              `periodEnd=${currentPeriodEnd.toISOString()}`,
             );
-            // Siempre sobrescribe los campos premium con la suscripción
+            // Guardar periodo de suscripción (sin mezclar con Jar)
             await this.patchUser(user, {
               premiumSubscriptionId: subscriptionId,
               premiumSubscriptionStatus: subscription.status || 'active',
-              premiumUntil: effectiveUntil,
+              premiumSubscriptionUntil: currentPeriodEnd,
             });
           } else {
             this.logger.warn(`[invoice.paid] Usuario no encontrado para customerId: ${customerId}`);
@@ -880,14 +876,12 @@ export class StripeController {
         this.logger.log(`[customer.subscription.updated] customerId: ${customerId}, subId: ${sub.id}, status: ${sub.status}, current_period_end: ${currentPeriodEnd.toISOString()}`);
         const user = await this.findByStripeCustomerId(customerId);
         if (user) {
-          const bonusDays = Number((user as any).premiumBonusDays || 0);
-          const effectiveUntil = this.addDays(currentPeriodEnd, bonusDays);
           this.logger.log(`[customer.subscription.updated] Actualizando usuario`);
-          // Siempre sobrescribe los campos premium con la suscripción
+          // Guardar periodo de suscripción (sin mezclar con Jar)
           await this.patchUser(user, {
             premiumSubscriptionId: sub.id,
             premiumSubscriptionStatus: sub.status,
-            premiumUntil: effectiveUntil,
+            premiumSubscriptionUntil: currentPeriodEnd,
           });
         } else {
           this.logger.warn(`[customer.subscription.updated] Usuario no encontrado para customerId: ${customerId}`);
@@ -902,7 +896,12 @@ export class StripeController {
         const user = await this.findByStripeCustomerId(customerId);
         if (user) {
           this.logger.log(`[customer.subscription.deleted] Actualizando premiumSubscriptionStatus a canceled`);
-          await this.patchUser(user, { premiumSubscriptionStatus: 'canceled' });
+          const periodEnd = sub?.current_period_end ? new Date(sub.current_period_end * 1000) : null;
+          await this.patchUser(user, {
+            premiumSubscriptionId: sub.id,
+            premiumSubscriptionStatus: sub.status || 'canceled',
+            premiumSubscriptionUntil: periodEnd,
+          });
         } else {
           this.logger.warn(`[customer.subscription.deleted] Usuario no encontrado para customerId: ${customerId}`);
         }
@@ -929,11 +928,10 @@ export class StripeController {
       cancel_at_period_end: true,
     });
 
-    const premiumUntil = sub?.current_period_end ? new Date(sub.current_period_end * 1000) : undefined;
     await this.patchUser(user, {
       premiumSubscriptionId: sub.id,
       premiumSubscriptionStatus: sub.status,
-      ...(premiumUntil ? { premiumUntil } : {}),
+      premiumSubscriptionUntil: sub?.current_period_end ? new Date(sub.current_period_end * 1000) : null,
     });
 
     return {
@@ -960,11 +958,10 @@ export class StripeController {
       cancel_at_period_end: false,
     });
 
-    const premiumUntil = sub?.current_period_end ? new Date(sub.current_period_end * 1000) : undefined;
     await this.patchUser(user, {
       premiumSubscriptionId: sub.id,
       premiumSubscriptionStatus: sub.status,
-      ...(premiumUntil ? { premiumUntil } : {}),
+      premiumSubscriptionUntil: sub?.current_period_end ? new Date(sub.current_period_end * 1000) : null,
     });
 
     return {
