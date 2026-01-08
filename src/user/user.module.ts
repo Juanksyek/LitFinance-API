@@ -5,6 +5,9 @@ import { UserService } from './user.service';
 import { User, UserSchema } from './schemas/user.schema/user.schema';
 import { CleanupService } from './services/cleanup.service';
 import { CurrencyConversionService } from './services/currency-conversion.service';
+import { PremiumCronService } from './premium-cron.service';
+import { SubscriptionVerifyCronService } from './subscription-verify-cron.service';
+import { StripeModule } from '../stripe/stripe.module';
 import { CuentaModule } from '../cuenta/cuenta.module';
 import { SubcuentaModule } from 'src/subcuenta/subcuenta.module';
 import { TransactionsModule } from 'src/transactions/transactions.module';
@@ -31,10 +34,11 @@ import { Moneda, MonedaSchema } from '../moneda/schema/moneda.schema';
     TransactionsModule,
     CuentaHistorialModule,
     MonedaModule,
+    StripeModule,
     UtilsModule
   ],
   controllers: [UserController],
-  providers: [UserService, CleanupService, CurrencyConversionService],
+  providers: [UserService, CleanupService, CurrencyConversionService, PremiumCronService, SubscriptionVerifyCronService],
   exports: [UserService, MongooseModule, CurrencyConversionService],
 })
 export class UserModule {}
