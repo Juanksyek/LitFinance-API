@@ -129,6 +129,24 @@ export class AuthService {
             throw new BadRequestException('Faltan campos obligatorios: edad y ocupacion');
         }
 
+        // Normalizar y validar `edad`: debe ser entero y dentro del rango aceptable
+        const edadNum = Number(dto.edad);
+        if (!Number.isFinite(edadNum) || Number.isNaN(edadNum)) {
+            throw new BadRequestException('Edad inválida');
+        }
+
+        // No permitir decimales
+        if (!Number.isInteger(edadNum)) {
+            throw new BadRequestException('La edad debe ser un número entero');
+        }
+
+        // Definir rango mínimo/máximo (mínimo 13 años)
+        const EDAD_MIN = 13;
+        const EDAD_MAX = 100;
+        if (edadNum < EDAD_MIN || edadNum > EDAD_MAX) {
+            throw new BadRequestException(`La edad debe estar entre ${EDAD_MIN} y ${EDAD_MAX}`);
+        }
+
         const hashedPassword = await bcrypt.hash(password, 10);
         const generatedId = await this.generateUniqueId();
 
@@ -202,6 +220,11 @@ export class AuthService {
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             throw new UnauthorizedException('Credenciales inválidas');
+        }
+
+        // Bloquear acceso si el usuario no confirmó su correo
+        if (!user.isActive) {
+            throw new UnauthorizedException('Cuenta no activada. Revisa tu correo para confirmar la cuenta.');
         }
 
         // Forzar monedaPrincipal y monedaPreferencia a 'MXN' si no existen
