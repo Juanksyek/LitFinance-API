@@ -34,12 +34,35 @@ export class RecurrentesService {
     const recurrenteId = await generateUniqueId(this.recurrenteModel, 'recurrenteId');
     const cuenta: CuentaDocument = await this.cuentaService.obtenerCuentaPrincipal(userId);
 
+    // Default para compatibilidad con recurrentes existentes
+    const tipoRecurrente = dto.tipoRecurrente || 'indefinido';
+
+    // Validación: si es plazo_fijo, totalPagos es obligatorio
+    if (tipoRecurrente === 'plazo_fijo' && (!dto.totalPagos || dto.totalPagos <= 0)) {
+      throw new BadRequestException(
+        'totalPagos es obligatorio y debe ser mayor a 0 cuando tipoRecurrente es plazo_fijo'
+      );
+    }
+
+    // Calcular fechas para plazo_fijo
+    const fechaInicio = dto.fechaInicio || new Date();
+    let fechaFin: Date | undefined;
+
+    if (tipoRecurrente === 'plazo_fijo' && dto.totalPagos) {
+      fechaFin = this.calcularFechaFin(
+        fechaInicio,
+        dto.frecuenciaTipo,
+        dto.frecuenciaValor,
+        dto.totalPagos
+      );
+    }
+
     // Registrar creación de recurrente en historial
     await this.cuentaHistorialService.registrarMovimiento({
       cuentaId: dto.cuentaId || cuenta.id,
       userId,
       tipo: 'recurrente',
-      descripcion: `Recurrente creado: "${dto.nombre}" - ${dto.monto} ${dto.moneda}`,
+      descripcion: `Recurrente creado: "${dto.nombre}" - ${dto.monto} ${dto.moneda}${tipoRecurrente === 'plazo_fijo' ? ` (${dto.totalPagos} pagos)` : ''}`,
       monto: 0,
       fecha: new Date().toISOString(),
       conceptoId: undefined,
@@ -51,6 +74,8 @@ export class RecurrentesService {
         monto: dto.monto,
         afectaCuentaPrincipal: dto.afectaCuentaPrincipal,
         afectaSubcuenta: dto.afectaSubcuenta,
+        tipoRecurrente,
+        totalPagos: dto.totalPagos,
       },
     });
 
@@ -58,6 +83,10 @@ export class RecurrentesService {
       ...dto,
       recurrenteId,
       userId,
+      tipoRecurrente,
+      pagosRealizados: 0,
+      fechaInicio: tipoRecurrente === 'plazo_fijo' ? fechaInicio : undefined,
+      fechaFin: tipoRecurrente === 'plazo_fijo' ? fechaFin : undefined,
       proximaEjecucion: this.calcularProximaFechaPersonalizada(
         new Date(),
         dto.frecuenciaTipo,
@@ -66,6 +95,26 @@ export class RecurrentesService {
     });
 
     return await nuevo.save();
+  }
+
+  // Método auxiliar para calcular la fecha de finalización
+  private calcularFechaFin(
+    fechaInicio: Date,
+    frecuenciaTipo: string,
+    frecuenciaValor: string,
+    totalPagos: number
+  ): Date {
+    let fechaFin = new Date(fechaInicio);
+
+    for (let i = 0; i < totalPagos; i++) {
+      fechaFin = this.calcularProximaFechaPersonalizada(
+        fechaFin,
+        frecuenciaTipo,
+        frecuenciaValor
+      );
+    }
+
+    return fechaFin;
   }
 
   calcularProximaFechaPersonalizada(
@@ -275,7 +324,7 @@ export class RecurrentesService {
     const recurrentes = await this.recurrenteModel.find({
       proximaEjecucion: { $gte: hoy, $lt: mañana },
       pausado: { $ne: true },
-      estado: { $ne: 'ejecutando' },
+      estado: { $nin: ['ejecutando', 'completado'] }, // Excluir completados
     });
 
     let exitosos = 0;
@@ -283,6 +332,39 @@ export class RecurrentesService {
 
     for (const r of recurrentes) {
       try {
+        // ===========================
+        // VALIDACIÓN: Plazo Fijo Completado
+        // ===========================
+        if (r.tipoRecurrente === 'plazo_fijo') {
+          if (r.pagosRealizados >= (r.totalPagos || 0)) {
+            // Marcar como completado y desactivar
+            r.estado = 'completado';
+            r.pausado = true;
+            await r.save();
+            
+            // Registrar finalización en historial
+            await this.historialModel.create({
+              recurrenteId: r.recurrenteId,
+              monto: 0,
+              moneda: r.moneda,
+              cuentaId: r.cuentaId,
+              subcuentaId: r.subcuentaId,
+              afectaCuentaPrincipal: r.afectaCuentaPrincipal,
+              fecha: new Date(),
+              userId: r.userId,
+              estado: 'exitoso',
+              nombreRecurrente: r.nombre,
+              plataforma: r.plataforma,
+              mensajeError: undefined,
+              numeroPago: r.pagosRealizados,
+              totalPagos: r.totalPagos,
+              tipoRecurrente: r.tipoRecurrente,
+            });
+
+            continue; // Saltar a siguiente recurrente
+          }
+        }
+
         // Marcar como ejecutando
         r.estado = 'ejecutando';
         await r.save();
@@ -383,6 +465,13 @@ export class RecurrentesService {
         r.tasaConversion = tasaConversion;
         r.fechaConversion = new Date();
 
+        // ===========================
+        // INCREMENTAR PAGOS REALIZADOS (para plazo_fijo)
+        // ===========================
+        if (r.tipoRecurrente === 'plazo_fijo') {
+          r.pagosRealizados += 1;
+        }
+
         // Registrar en historial de recurrentes
         const montoFinalConvertido = r.afectaSubcuenta ? montoConvertidoSubcuenta : montoConvertidoCuenta;
         const tasaFinalConversion = r.afectaSubcuenta ? tasaConversionSubcuenta : tasaConversionCuenta;
@@ -409,6 +498,10 @@ export class RecurrentesService {
           estado: 'exitoso',
           nombreRecurrente: r.nombre,
           plataforma: r.plataforma,
+          // Campos de plazo_fijo
+          numeroPago: r.tipoRecurrente === 'plazo_fijo' ? r.pagosRealizados : undefined,
+          totalPagos: r.tipoRecurrente === 'plazo_fijo' ? r.totalPagos : undefined,
+          tipoRecurrente: r.tipoRecurrente,
         });
 
         // Registrar en historial de cuenta
@@ -446,7 +539,12 @@ export class RecurrentesService {
         });
 
         // Notificación de cobro (incluye concepto/título/monto)
-        const tituloNotificacion = `Pago recurrente: ${r.nombre}`;
+        let tituloNotificacion = `Pago recurrente: ${r.nombre}`;
+        
+        // Si es plazo_fijo, agregar progreso al título
+        if (r.tipoRecurrente === 'plazo_fijo' && r.totalPagos) {
+          tituloNotificacion += ` (${r.pagosRealizados}/${r.totalPagos})`;
+        }
         
         // Determinar qué conversión mostrar (prioridad: subcuenta > cuenta)
         let lineaMonto: string;
@@ -458,7 +556,12 @@ export class RecurrentesService {
           lineaMonto = `${r.monto} ${r.moneda}`;
         }
         
-        const mensajeNotificacion = `${lineaMonto}${r.plataforma?.nombre ? ` • ${r.plataforma.nombre}` : ''}`;
+        let mensajeNotificacion = `${lineaMonto}${r.plataforma?.nombre ? ` • ${r.plataforma.nombre}` : ''}`;
+        
+        // Si es plazo_fijo y es el último pago, agregar mensaje
+        if (r.tipoRecurrente === 'plazo_fijo' && r.pagosRealizados === r.totalPagos) {
+          mensajeNotificacion += ' 🎉 ¡Último pago completado!';
+        }
 
         await this.notificacionesService.enviarNotificacionPush(
           r.userId,
@@ -475,6 +578,10 @@ export class RecurrentesService {
             montoConvertidoSubcuenta: r.afectaSubcuenta ? montoConvertidoSubcuenta : null,
             monedaSubcuenta: r.afectaSubcuenta ? monedaDestinoSubcuenta : null,
             subcuentaId: r.subcuentaId ?? null,
+            // Agregar info de plazo_fijo
+            tipoRecurrente: r.tipoRecurrente,
+            pagosRealizados: r.tipoRecurrente === 'plazo_fijo' ? r.pagosRealizados : undefined,
+            totalPagos: r.tipoRecurrente === 'plazo_fijo' ? r.totalPagos : undefined,
           },
         );
 

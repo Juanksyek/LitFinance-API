@@ -72,6 +72,16 @@ export class HistorialRecurrente {
     color: string;
     categoria: string;
   };
+
+  // Campos para planes de pago (plazo_fijo)
+  @Prop()
+  numeroPago?: number; // Ej. 3 de 12
+
+  @Prop()
+  totalPagos?: number; // Ej. 12
+
+  @Prop()
+  tipoRecurrente?: 'indefinido' | 'plazo_fijo'; // Para referencia
 }
 
 export const HistorialRecurrenteSchema = SchemaFactory.createForClass(HistorialRecurrente);
