@@ -74,7 +74,7 @@ export class Recurrente {
   @Prop({ default: false })
   pausado: boolean;
 
-  @Prop({ default: 'activo', enum: ['activo', 'ejecutando', 'error', 'pausado'] })
+  @Prop({ default: 'activo', enum: ['activo', 'ejecutando', 'error', 'pausado', 'completado'] })
   estado: string;
 
   @Prop()
@@ -82,6 +82,30 @@ export class Recurrente {
 
   @Prop()
   mensajeError?: string;
+
+  // ===========================
+  // NUEVOS CAMPOS: Planes de Pago (Plazo Fijo)
+  // ===========================
+
+  @Prop({ 
+    required: true, 
+    enum: ['indefinido', 'plazo_fijo'], 
+    default: 'indefinido' 
+  })
+  tipoRecurrente: 'indefinido' | 'plazo_fijo';
+
+  // Campos SOLO para plazo_fijo
+  @Prop({ required: false })
+  totalPagos?: number; // Requerido si tipoRecurrente === 'plazo_fijo'
+
+  @Prop({ default: 0 })
+  pagosRealizados: number; // Inicia en 0, se incrementa con cada ejecución
+
+  @Prop()
+  fechaInicio?: Date; // Opcional (default: fecha de creación)
+
+  @Prop()
+  fechaFin?: Date; // Opcional (calculable basado en totalPagos y frecuencia)
 }
 
 export const RecurrenteSchema = SchemaFactory.createForClass(Recurrente);
