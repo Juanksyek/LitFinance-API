@@ -1,4 +1,4 @@
-import { Controller, Get, Req, Post, Body, Param, Put, Delete, Query, HttpCode, HttpStatus, UseGuards, Logger } from '@nestjs/common';
+import { Controller, Get, Req, Post, Body, Param, Put, Delete, Query, HttpCode, HttpStatus, UseGuards, Logger, Patch } from '@nestjs/common';
 import { RecurrentesService } from './recurrentes.service';
 import { RecurrentesTestService } from './recurrentes-test.service';
 import { CrearRecurrenteDto } from './dto/crear-recurrente.dto';
@@ -89,6 +89,24 @@ export class RecurrentesController {
   @Put(':recurrenteId/reanudar')
   async reanudar(@Param('recurrenteId') recurrenteId: string, @Req() req) {
     return this.recurrentesService.reanudarRecurrente(recurrenteId, req.user.id);
+  }
+
+  // Endpoint PATCH general para actualizaciones de estado
+  @Patch(':recurrenteId')
+  async actualizarEstado(
+    @Param('recurrenteId') recurrenteId: string,
+    @Body() body: { accion: 'pausar' | 'reactivar' },
+    @Req() req
+  ) {
+    const { accion } = body;
+    
+    if (accion === 'pausar') {
+      return this.recurrentesService.pausarRecurrente(recurrenteId, req.user.id);
+    } else if (accion === 'reactivar') {
+      return this.recurrentesService.reanudarRecurrente(recurrenteId, req.user.id);
+    } else {
+      throw new Error('Acción no válida. Use "pausar" o "reactivar"');
+    }
   }
 
   @Get('historial/estadisticas')
