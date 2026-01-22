@@ -17,19 +17,19 @@ export class PasswordReset {
   @Prop({ required: true, index: true })
   expiresAt: Date;
 
-  @Prop({ default: 0 })
+  @Prop({ type: Number, default: 0 })
   attempts: number;
 
-  @Prop({ default: null })
+  @Prop({ type: Date, default: null })
   lockedUntil: Date | null;
 
-  @Prop({ default: null })
+  @Prop({ type: Date, default: null })
   consumedAt: Date | null;
 
-  @Prop({ default: null })
+  @Prop({ type: Date, default: null })
   lastSentAt: Date | null;
 
-  @Prop({ default: 0 })
+  @Prop({ type: Number, default: 0 })
   resendCount: number;
 }
 
