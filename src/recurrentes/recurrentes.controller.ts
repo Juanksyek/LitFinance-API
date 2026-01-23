@@ -1,4 +1,4 @@
-import { Controller, Get, Req, Post, Body, Param, Put, Delete, Query, HttpCode, HttpStatus, UseGuards, Logger, Patch } from '@nestjs/common';
+import { Controller, Get, Req, Post, Body, Param, Put, Delete, Query, HttpCode, HttpStatus, UseGuards, Logger, Patch, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { RecurrentesService } from './recurrentes.service';
 import { RecurrentesTestService } from './recurrentes-test.service';
 import { CrearRecurrenteDto } from './dto/crear-recurrente.dto';
@@ -20,7 +20,7 @@ export class RecurrentesController {
   @Post()
   async crear(@Req() req, @Body() dto: CrearRecurrenteDto) {
     const userId = req.user.id;
-    const userPlanType = req.user.isPremium ? 'premium_plan' : 'free_plan';
+    const userPlanType = req.user.planType ?? (req.user.isPremium ? 'premium_plan' : 'free_plan');
 
     // Obtener el número actual de recurrentes del usuario
     const recurrentesActuales = await this.recurrentesService.contarRecurrentes(userId);
@@ -36,7 +36,7 @@ export class RecurrentesController {
     this.logger.log(`[Recurrente] userId: ${userId} allowed: ${validation.allowed} message: ${validation.message}`);
 
     if (!validation.allowed) {
-      throw new Error(validation.message || 'No puedes crear más recurrentes con tu plan actual');
+      throw new ForbiddenException(validation.message || 'No puedes crear más recurrentes con tu plan actual');
     }
 
     return this.recurrentesService.crear(dto, userId);
@@ -105,7 +105,7 @@ export class RecurrentesController {
     } else if (accion === 'reactivar') {
       return this.recurrentesService.reanudarRecurrente(recurrenteId, req.user.id);
     } else {
-      throw new Error('Acción no válida. Use "pausar" o "reactivar"');
+      throw new BadRequestException('Acción no válida. Use "pausar" o "reactivar"');
     }
   }
 
