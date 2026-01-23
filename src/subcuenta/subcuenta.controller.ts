@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Req, UseGuards, Query, Param, Patch, Delete, Logger } from '@nestjs/common';
+import { Controller, Post, Get, Body, Req, UseGuards, Query, Param, Patch, Delete, Logger, ForbiddenException } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { SubcuentaService } from './subcuenta.service';
 import { CreateSubcuentaDto } from './dto/create-subcuenta.dto/create-subcuenta.dto';
@@ -18,8 +18,7 @@ export class SubcuentaController {
   @Post()
   async crear(@Req() req, @Body() dto: CreateSubcuentaDto) {
     const userId = req.user.id;
-    // Determinar el plan basado en isPremium (todos los usuarios consumen las reglas generales)
-    const userPlanType = req.user.isPremium ? 'premium_plan' : 'free_plan';
+    const userPlanType = req.user.planType ?? (req.user.isPremium ? 'premium_plan' : 'free_plan');
 
     // Obtener el número actual de subcuentas del usuario
     const subcuentasActuales = await this.subcuentaService.contarSubcuentas(userId);
@@ -35,7 +34,7 @@ export class SubcuentaController {
     this.logger.log(`[Subcuenta] userId: ${userId} allowed: ${validation.allowed} message: ${validation.message}`);
 
     if (!validation.allowed) {
-      throw new Error(validation.message || 'No puedes crear más subcuentas con tu plan actual');
+      throw new ForbiddenException(validation.message || 'No puedes crear más subcuentas con tu plan actual');
     }
 
     return this.subcuentaService.crear(dto, userId);
