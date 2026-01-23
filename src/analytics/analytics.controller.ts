@@ -2,6 +2,8 @@ import { Controller, Get, Query, Req, UseGuards, ValidationPipe, UsePipes, Logge
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AnalyticsService } from './analytics.service';
 import { AnalyticsFiltersDto, MovimientosFiltersDto } from './dto/analytics-filters.dto';
+import { PlanAction } from '../plan-config/decorators/plan-action.decorator';
+import { PlanActionGuard } from '../plan-config/guards/plan-action.guard';
 import {
   ResumenFinanciero,
   EstadisticasPorConcepto,
@@ -89,6 +91,8 @@ export class AnalyticsController {
    */
   @Get('analisis-temporal')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @PlanAction('grafica')
+  @UseGuards(PlanActionGuard)
   async obtenerAnalisisTemporal(
     @Req() req: any,
     @Query() filtros: AnalyticsFiltersDto
@@ -105,6 +109,8 @@ export class AnalyticsController {
    */
   @Get('movimientos-detallados')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @PlanAction('grafica')
+  @UseGuards(PlanActionGuard)
   async obtenerMovimientosDetallados(
     @Req() req: any,
     @Query() filtros: MovimientosFiltersDto
@@ -121,6 +127,8 @@ export class AnalyticsController {
    */
   @Get('comparacion-periodos')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @PlanAction('grafica')
+  @UseGuards(PlanActionGuard)
   async compararPeriodos(
     @Req() req: any,
     @Query() filtros: AnalyticsFiltersDto
@@ -238,6 +246,8 @@ export class AnalyticsController {
    * Métricas específicas del mes actual vs mes anterior
    */
   @Get('metricas-mes-actual')
+  @PlanAction('grafica')
+  @UseGuards(PlanActionGuard)
   async obtenerMetricasMesActual(@Req() req: any): Promise<{
     mesActual: {
       ingresos: number;

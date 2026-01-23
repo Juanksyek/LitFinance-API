@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AnalyticsController } from '../analytics.controller';
 import { AnalyticsService } from '../analytics.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { PlanActionGuard } from '../../plan-config/guards/plan-action.guard';
 
 describe('AnalyticsController', () => {
   let controller: AnalyticsController;
@@ -21,6 +22,10 @@ describe('AnalyticsController', () => {
     canActivate: jest.fn(() => true),
   };
 
+  const mockPlanActionGuard = {
+    canActivate: jest.fn(() => true),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AnalyticsController],
@@ -33,6 +38,8 @@ describe('AnalyticsController', () => {
     })
       .overrideGuard(JwtAuthGuard)
       .useValue(mockJwtAuthGuard)
+      .overrideGuard(PlanActionGuard)
+      .useValue(mockPlanActionGuard)
       .compile();
 
     controller = module.get<AnalyticsController>(AnalyticsController);

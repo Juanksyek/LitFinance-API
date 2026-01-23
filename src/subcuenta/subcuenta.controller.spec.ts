@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SubcuentaController } from './subcuenta.controller';
 import { SubcuentaService } from './subcuenta.service';
+import { PlanConfigService } from '../plan-config/plan-config.service';
 
 describe('SubcuentaController', () => {
   let controller: SubcuentaController;
@@ -16,10 +17,17 @@ describe('SubcuentaController', () => {
     calcularParticipacion: jest.fn(),
   };
 
+  const mockPlanConfigService = {
+    canPerformAction: jest.fn(async () => ({ allowed: true })),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [SubcuentaController],
-      providers: [{ provide: SubcuentaService, useValue: mockService }],
+      providers: [
+        { provide: SubcuentaService, useValue: mockService },
+        { provide: PlanConfigService, useValue: mockPlanConfigService },
+      ],
     }).compile();
 
     controller = module.get<SubcuentaController>(SubcuentaController);

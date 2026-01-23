@@ -13,6 +13,8 @@ import { ConceptoPersonalizado, ConceptoPersonalizadoSchema } from '../conceptos
 import { MonedaModule } from '../moneda/moneda.module';
 import { UserModule } from '../user/user.module';
 import { UtilsModule } from '../utils/utils.module';
+import { PlanConfigModule } from '../plan-config/plan-config.module';
+import { PlanActionGuard } from '../plan-config/guards/plan-action.guard';
 
 @Module({
   imports: [
@@ -27,9 +29,10 @@ import { UtilsModule } from '../utils/utils.module';
     MonedaModule,
     UserModule,
     UtilsModule,
+    PlanConfigModule,
   ],
   controllers: [AnalyticsController],
-  providers: [AnalyticsService],
+  providers: [AnalyticsService, PlanActionGuard],
   exports: [
     AnalyticsService,
     MongooseModule,
