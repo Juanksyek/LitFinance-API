@@ -74,6 +74,10 @@ export class Recurrente {
   @Prop({ default: false })
   pausado: boolean;
 
+  // Indica si fue pausado automáticamente por expiración de premium
+  @Prop({ default: false })
+  pausadoPorPlan?: boolean;
+
   @Prop({ default: 'activo', enum: ['activo', 'ejecutando', 'error', 'pausado', 'completado'] })
   estado: string;
 
