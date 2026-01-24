@@ -181,12 +181,66 @@ export class RecurrentesService {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
+        .lean()
         .exec(),
       this.recurrenteModel.countDocuments(filtroBase),
     ]);
+
+    // Obtener el planType del usuario para calcular límites
+    let itemsWithPauseStatus = items;
+    try {
+      const userProfile = await this.userService.getProfile(userId);
+      const planType = userProfile?.planType || 'free_plan';
+      
+      // Límites por plan
+      const planLimits = {
+        premium_plan: Infinity,
+        free_plan: 10, // 10 recurrentes para plan free
+      };
+      
+      const planLimit = planLimits[planType] || planLimits.free_plan;
+      
+      console.log('🔍 [RecurrentesService] Aplicando límites:', {
+        userId,
+        totalCount: total,
+        planLimit,
+        planType,
+        currentPage: page,
+        skip,
+      });
+      
+      // Si excede el límite, marcar los más antiguos como pausados
+      if (total > planLimit) {
+        const startIndex = skip;
+        
+        itemsWithPauseStatus = items.map((rec, localIndex) => {
+          const globalIndex = startIndex + localIndex;
+          
+          // Los primeros 'planLimit' items globalmente están activos
+          // Los demás están pausados
+          const shouldBePaused = globalIndex >= planLimit;
+          
+          return {
+            ...rec,
+            pausadoPorPlan: shouldBePaused || rec.pausadoPorPlan || false,
+          };
+        });
+        
+        console.log('✅ [RecurrentesService] Items marcados:', 
+          itemsWithPauseStatus.map((r, i) => ({
+            nombre: r.nombre,
+            globalIndex: startIndex + i,
+            pausadoPorPlan: r.pausadoPorPlan,
+          }))
+        );
+      }
+    } catch (error) {
+      console.error('❌ [RecurrentesService] Error al aplicar límites:', error.message);
+      // En caso de error, devolver items sin modificar
+    }
   
     return {
-      items,
+      items: itemsWithPauseStatus,
       total,
       page,
       hasNextPage: page * limit < total,
