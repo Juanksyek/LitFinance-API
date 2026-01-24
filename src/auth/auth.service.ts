@@ -18,6 +18,7 @@ import { Moneda, MonedaDocument } from '../moneda/schema/moneda.schema';
 import { EmailService } from '../email/email.service';
 import { UserSession, UserSessionDocument } from './schemas/user-session.schema';
 import { RefreshAuthDto } from './dto/refresh-auth.dto';
+import { PlanAutoPauseService } from '../user/services/plan-auto-pause.service';
 
 @Injectable()
 export class AuthService {
@@ -28,6 +29,7 @@ export class AuthService {
                 @InjectModel(UserSession.name) private readonly sessionModel: Model<UserSessionDocument>,
                 private readonly jwtService: JwtService,
                 private readonly emailService: EmailService,
+                private readonly planAutoPauseService: PlanAutoPauseService,
     ) { }
 
     // Token settings (env overrides recommended)
@@ -243,6 +245,7 @@ export class AuthService {
 
         user.lastActivityAt = new Date();
         // Mantener premium consistente en cada login (Jar vs suscripción)
+        const wasPremium = user.isPremium ?? false;
         const reconciled = reconcileEntitlements(user as any, new Date());
         (user as any).isPremium = reconciled.isPremium;
         (user as any).planType = reconciled.planType;
@@ -255,6 +258,12 @@ export class AuthService {
         if ('premiumSubscriptionUntil' in reconciled) (user as any).premiumSubscriptionUntil = reconciled.premiumSubscriptionUntil;
 
         await user.save();
+        
+        // Detectar transición de premium y pausar/reanudar recursos
+        const isPremiumNow = reconciled.isPremium;
+        if (wasPremium !== isPremiumNow) {
+            await this.planAutoPauseService.handlePlanTransition(user.id, wasPremium, isPremiumNow);
+        }
 
         const cuentaPrincipal = await this.cuentaModel.findOne({ userId: user.id, isPrincipal: true });
 
