@@ -4,12 +4,16 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema/user.schema';
 import { reconcileEntitlements } from './premium-entitlements';
+import { PlanAutoPauseService } from './services/plan-auto-pause.service';
 
 @Injectable()
 export class PremiumCronService {
   private readonly logger = new Logger(PremiumCronService.name);
 
-  constructor(@InjectModel(User.name) private readonly userModel: Model<UserDocument>) {}
+  constructor(
+    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    private readonly planAutoPauseService: PlanAutoPauseService,
+  ) {}
 
   async onModuleInit() {
     try {
@@ -59,7 +63,7 @@ export class PremiumCronService {
           ],
         })
         .select(
-          '_id premiumSubscriptionId premiumSubscriptionStatus premiumSubscriptionUntil ' +
+          '_id id premiumSubscriptionId premiumSubscriptionStatus premiumSubscriptionUntil ' +
             'jarExpiresAt jarRemainingMs premiumUntil isPremium planType premiumBonusDays',
         )
         .limit(500)
@@ -71,8 +75,13 @@ export class PremiumCronService {
       }
 
       const bulkOps: any[] = [];
+      const transitionsToHandle: Array<{ userId: string; wasPremium: boolean; isPremiumNow: boolean }> = [];
+      
       for (const u of candidates) {
+        const wasPremium = u.isPremium ?? false;
         const reconciled = reconcileEntitlements(u as any, now);
+        const isPremiumNow = reconciled.isPremium;
+        
         const update: any = {
           isPremium: reconciled.isPremium,
           planType: reconciled.planType,
@@ -86,12 +95,32 @@ export class PremiumCronService {
         if ('premiumBonusDays' in reconciled) update.premiumBonusDays = reconciled.premiumBonusDays;
 
         bulkOps.push({ updateOne: { filter: { _id: u._id }, update: { $set: update } } });
+        
+        // Detectar transición de premium
+        if (wasPremium !== isPremiumNow) {
+          // Necesitamos el userId string (no el _id de Mongo)
+          const userIdStr = (u as any).id ?? String(u._id);
+          transitionsToHandle.push({ userId: userIdStr, wasPremium, isPremiumNow });
+        }
       }
 
       if (bulkOps.length > 0) {
         const res = await this.userModel.bulkWrite(bulkOps, { ordered: false });
         const updatedCount = (res as any).modifiedCount ?? (res as any).nModified ?? 0;
         this.logger.log(`🔧 Actualizados: ${updatedCount} usuarios`);
+        
+        // Pausar/reanudar recursos según transiciones detectadas
+        for (const transition of transitionsToHandle) {
+          try {
+            await this.planAutoPauseService.handlePlanTransition(
+              transition.userId, 
+              transition.wasPremium, 
+              transition.isPremiumNow
+            );
+          } catch (err: any) {
+            this.logger.error(`❌ Error pausando/reanudando recursos para ${transition.userId}: ${err?.message}`);
+          }
+        }
       } else {
         this.logger.log('✅ Ninguna actualización necesaria después de evaluación');
       }
