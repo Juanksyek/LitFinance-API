@@ -128,4 +128,75 @@ export class PremiumCronService {
       this.logger.error('❌ Error en reconcilePremiumStatus: ' + err?.message);
     }
   }
+
+  /**
+   * Alias para el cron (más claro para el endpoint admin)
+   */
+  async reconcilePremiumStates() {
+    return this.reconcilePremiumStatus();
+  }
+
+  /**
+   * 🎯 Reconcilia un único usuario específico
+   * Útil para testing o forzar manualmente la reconciliación de un usuario
+   */
+  async reconcileSingleUser(userId: string): Promise<{
+    userId: string;
+    wasPremium: boolean;
+    isPremiumNow: boolean;
+    transitionDetected: boolean;
+    resourcesAffected?: { subcuentas?: number; recurrentes?: number };
+  }> {
+    try {
+      const now = new Date();
+      const user = await this.userModel.findOne({ id: userId }).select(
+        '_id id premiumSubscriptionId premiumSubscriptionStatus premiumSubscriptionUntil ' +
+        'jarExpiresAt jarRemainingMs premiumUntil isPremium planType premiumBonusDays'
+      ).lean();
+
+      if (!user) {
+        throw new Error(`Usuario ${userId} no encontrado`);
+      }
+
+      const wasPremium = user.isPremium ?? false;
+      const reconciled = reconcileEntitlements(user as any, now);
+      const isPremiumNow = reconciled.isPremium;
+
+      // Actualizar usuario en DB
+      const update: any = {
+        isPremium: reconciled.isPremium,
+        planType: reconciled.planType,
+        premiumUntil: reconciled.premiumUntil,
+        jarExpiresAt: reconciled.jarExpiresAt,
+        jarRemainingMs: reconciled.jarRemainingMs,
+      };
+      if ('premiumSubscriptionId' in reconciled) update.premiumSubscriptionId = reconciled.premiumSubscriptionId;
+      if ('premiumSubscriptionStatus' in reconciled) update.premiumSubscriptionStatus = reconciled.premiumSubscriptionStatus;
+      if ('premiumSubscriptionUntil' in reconciled) update.premiumSubscriptionUntil = reconciled.premiumSubscriptionUntil;
+      if ('premiumBonusDays' in reconciled) update.premiumBonusDays = reconciled.premiumBonusDays;
+
+      await this.userModel.updateOne({ _id: user._id }, { $set: update });
+
+      const result: any = {
+        userId,
+        wasPremium,
+        isPremiumNow,
+        transitionDetected: wasPremium !== isPremiumNow,
+      };
+
+      // Si hay transición, pausar/reanudar recursos
+      if (wasPremium !== isPremiumNow) {
+        this.logger.log(`🔄 Transición detectada para ${userId}: ${wasPremium ? 'premium' : 'free'} → ${isPremiumNow ? 'premium' : 'free'}`);
+        const resourcesResult = await this.planAutoPauseService.handlePlanTransition(userId, wasPremium, isPremiumNow);
+        result.resourcesAffected = resourcesResult;
+      } else {
+        this.logger.log(`✅ Usuario ${userId} ya está sincronizado (isPremium: ${isPremiumNow})`);
+      }
+
+      return result;
+    } catch (err: any) {
+      this.logger.error(`❌ Error reconciliando usuario ${userId}: ${err?.message}`);
+      throw err;
+    }
+  }
 }
