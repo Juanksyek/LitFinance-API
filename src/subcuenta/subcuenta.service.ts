@@ -14,6 +14,7 @@ import { ConversionService } from '../utils/services/conversion.service';
 import { UserService } from '../user/user.service';
 import { Transaction, TransactionDocument } from '../transactions/schemas/transaction.schema/transaction.schema';
 import { HistorialRecurrente, HistorialRecurrenteDocument } from '../recurrentes/schemas/historial-recurrente.schema';
+import { PlanConfigService } from '../plan-config/plan-config.service';
 
 @Injectable()
 export class SubcuentaService {
@@ -27,6 +28,7 @@ export class SubcuentaService {
     private readonly cuentaHistorialService: CuentaHistorialService,
     private readonly conversionService: ConversionService,
     private readonly userService: UserService,
+    private readonly planConfigService: PlanConfigService,
   ) {}
 
   async obtenerMovimientosFinancieros(
@@ -279,13 +281,11 @@ export class SubcuentaService {
       const userProfile = await this.userService.getProfile(userId);
       const planType = userProfile?.planType || 'free_plan';
       
-      // Límites por plan
-      const planLimits = {
-        premium_plan: Infinity,
-        free_plan: 5, // 5 subcuentas para plan free
-      };
-      
-      const planLimit = planLimits[planType] || planLimits.free_plan;
+      // 🔥 Consultar límite dinámicamente desde PlanConfig
+      const planConfig = await this.planConfigService.findByPlanType(planType);
+      const planLimit = planConfig?.subcuentasPorUsuario === -1 
+        ? Infinity 
+        : (planConfig?.subcuentasPorUsuario || 5);
       
       console.log('🔍 [SubcuentaService] Aplicando límites:', {
         userId,
