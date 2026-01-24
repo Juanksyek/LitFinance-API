@@ -19,6 +19,9 @@ import { Cuenta, CuentaSchema } from '../cuenta/schemas/cuenta.schema/cuenta.sch
 import { Transaction, TransactionSchema } from '../transactions/schemas/transaction.schema/transaction.schema';
 import { CuentaHistorial, CuentaHistorialSchema } from '../cuenta-historial/schemas/cuenta-historial.schema';
 import { Moneda, MonedaSchema } from '../moneda/schema/moneda.schema';
+import { Subcuenta, SubcuentaSchema } from '../subcuenta/schemas/subcuenta.schema/subcuenta.schema';
+import { Recurrente, RecurrenteSchema } from '../recurrentes/schemas/recurrente.schema';
+import { PlanAutoPauseService } from './services/plan-auto-pause.service';
 
 @Module({
   imports: [
@@ -27,7 +30,9 @@ import { Moneda, MonedaSchema } from '../moneda/schema/moneda.schema';
       { name: Cuenta.name, schema: CuentaSchema },
       { name: Transaction.name, schema: TransactionSchema },
       { name: CuentaHistorial.name, schema: CuentaHistorialSchema },
-      { name: Moneda.name, schema: MonedaSchema }
+      { name: Moneda.name, schema: MonedaSchema },
+      { name: Subcuenta.name, schema: SubcuentaSchema },
+      { name: Recurrente.name, schema: RecurrenteSchema },
     ]),
     forwardRef(() => CuentaModule),
     forwardRef(() => SubcuentaModule),
@@ -38,7 +43,7 @@ import { Moneda, MonedaSchema } from '../moneda/schema/moneda.schema';
     UtilsModule
   ],
   controllers: [UserController],
-  providers: [UserService, CleanupService, CurrencyConversionService, PremiumCronService, SubscriptionVerifyCronService],
-  exports: [UserService, MongooseModule, CurrencyConversionService],
+  providers: [UserService, CleanupService, CurrencyConversionService, PremiumCronService, SubscriptionVerifyCronService, PlanAutoPauseService],
+  exports: [UserService, MongooseModule, CurrencyConversionService, PlanAutoPauseService],
 })
 export class UserModule {}

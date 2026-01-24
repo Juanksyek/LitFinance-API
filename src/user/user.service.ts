@@ -5,14 +5,18 @@ import { User, UserDocument } from './schemas/user.schema/user.schema';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { Moneda, MonedaDocument } from '../moneda/schema/moneda.schema';
 import { reconcileEntitlements } from './premium-entitlements';
+import { PlanAutoPauseService } from './services/plan-auto-pause.service';
 
 @Injectable()
 export class UserService {
     async syncPremiumStatus(userId: string) {
       const user = await this.userModel.findOne({ id: userId });
       if (!user) return;
+      
+      const wasPremium = user.isPremium ?? false;
       const now = new Date();
       const reconciled = reconcileEntitlements(user as any, now);
+      
       const set: any = {
         isPremium: reconciled.isPremium,
         planType: reconciled.planType,
@@ -26,11 +30,19 @@ export class UserService {
       if ('premiumBonusDays' in reconciled) set.premiumBonusDays = reconciled.premiumBonusDays;
 
       await this.userModel.updateOne({ id: userId }, { $set: set });
+      
+      // Detectar transición de premium y pausar/reanudar recursos automáticamente
+      const isPremiumNow = reconciled.isPremium;
+      if (wasPremium !== isPremiumNow) {
+        await this.planAutoPauseService.handlePlanTransition(userId, wasPremium, isPremiumNow);
+      }
+      
       return reconciled.isPremium;
     }
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(Moneda.name) private readonly monedaModel: Model<MonedaDocument>,
+    private readonly planAutoPauseService: PlanAutoPauseService,
   ) {}
 
   async getProfile(userId: string) {

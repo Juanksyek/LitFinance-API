@@ -43,6 +43,10 @@ export class Subcuenta {
   @Prop({ default: true })
   activa: boolean;
 
+  // Indica si fue pausada automáticamente por expiración de premium
+  @Prop({ default: false })
+  pausadaPorPlan?: boolean;
+
   // Campos de conversión (se calculan cuando afectaCuenta=true y moneda != monedaPrincipal del usuario)
   @Prop()
   montoConvertido?: number; // Monto convertido a monedaPrincipal del usuario
