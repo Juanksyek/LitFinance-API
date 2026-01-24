@@ -119,15 +119,19 @@ export class PlanAutoPauseService {
     userId: string, 
     wasPremium: boolean, 
     isPremiumNow: boolean
-  ): Promise<void> {
+  ): Promise<{ subcuentas?: number; recurrentes?: number }> {
     // Perdió premium
     if (wasPremium && !isPremiumNow) {
-      await this.pauseOnPremiumExpiry(userId);
+      const result = await this.pauseOnPremiumExpiry(userId);
+      return { subcuentas: result.subcuentasPausadas, recurrentes: result.recurrentesPausados };
     }
     
     // Recuperó premium
     if (!wasPremium && isPremiumNow) {
-      await this.resumeOnPremiumReactivation(userId);
+      const result = await this.resumeOnPremiumReactivation(userId);
+      return { subcuentas: result.subcuentasReanudadas, recurrentes: result.recurrentesReanudados };
     }
+
+    return {};
   }
 }

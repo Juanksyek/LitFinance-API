@@ -9,6 +9,7 @@ import { applyJarCredit, msFromJarDays, reconcileEntitlements } from '../user/pr
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PlanAutoPauseService } from '../user/services/plan-auto-pause.service';
 
 function parseStripeSignature(sigHeader: string): { t?: string; v1s: string[] } {
   const parts = sigHeader.split(',').map(s => s.trim());
@@ -22,6 +23,7 @@ export class StripeController {
   constructor(
     private readonly stripeSvc: StripeService,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    private readonly planAutoPauseService: PlanAutoPauseService,
   ) {}
 
   private readonly logger = new Logger(StripeController.name);
@@ -849,6 +851,7 @@ export class StripeController {
           const user = await this.findByStripeCustomerId(customerId);
           
           if (user) {
+            const wasPremium = user.isPremium ?? false;
             const currentPeriodEnd = new Date(subscription.current_period_end * 1000);
             
             this.logger.log(
@@ -861,6 +864,17 @@ export class StripeController {
               premiumSubscriptionStatus: subscription.status || 'active',
               premiumSubscriptionUntil: currentPeriodEnd,
             });
+            
+            // Reconciliar y detectar cambio premium
+            const reconciled = reconcileEntitlements(user as any, new Date());
+            const isPremiumNow = reconciled.isPremium;
+            
+            // Si recuperó premium, reanudar recursos
+            if (!wasPremium && isPremiumNow) {
+              this.logger.log(`[invoice.paid] Usuario recuperó premium, reanudando recursos...`);
+              const userId = (user as any).id ?? String(user._id);
+              await this.planAutoPauseService.resumeOnPremiumReactivation(userId);
+            }
           } else {
             this.logger.warn(`[invoice.paid] Usuario no encontrado para customerId: ${customerId}`);
           }
@@ -876,6 +890,7 @@ export class StripeController {
         this.logger.log(`[customer.subscription.updated] customerId: ${customerId}, subId: ${sub.id}, status: ${sub.status}, current_period_end: ${currentPeriodEnd.toISOString()}`);
         const user = await this.findByStripeCustomerId(customerId);
         if (user) {
+          const wasPremium = user.isPremium ?? false;
           this.logger.log(`[customer.subscription.updated] Actualizando usuario`);
           // Guardar periodo de suscripción (sin mezclar con Jar)
           await this.patchUser(user, {
@@ -883,6 +898,17 @@ export class StripeController {
             premiumSubscriptionStatus: sub.status,
             premiumSubscriptionUntil: currentPeriodEnd,
           });
+          
+          // Reconciliar y detectar cambio premium
+          const reconciled = reconcileEntitlements(user as any, new Date());
+          const isPremiumNow = reconciled.isPremium;
+          const userId = (user as any).id ?? String(user._id);
+          
+          // Detectar transición y pausar/reanudar automáticamente
+          if (wasPremium !== isPremiumNow) {
+            this.logger.log(`[customer.subscription.updated] Transición detectada: wasPremium=${wasPremium}, isPremiumNow=${isPremiumNow}`);
+            await this.planAutoPauseService.handlePlanTransition(userId, wasPremium, isPremiumNow);
+          }
         } else {
           this.logger.warn(`[customer.subscription.updated] Usuario no encontrado para customerId: ${customerId}`);
         }
@@ -895,6 +921,7 @@ export class StripeController {
         this.logger.log(`[customer.subscription.deleted] customerId: ${customerId}`);
         const user = await this.findByStripeCustomerId(customerId);
         if (user) {
+          const wasPremium = user.isPremium ?? false;
           this.logger.log(`[customer.subscription.deleted] Actualizando premiumSubscriptionStatus a canceled`);
           const periodEnd = sub?.current_period_end ? new Date(sub.current_period_end * 1000) : null;
           await this.patchUser(user, {
@@ -902,6 +929,16 @@ export class StripeController {
             premiumSubscriptionStatus: sub.status || 'canceled',
             premiumSubscriptionUntil: periodEnd,
           });
+          
+          // Reconciliar y pausar recursos si perdió premium
+          const reconciled = reconcileEntitlements(user as any, new Date());
+          const isPremiumNow = reconciled.isPremium;
+          const userId = (user as any).id ?? String(user._id);
+          
+          if (wasPremium && !isPremiumNow) {
+            this.logger.log(`[customer.subscription.deleted] Usuario perdió premium, pausando recursos...`);
+            await this.planAutoPauseService.pauseOnPremiumExpiry(userId);
+          }
         } else {
           this.logger.warn(`[customer.subscription.deleted] Usuario no encontrado para customerId: ${customerId}`);
         }
