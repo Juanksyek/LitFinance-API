@@ -39,7 +39,7 @@ import { PlanAutoPauseService } from './services/plan-auto-pause.service';
     TransactionsModule,
     CuentaHistorialModule,
     MonedaModule,
-    StripeModule,
+    forwardRef(() => StripeModule),
     UtilsModule
   ],
   controllers: [UserController],
