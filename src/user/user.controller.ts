@@ -7,6 +7,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ToggleFavoritaMonedaDto } from '../moneda/dto/toggle-favorita-moneda.dto';
 import { SubscriptionVerifyCronService } from './subscription-verify-cron.service';
+import { PremiumCronService } from './premium-cron.service';
 
 @Controller('user')
 export class UserController {
@@ -14,6 +15,7 @@ export class UserController {
         private readonly userService: UserService,
               private readonly cleanupService: CleanupService,
               @Optional() private readonly subscriptionVerifyCronService?: SubscriptionVerifyCronService,
+              @Optional() private readonly premiumCronService?: PremiumCronService,
     ) { }
 
     @UseGuards(JwtAuthGuard)
@@ -88,5 +90,50 @@ export class UserController {
                 return { message: 'Verification completed', result };
             }
             return { message: 'Service not available' };
+        }
+
+        /**
+         * 🔥 Endpoint para forzar reconciliación de recursos (pausar/reanudar según estado premium)
+         * 
+         * POST /user/admin/reconcile-premium-resources
+         * Body (opcional): { userId?: string }
+         * 
+         * - Sin userId: Reconcilia TODOS los usuarios (puede tardar con muchos usuarios)
+         * - Con userId: Reconcilia solo ese usuario específico
+         * 
+         * Retorna estadísticas de usuarios procesados y recursos pausados/reanudados
+         */
+        @UseGuards(JwtAuthGuard, RolesGuard)
+        @Roles('admin')
+        @Post('admin/reconcile-premium-resources')
+        async adminReconcilePremiumResources(@Body() body?: { userId?: string }) {
+            if (!this.premiumCronService) {
+                return { message: 'PremiumCronService not available', success: false };
+            }
+
+            try {
+                if (body?.userId) {
+                    // Reconciliar un usuario específico
+                    const result = await this.premiumCronService.reconcileSingleUser(body.userId);
+                    return {
+                        success: true,
+                        message: `Usuario ${body.userId} reconciliado`,
+                        ...result,
+                    };
+                } else {
+                    // Reconciliar todos los usuarios
+                    await this.premiumCronService.reconcilePremiumStates();
+                    return {
+                        success: true,
+                        message: 'Reconciliación de todos los usuarios completada (ver logs para detalles)',
+                    };
+                }
+            } catch (error) {
+                return {
+                    success: false,
+                    message: 'Error durante reconciliación',
+                    error: error.message,
+                };
+            }
         }
 }
