@@ -261,10 +261,72 @@ export class SubcuentaService {
     if (subCuentaId) query.subCuentaId = subCuentaId;
     if (search) query.nombre = { $regex: search, $options: 'i' };
   
-    return this.subcuentaModel
-      .find(query)
-      .skip((page - 1) * limit)
-      .limit(limit);
+    const skip = (page - 1) * limit;
+    
+    const [items, totalCount] = await Promise.all([
+      this.subcuentaModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      this.subcuentaModel.countDocuments(query),
+    ]);
+
+    // Obtener el planType del usuario para calcular límites
+    let itemsWithPauseStatus = items;
+    try {
+      const userProfile = await this.userService.getProfile(userId);
+      const planType = userProfile?.planType || 'free_plan';
+      
+      // Límites por plan
+      const planLimits = {
+        premium_plan: Infinity,
+        free_plan: 5, // 5 subcuentas para plan free
+      };
+      
+      const planLimit = planLimits[planType] || planLimits.free_plan;
+      
+      console.log('🔍 [SubcuentaService] Aplicando límites:', {
+        userId,
+        totalCount,
+        planLimit,
+        planType,
+        currentPage: page,
+        skip,
+      });
+      
+      // Si excede el límite, marcar las más antiguas como pausadas
+      if (totalCount > planLimit) {
+        const startIndex = skip;
+        
+        itemsWithPauseStatus = items.map((sub, localIndex) => {
+          const globalIndex = startIndex + localIndex;
+          
+          // Las primeras 'planLimit' items globalmente están activas
+          // Las demás están pausadas
+          const shouldBePaused = globalIndex >= planLimit;
+          
+          return {
+            ...sub,
+            pausadaPorPlan: shouldBePaused || sub.pausadaPorPlan || false,
+          };
+        });
+        
+        console.log('✅ [SubcuentaService] Items marcadas:', 
+          itemsWithPauseStatus.map((s, i) => ({
+            nombre: s.nombre,
+            globalIndex: startIndex + i,
+            pausadaPorPlan: s.pausadaPorPlan,
+          }))
+        );
+      }
+    } catch (error) {
+      console.error('❌ [SubcuentaService] Error al aplicar límites:', error.message);
+      // En caso de error, devolver items sin modificar
+    }
+    
+    return itemsWithPauseStatus;
   }
 
   async buscarPorSubCuentaId(subCuentaId: string) {
