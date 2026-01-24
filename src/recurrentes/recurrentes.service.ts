@@ -14,6 +14,7 @@ import { MonedaService } from '../moneda/moneda.service';
 import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.service';
 import { ConversionService } from '../utils/services/conversion.service';
 import { UserService } from '../user/user.service';
+import { PlanConfigService } from '../plan-config/plan-config.service';
 
 @Injectable()
 export class RecurrentesService {
@@ -28,6 +29,7 @@ export class RecurrentesService {
     private readonly cuentaHistorialService: CuentaHistorialService,
     private readonly conversionService: ConversionService,
     private readonly userService: UserService,
+    private readonly planConfigService: PlanConfigService,
   ) {}
 
   async crear(dto: CrearRecurrenteDto, userId: string): Promise<Recurrente> {
@@ -192,13 +194,11 @@ export class RecurrentesService {
       const userProfile = await this.userService.getProfile(userId);
       const planType = userProfile?.planType || 'free_plan';
       
-      // Límites por plan
-      const planLimits = {
-        premium_plan: Infinity,
-        free_plan: 10, // 10 recurrentes para plan free
-      };
-      
-      const planLimit = planLimits[planType] || planLimits.free_plan;
+      // 🔥 Consultar límite dinámicamente desde PlanConfig
+      const planConfig = await this.planConfigService.findByPlanType(planType);
+      const planLimit = planConfig?.recurrentesPorUsuario === -1 
+        ? Infinity 
+        : (planConfig?.recurrentesPorUsuario || 10);
       
       console.log('🔍 [RecurrentesService] Aplicando límites:', {
         userId,
