@@ -15,6 +15,7 @@ import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.ser
 import { ConversionService } from '../utils/services/conversion.service';
 import { UserService } from '../user/user.service';
 import { PlanConfigService } from '../plan-config/plan-config.service';
+import { DashboardVersionService } from '../user/services/dashboard-version.service';
 
 @Injectable()
 export class RecurrentesService {
@@ -30,6 +31,7 @@ export class RecurrentesService {
     private readonly conversionService: ConversionService,
     private readonly userService: UserService,
     private readonly planConfigService: PlanConfigService,
+    private readonly dashboardVersionService: DashboardVersionService,
   ) {}
 
   async crear(dto: CrearRecurrenteDto, userId: string): Promise<Recurrente> {
@@ -95,6 +97,8 @@ export class RecurrentesService {
         dto.frecuenciaValor
       ),
     });
+
+    await this.dashboardVersionService.touchDashboard(userId, 'recurrente.create');
 
     return await nuevo.save();
   }
@@ -294,6 +298,8 @@ export class RecurrentesService {
       },
     });
 
+    await this.dashboardVersionService.touchDashboard(recurrente.userId, 'recurrente.update');
+
     return actualizado;
   }
 
@@ -330,6 +336,8 @@ export class RecurrentesService {
     const res = await this.recurrenteModel.deleteOne({ recurrenteId });
 
     if (res.deletedCount > 0) {
+
+      await this.dashboardVersionService.touchDashboard(recurrente.userId, 'recurrente.delete');
       return {
         eliminado: true,
         mensaje: `El recurrente con ID ${recurrenteId} fue eliminado correctamente.`,
@@ -707,6 +715,8 @@ export class RecurrentesService {
       mensajeError: undefined,
       observacion: '⏸ Recurrente pausado por el usuario',
     });
+
+    await this.dashboardVersionService.touchDashboard(userId, 'recurrente.pause');
   
     return { mensaje: `Recurrente "${recurrente.nombre}" pausado correctamente.` };
   }
@@ -736,6 +746,8 @@ export class RecurrentesService {
       mensajeError: undefined,
       observacion: '▶️ Recurrente reanudado por el usuario',
     });
+
+    await this.dashboardVersionService.touchDashboard(userId, 'recurrente.resume');
   
     return { mensaje: `Recurrente \"${recurrente.nombre}\" reanudado correctamente.` };
   }
