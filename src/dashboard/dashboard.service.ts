@@ -7,6 +7,7 @@ import { Subcuenta, SubcuentaDocument } from '../subcuenta/schemas/subcuenta.sch
 import { Recurrente, RecurrenteDocument } from '../recurrentes/schemas/recurrente.schema';
 import { Transaction, TransactionDocument } from '../transactions/schemas/transaction.schema/transaction.schema';
 import { PlanConfigService } from '../plan-config/plan-config.service';
+import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.service';
 
 type SnapshotRange = 'week' | 'month' | 'year';
 
@@ -37,6 +38,7 @@ export class DashboardService {
     @InjectModel(Recurrente.name) private readonly recurrenteModel: Model<RecurrenteDocument>,
     @InjectModel(Transaction.name) private readonly transactionModel: Model<TransactionDocument>,
     private readonly planConfigService: PlanConfigService,
+    private readonly cuentaHistorialService: CuentaHistorialService,
   ) {}
 
   async getDashboardVersion(userId: string): Promise<string> {
@@ -196,6 +198,10 @@ export class DashboardService {
         .exec(),
     ]);
 
+    const recentHistory = cuenta?.id
+      ? await this.cuentaHistorialService.buscarHistorial(String(cuenta.id), recentPage, recentLimit)
+      : { total: 0, page: recentPage, limit: recentLimit, data: [] };
+
     const ingresosPeriodo = Number(periodAgg?.find((x: any) => x._id === 'ingreso')?.total ?? 0);
     const egresosPeriodo = Number(periodAgg?.find((x: any) => x._id === 'egreso')?.total ?? 0);
 
@@ -253,6 +259,23 @@ export class DashboardService {
         subCuentaId: t.subCuentaId ?? null,
         createdAt: t.createdAt,
       })),
+      recentHistory: {
+        total: recentHistory.total,
+        page: recentHistory.page,
+        limit: recentHistory.limit,
+        data: (recentHistory.data ?? []).map((h: any) => ({
+          id: h.id ?? String(h._id ?? ''),
+          tipo: h.tipo,
+          descripcion: h.descripcion,
+          monto: h.monto,
+          fecha: h.fecha,
+          motivo: h.motivo ?? null,
+          subcuentaId: h.subcuentaId ?? null,
+          conceptoId: h.conceptoId ?? null,
+          detalles: h.detalles ?? null,
+          metadata: h.metadata ?? null,
+        })),
+      },
       chartAggregates: {
         range,
         start: start.toISOString(),
