@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Subcuenta, SubcuentaDocument } from '../../subcuenta/schemas/subcuenta.schema/subcuenta.schema';
 import { Recurrente, RecurrenteDocument } from '../../recurrentes/schemas/recurrente.schema';
+import { DashboardVersionService } from './dashboard-version.service';
 
 @Injectable()
 export class PlanAutoPauseService {
@@ -11,6 +12,7 @@ export class PlanAutoPauseService {
   constructor(
     @InjectModel(Subcuenta.name) private subcuentaModel: Model<SubcuentaDocument>,
     @InjectModel(Recurrente.name) private recurrenteModel: Model<RecurrenteDocument>,
+    private readonly dashboardVersionService: DashboardVersionService,
   ) {}
 
   /**
@@ -123,12 +125,22 @@ export class PlanAutoPauseService {
     // Perdió premium
     if (wasPremium && !isPremiumNow) {
       const result = await this.pauseOnPremiumExpiry(userId);
+
+      if (result.subcuentasPausadas > 0 || result.recurrentesPausados > 0) {
+        await this.dashboardVersionService.touchDashboard(userId, 'premium.expired');
+      }
+
       return { subcuentas: result.subcuentasPausadas, recurrentes: result.recurrentesPausados };
     }
     
     // Recuperó premium
     if (!wasPremium && isPremiumNow) {
       const result = await this.resumeOnPremiumReactivation(userId);
+
+      if (result.subcuentasReanudadas > 0 || result.recurrentesReanudados > 0) {
+        await this.dashboardVersionService.touchDashboard(userId, 'premium.reactivated');
+      }
+
       return { subcuentas: result.subcuentasReanudadas, recurrentes: result.recurrentesReanudados };
     }
 
