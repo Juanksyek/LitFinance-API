@@ -11,6 +11,7 @@ import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.ser
 import { generateUniqueId } from '../utils/generate-id';
 import { ConversionService } from '../utils/services/conversion.service';
 import { UserService } from '../user/user.service';
+import { DashboardVersionService } from '../user/services/dashboard-version.service';
 
 @Injectable()
 export class TransactionsService {
@@ -22,6 +23,7 @@ export class TransactionsService {
     private readonly historialService: CuentaHistorialService,
     private readonly conversionService: ConversionService,
     private readonly userService: UserService,
+    private readonly dashboardVersionService: DashboardVersionService,
   ) {}
 
   async crear(dto: CreateTransactionDto, userId: string) {
@@ -80,6 +82,8 @@ export class TransactionsService {
       motivo: dto.motivo,
       concepto: dto.concepto
     });
+
+    await this.dashboardVersionService.touchDashboard(userId, 'transaction.create');
   
     return {
       transaccion: guardada,
@@ -128,6 +132,8 @@ export class TransactionsService {
         motivo: dto.motivo,
       });
     }
+
+    await this.dashboardVersionService.touchDashboard(userId, 'transaction.update');
   
     return actualizada;
   }
@@ -143,6 +149,8 @@ export class TransactionsService {
       descripcion: 'Transacción eliminada',
       datos: { concepto: transaccion.concepto, monto: transaccion.monto },
     });
+
+    await this.dashboardVersionService.touchDashboard(userId, 'transaction.delete');
 
     return { message: 'Transacción eliminada correctamente' };
   }
