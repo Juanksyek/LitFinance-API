@@ -118,6 +118,13 @@ export class User {
   // Fecha fin efectiva de premium (derivada: suscripción si aplica, si no Jar)
   @Prop({ type: Date, required: false })
   premiumUntil?: Date;
+
+  // Dashboard snapshot versioning (ETag)
+  @Prop({ type: Number, default: 0 })
+  dashboardVersion?: number;
+
+  @Prop({ type: Date, required: false })
+  dashboardUpdatedAt?: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
