@@ -10,6 +10,8 @@ import { Transaction } from '../transactions/schemas/transaction.schema/transact
 import { HistorialRecurrente } from '../recurrentes/schemas/historial-recurrente.schema';
 import { ConversionService } from '../utils/services/conversion.service';
 import { UserService } from '../user/user.service';
+import { PlanConfigService } from '../plan-config/plan-config.service';
+import { DashboardVersionService } from '../user/services/dashboard-version.service';
 
 describe('SubcuentaService', () => {
   let service: SubcuentaService;
@@ -40,6 +42,14 @@ describe('SubcuentaService', () => {
     getProfile: jest.fn().mockResolvedValue({ monedaPrincipal: 'MXN' }),
   };
 
+  const mockPlanConfigService = {
+    findByPlanType: jest.fn().mockResolvedValue({ limits: { subcuentasPorUsuario: -1 } }),
+  };
+
+  const mockDashboardVersionService = {
+    touchDashboard: jest.fn().mockResolvedValue(undefined),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -53,6 +63,8 @@ describe('SubcuentaService', () => {
         { provide: CuentaHistorialService, useValue: mockCuentaHistorialService },
         { provide: ConversionService, useValue: mockConversionService },
         { provide: UserService, useValue: mockUserService },
+        { provide: PlanConfigService, useValue: mockPlanConfigService },
+        { provide: DashboardVersionService, useValue: mockDashboardVersionService },
       ],
     }).compile();
 
