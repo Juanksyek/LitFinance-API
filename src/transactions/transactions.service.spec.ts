@@ -5,6 +5,7 @@ import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.ser
 import { NotFoundException } from '@nestjs/common';
 import { ConversionService } from '../utils/services/conversion.service';
 import { UserService } from '../user/user.service';
+import { DashboardVersionService } from '../user/services/dashboard-version.service';
 
 describe('TransactionsService', () => {
   let service: TransactionsService;
@@ -55,6 +56,10 @@ describe('TransactionsService', () => {
     getProfile: jest.fn().mockResolvedValue({ monedaPrincipal: 'MXN' }),
   };
 
+  const mockDashboardVersionService = {
+    touchDashboard: jest.fn().mockResolvedValue(undefined),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -66,6 +71,7 @@ describe('TransactionsService', () => {
         { provide: CuentaHistorialService, useValue: mockHistorialService },
         { provide: ConversionService, useValue: mockConversionService },
         { provide: UserService, useValue: mockUserService },
+        { provide: DashboardVersionService, useValue: mockDashboardVersionService },
       ],
     }).compile();
 
