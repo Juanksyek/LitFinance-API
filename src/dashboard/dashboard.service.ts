@@ -13,6 +13,11 @@ type SnapshotRange = 'week' | 'month' | 'year';
 type SnapshotOptions = {
   range?: SnapshotRange;
   recentLimit?: number;
+  recentPage?: number;
+  subaccountsLimit?: number;
+  subaccountsPage?: number;
+  recurrentesLimit?: number;
+  recurrentesPage?: number;
 };
 
 type Cached = {
@@ -64,11 +69,32 @@ export class DashboardService {
 
   async getSnapshot(userId: string, version: string, opts?: SnapshotOptions) {
     const { range, start, end } = this.resolveRange(opts?.range);
-    const requestedRecentLimit = Number(opts?.recentLimit);
-    const recentLimitBase = Number.isFinite(requestedRecentLimit) ? requestedRecentLimit : 15;
-    const recentLimit = Math.min(20, Math.max(10, recentLimitBase));
 
-    const cacheKey = `${userId}:${version}:${range}:${recentLimit}`;
+    const clampInt = (value: unknown, fallback: number, min: number, max: number) => {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      const i = Math.trunc(n);
+      return Math.min(max, Math.max(min, i));
+    };
+
+    // Movimientos (transacciones)
+    const requestedRecentLimit = Number(opts?.recentLimit);
+    const recentLimitBase = Number.isFinite(requestedRecentLimit) ? requestedRecentLimit : 20;
+    const recentLimit = Math.min(20, Math.max(10, Math.trunc(recentLimitBase)));
+    const recentPage = clampInt(opts?.recentPage, 1, 1, 10_000);
+    const recentSkip = (recentPage - 1) * recentLimit;
+
+    // Subcuentas
+    const subaccountsLimit = clampInt(opts?.subaccountsLimit, 50, 10, 50);
+    const subaccountsPage = clampInt(opts?.subaccountsPage, 1, 1, 10_000);
+    const subaccountsSkip = (subaccountsPage - 1) * subaccountsLimit;
+
+    // Recurrentes
+    const recurrentesLimit = clampInt(opts?.recurrentesLimit, 50, 10, 50);
+    const recurrentesPage = clampInt(opts?.recurrentesPage, 1, 1, 10_000);
+    const recurrentesSkip = (recurrentesPage - 1) * recurrentesLimit;
+
+    const cacheKey = `${userId}:${version}:${range}:tx:${recentLimit}:${recentPage}:sub:${subaccountsLimit}:${subaccountsPage}:rec:${recurrentesLimit}:${recurrentesPage}`;
     const cached = this.microCache.get(cacheKey);
     const nowMs = Date.now();
     if (cached && nowMs < cached.expiresAt) {
@@ -95,22 +121,25 @@ export class DashboardService {
         .find({ userId })
         .select('subCuentaId nombre cantidad moneda simbolo color activa pausadaPorPlan')
         .sort({ createdAt: -1 })
-        .limit(50)
+        .skip(subaccountsSkip)
+        .limit(subaccountsLimit)
         .lean(),
 
       this.recurrenteModel
         .find({ userId })
         .select(
-          'recurrenteId nombre monto moneda frecuenciaTipo frecuenciaValor proximaEjecucion pausado pausadoPorPlan estado',
+          'recurrenteId nombre monto moneda frecuenciaTipo frecuenciaValor proximaEjecucion pausado pausadoPorPlan estado plataforma',
         )
         .sort({ createdAt: -1 })
-        .limit(50)
+        .skip(recurrentesSkip)
+        .limit(recurrentesLimit)
         .lean(),
 
       this.transactionModel
         .find({ userId })
         .select('transaccionId tipo monto montoConvertido moneda monedaConvertida concepto cuentaId subCuentaId createdAt')
         .sort({ createdAt: -1 })
+        .skip(recentSkip)
         .limit(recentLimit)
         .lean(),
 
@@ -202,6 +231,7 @@ export class DashboardService {
       recurrentesSummary: (recurrentes ?? []).map((r: any) => ({
         id: r.recurrenteId,
         nombre: r.nombre,
+        color: r?.plataforma?.color ?? null,
         monto: r.monto,
         moneda: r.moneda,
         frecuenciaTipo: r.frecuenciaTipo ?? null,
