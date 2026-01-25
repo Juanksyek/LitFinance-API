@@ -8,6 +8,7 @@ import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { PlanConfigService } from '../plan-config.service';
 import { PLAN_ACTION_KEY, PlanActionType } from '../decorators/plan-action.decorator';
+import { PremiumRequiredException } from '../exceptions/premium-required.exception';
 
 @Injectable()
 export class PlanActionGuard implements CanActivate {
@@ -42,7 +43,7 @@ export class PlanActionGuard implements CanActivate {
     );
 
     if (!validation.allowed) {
-      throw new ForbiddenException(validation.message || 'Acción no permitida en tu plan');
+      throw new PremiumRequiredException(validation.message || 'Acción no permitida en tu plan');
     }
 
     return true;

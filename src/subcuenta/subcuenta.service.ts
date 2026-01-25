@@ -15,6 +15,7 @@ import { UserService } from '../user/user.service';
 import { Transaction, TransactionDocument } from '../transactions/schemas/transaction.schema/transaction.schema';
 import { HistorialRecurrente, HistorialRecurrenteDocument } from '../recurrentes/schemas/historial-recurrente.schema';
 import { PlanConfigService } from '../plan-config/plan-config.service';
+import { DashboardVersionService } from '../user/services/dashboard-version.service';
 
 @Injectable()
 export class SubcuentaService {
@@ -29,6 +30,7 @@ export class SubcuentaService {
     private readonly conversionService: ConversionService,
     private readonly userService: UserService,
     private readonly planConfigService: PlanConfigService,
+    private readonly dashboardVersionService: DashboardVersionService,
   ) {}
 
   async obtenerMovimientosFinancieros(
@@ -246,6 +248,8 @@ export class SubcuentaService {
       descripcion: 'Subcuenta creada exitosamente',
       datos: { ...dto, cuentaPrincipalId, subCuentaId },
     });
+
+    await this.dashboardVersionService.touchDashboard(userId, 'subcuenta.create');
   
     return {
       ...creada.toObject(),
@@ -388,6 +392,8 @@ export class SubcuentaService {
         descripcion: 'Subcuenta modificada exitosamente',
         datos: cambios,
       });
+
+      await this.dashboardVersionService.touchDashboard(actualizado.userId, 'subcuenta.update');
     }
   
     return actualizado;
@@ -451,6 +457,8 @@ export class SubcuentaService {
         descripcion: 'Subcuenta eliminada exitosamente',
         datos: { id },
       });
+
+      await this.dashboardVersionService.touchDashboard(userId, 'subcuenta.delete');
   
       return { message: 'Subcuenta eliminada' };
   
@@ -496,6 +504,8 @@ export class SubcuentaService {
       descripcion: 'Subcuenta desactivada',
       datos: { activa: false },
     });
+
+    await this.dashboardVersionService.touchDashboard(userId, 'subcuenta.deactivate');
   
     return updated;
   }
@@ -516,6 +526,8 @@ export class SubcuentaService {
       descripcion: 'Subcuenta reactivada',
       datos: { activa: true },
     });
+
+    await this.dashboardVersionService.touchDashboard(userId, 'subcuenta.activate');
   
     return updated;
   }

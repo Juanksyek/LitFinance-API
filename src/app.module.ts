@@ -24,6 +24,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { ReportsModule } from './reports/reports.module';
 import { StripeModule } from './stripe/stripe.module';
 import { PlanConfigModule } from './plan-config/plan-config.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { PlanConfigModule } from './plan-config/plan-config.module';
     ReportsModule,
     StripeModule,
     PlanConfigModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [

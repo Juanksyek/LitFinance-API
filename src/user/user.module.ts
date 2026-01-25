@@ -22,6 +22,7 @@ import { Moneda, MonedaSchema } from '../moneda/schema/moneda.schema';
 import { Subcuenta, SubcuentaSchema } from '../subcuenta/schemas/subcuenta.schema/subcuenta.schema';
 import { Recurrente, RecurrenteSchema } from '../recurrentes/schemas/recurrente.schema';
 import { PlanAutoPauseService } from './services/plan-auto-pause.service';
+import { DashboardVersionService } from './services/dashboard-version.service';
 
 @Module({
   imports: [
@@ -43,7 +44,15 @@ import { PlanAutoPauseService } from './services/plan-auto-pause.service';
     UtilsModule
   ],
   controllers: [UserController],
-  providers: [UserService, CleanupService, CurrencyConversionService, PremiumCronService, SubscriptionVerifyCronService, PlanAutoPauseService],
-  exports: [UserService, MongooseModule, CurrencyConversionService, PlanAutoPauseService],
+  providers: [
+    UserService,
+    CleanupService,
+    CurrencyConversionService,
+    PremiumCronService,
+    SubscriptionVerifyCronService,
+    PlanAutoPauseService,
+    DashboardVersionService,
+  ],
+  exports: [UserService, MongooseModule, CurrencyConversionService, PlanAutoPauseService, DashboardVersionService],
 })
 export class UserModule {}
