@@ -17,7 +17,7 @@ export class DashboardController {
     @Req() req: Request,
     @Res() res: Response,
     @Headers('if-none-match') ifNoneMatch?: string,
-    @Query('range') range?: 'week' | 'month' | 'year',
+    @Query('range') range?: 'day' | 'week' | 'month' | '3months' | '6months' | 'year',
     @Query('recentLimit') recentLimit?: string,
     @Query('recentPage') recentPage?: string,
     @Query('subaccountsLimit') subaccountsLimit?: string,
@@ -73,7 +73,15 @@ export class DashboardController {
       return res.status(HttpStatus.NOT_MODIFIED).send();
     }
 
-    const safeRange = range === 'week' || range === 'month' || range === 'year' ? range : undefined;
+    const safeRange =
+      range === 'day' ||
+      range === 'week' ||
+      range === 'month' ||
+      range === '3months' ||
+      range === '6months' ||
+      range === 'year'
+        ? range
+        : undefined;
     const safeRecentLimit = recentLimit ? Number(recentLimit) : undefined;
     const safeSubaccountsLimit = subaccountsLimit ? Number(subaccountsLimit) : undefined;
     const safeRecurrentesLimit = recurrentesLimit ? Number(recurrentesLimit) : undefined;
