@@ -9,7 +9,7 @@ import { Transaction, TransactionDocument } from '../transactions/schemas/transa
 import { PlanConfigService } from '../plan-config/plan-config.service';
 import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.service';
 
-type SnapshotRange = 'week' | 'month' | 'year';
+type SnapshotRange = 'day' | 'week' | 'month' | '3months' | '6months' | 'year';
 
 type SnapshotOptions = {
   range?: SnapshotRange;
@@ -57,8 +57,14 @@ export class DashboardService {
     const r: SnapshotRange = range ?? 'month';
 
     const start = new Date(now);
-    if (r === 'week') {
+    if (r === 'day') {
+      start.setDate(start.getDate() - 1);
+    } else if (r === 'week') {
       start.setDate(start.getDate() - 7);
+    } else if (r === '3months') {
+      start.setMonth(start.getMonth() - 3);
+    } else if (r === '6months') {
+      start.setMonth(start.getMonth() - 6);
     } else if (r === 'year') {
       start.setFullYear(start.getFullYear() - 1);
     } else {
@@ -71,6 +77,29 @@ export class DashboardService {
 
   async getSnapshot(userId: string, version: string, opts?: SnapshotOptions) {
     const { range, start, end } = this.resolveRange(opts?.range);
+
+    const chartGranularity: 'hour' | 'day' | 'month' =
+      range === 'day' ? 'hour' : range === 'year' ? 'month' : 'day';
+
+    const chartDateFormat =
+      chartGranularity === 'hour'
+        ? '%Y-%m-%dT%H:00'
+        : chartGranularity === 'month'
+          ? '%Y-%m'
+          : '%Y-%m-%d';
+
+    const chartMaxPoints =
+      chartGranularity === 'hour'
+        ? 48
+        : chartGranularity === 'month'
+          ? 24
+          : range === '6months'
+            ? 250
+            : range === '3months'
+              ? 120
+              : range === 'month'
+                ? 60
+                : 30;
 
     const clampInt = (value: unknown, fallback: number, min: number, max: number) => {
       const n = Number(value);
@@ -105,13 +134,29 @@ export class DashboardService {
 
     const user = await this.userModel
       .findOne({ id: userId })
-      .select('id planType isPremium monedaPrincipal monedaPreferencia dashboardVersion')
+      .select('id nombreCompleto planType isPremium monedaPrincipal monedaPreferencia monedasFavoritas dashboardVersion')
       .lean();
 
     const planType = (user as any)?.planType ?? 'free_plan';
     const isPremium = !!(user as any)?.isPremium;
 
     const planConfig = await this.planConfigService.findByPlanType(planType);
+
+    const toLimitValue = (value: unknown): number | null => {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    const toLimitItem = (key: string, label: string, value: unknown) => {
+      const limit = toLimitValue(value);
+      const unlimited = limit === -1;
+      return {
+        key,
+        label,
+        limit,
+        unlimited,
+      };
+    };
 
     const [cuenta, subcuentas, recurrentes, recentTransactions, periodAgg, chartPoints] = await Promise.all([
       this.cuentaModel
@@ -172,14 +217,14 @@ export class DashboardService {
             $project: {
               tipo: 1,
               amount: { $ifNull: ['$montoConvertido', '$monto'] },
-              day: {
-                $dateToString: { format: '%Y-%m-%d', date: '$createdAt' },
+              bucket: {
+                $dateToString: { format: chartDateFormat, date: '$createdAt' },
               },
             },
           },
           {
             $group: {
-              _id: '$day',
+              _id: '$bucket',
               ingreso: {
                 $sum: {
                   $cond: [{ $eq: ['$tipo', 'ingreso'] }, '$amount', 0],
@@ -193,7 +238,7 @@ export class DashboardService {
             },
           },
           { $sort: { _id: 1 } },
-          { $limit: 90 },
+          { $limit: chartMaxPoints },
         ])
         .exec(),
     ]);
@@ -216,6 +261,34 @@ export class DashboardService {
           transaccionesPorDia: planConfig?.transaccionesPorDia ?? null,
           historicoLimitadoDias: planConfig?.historicoLimitadoDias ?? null,
         },
+        limitsV2: {
+          planType,
+          updatedAt: (planConfig as any)?.updatedAt ? new Date((planConfig as any).updatedAt).toISOString() : null,
+          items: [
+            toLimitItem('subcuentas', 'Subcuentas', planConfig?.subcuentasPorUsuario),
+            toLimitItem('recurrentes', 'Recurrentes', planConfig?.recurrentesPorUsuario),
+            toLimitItem('transaccionesPorDia', 'Transacciones por día', planConfig?.transaccionesPorDia),
+            toLimitItem('historicoLimitadoDias', 'Histórico (días)', planConfig?.historicoLimitadoDias),
+          ],
+        },
+        ranges: {
+          selected: range,
+          available: [
+            { key: 'day', label: 'Día' },
+            { key: 'week', label: 'Semana' },
+            { key: 'month', label: 'Mes' },
+            { key: '3months', label: '3 meses' },
+            { key: '6months', label: '6 meses' },
+            { key: 'year', label: 'Año' },
+          ],
+        },
+      },
+      viewer: {
+        id: (user as any)?.id ?? userId,
+        nombreCompleto: (user as any)?.nombreCompleto ?? null,
+        monedaPrincipal: (user as any)?.monedaPrincipal ?? null,
+        monedaPreferencia: (user as any)?.monedaPreferencia ?? null,
+        monedasFavoritas: Array.isArray((user as any)?.monedasFavoritas) ? (user as any).monedasFavoritas : [],
       },
       accountSummary: {
         cuentaId: cuenta?.id ?? null,
@@ -278,6 +351,7 @@ export class DashboardService {
       },
       chartAggregates: {
         range,
+        granularity: chartGranularity,
         start: start.toISOString(),
         end: end.toISOString(),
         points: (chartPoints ?? []).map((p: any) => ({
