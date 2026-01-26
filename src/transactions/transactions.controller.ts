@@ -30,8 +30,21 @@ import { Controller, Post, Get, Body, Param, Patch, Delete, Query, Req, UseGuard
     }
   
     @Get()
-      async listar(@Req() req, @Query('rango') rango?: string) {
-        return this.transactionsService.listar(req.user.id, rango);
+        async listar(
+          @Req() req,
+          @Query('rango') rango?: string,
+          @Query('fechaInicio') fechaInicio?: string,
+          @Query('fechaFin') fechaFin?: string,
+          @Query('moneda') moneda?: string,
+          @Query('withTotals') withTotals?: string,
+        ) {
+          return this.transactionsService.listar(req.user.id, {
+            rango,
+            fechaInicio,
+            fechaFin,
+            moneda,
+            withTotals: withTotals === 'true' || withTotals === '1',
+          });
     }
   
     @Get('subcuenta/:id/historial')
