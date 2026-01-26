@@ -155,59 +155,97 @@ export class TransactionsService {
     return { message: 'Transacción eliminada correctamente' };
   }
 
-  async listar(userId: string, rango?: string) {
+  async listar(
+    userId: string,
+    input?:
+      | string
+      | {
+          rango?: string;
+          fechaInicio?: string;
+          fechaFin?: string;
+          moneda?: string;
+          withTotals?: boolean;
+        },
+  ) {
+    const opts = typeof input === 'string' ? { rango: input } : (input ?? {});
     const query: any = { userId };
-  
-    if (rango) {
+
+    const parseDateInput = (value: string, isEnd: boolean): Date => {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return new Date(isEnd ? `${value}T23:59:59.999Z` : `${value}T00:00:00.000Z`);
+      }
+      return new Date(value);
+    };
+
+    // Si vienen fechas explícitas, siempre priorizarlas
+    if (opts.fechaInicio && opts.fechaFin) {
+      const desde = parseDateInput(opts.fechaInicio, false);
+      const hasta = parseDateInput(opts.fechaFin, true);
+      query.createdAt = { $gte: desde, $lte: hasta };
+    } else if (opts.rango) {
       const now = new Date();
       let desde: Date | null = null;
       let hasta: Date | null = null;
-  
-      switch (rango) {
+
+      switch (opts.rango) {
         case 'dia':
           desde = new Date(now);
           desde.setHours(0, 0, 0, 0);
           hasta = new Date(now);
           hasta.setHours(23, 59, 59, 999);
           break;
-  
         case 'semana':
           desde = new Date(now);
           desde.setDate(now.getDate() - 7);
           break;
-  
         case 'mes':
           desde = new Date(now);
           desde.setMonth(now.getMonth() - 1);
           break;
-  
         case '3meses':
           desde = new Date(now);
           desde.setMonth(now.getMonth() - 3);
           break;
-  
         case '6meses':
           desde = new Date(now);
           desde.setMonth(now.getMonth() - 6);
           break;
-  
         case 'año':
           desde = new Date(now);
           desde.setFullYear(now.getFullYear() - 1);
           break;
-  
         default:
           break;
       }
-  
+
       if (desde && hasta) {
         query.createdAt = { $gte: desde, $lte: hasta };
       } else if (desde) {
         query.createdAt = { $gte: desde };
       }
     }
-  
-    return this.transactionModel.find(query).sort({ createdAt: -1 });
+
+    if (opts.moneda) {
+      query.$or = [{ moneda: opts.moneda }, { monedaConvertida: opts.moneda }];
+    }
+
+    const data = await this.transactionModel.find(query).sort({ createdAt: -1 });
+
+    if (!opts.withTotals) {
+      return data;
+    }
+
+    const totals = (data ?? []).reduce(
+      (acc: { ingresos: number; egresos: number }, t: any) => {
+        const amount = Number(t?.montoConvertido ?? t?.monto ?? 0);
+        if (t?.tipo === 'ingreso') acc.ingresos += amount;
+        if (t?.tipo === 'egreso') acc.egresos += amount;
+        return acc;
+      },
+      { ingresos: 0, egresos: 0 },
+    );
+
+    return { data, totals };
   }
 
   async obtenerHistorial({ subCuentaId, desde, hasta, limite, pagina, descripcion }) {

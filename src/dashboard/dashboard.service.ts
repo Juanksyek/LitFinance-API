@@ -13,6 +13,10 @@ type SnapshotRange = 'day' | 'week' | 'month' | '3months' | '6months' | 'year';
 
 type SnapshotOptions = {
   range?: SnapshotRange;
+  fechaInicio?: string;
+  fechaFin?: string;
+  tipoTransaccion?: 'ingreso' | 'egreso' | 'ambos';
+  moneda?: string;
   recentLimit?: number;
   recentPage?: number;
   subaccountsLimit?: number;
@@ -51,10 +55,28 @@ export class DashboardService {
     return String(versionNum);
   }
 
-  private resolveRange(range?: SnapshotRange): { range: SnapshotRange; start: Date; end: Date } {
+  private resolveRange(opts?: SnapshotOptions): { range: SnapshotRange; start: Date; end: Date; isCustom: boolean } {
+    const parseDateInput = (value: string, isEnd: boolean): Date => {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return new Date(isEnd ? `${value}T23:59:59.999Z` : `${value}T00:00:00.000Z`);
+      }
+      return new Date(value);
+    };
+
     const now = new Date();
+    const defaultRange: SnapshotRange = opts?.range ?? 'month';
+
+    // Si vienen fechas explícitas, siempre usarlas (ignorando el range)
+    if (opts?.fechaInicio && opts?.fechaFin) {
+      const start = parseDateInput(opts.fechaInicio, false);
+      const end = parseDateInput(opts.fechaFin, true);
+      if (Number.isFinite(start.getTime()) && Number.isFinite(end.getTime()) && start.getTime() <= end.getTime()) {
+        return { range: defaultRange, start, end, isCustom: true };
+      }
+    }
+
     const end = new Date(now);
-    const r: SnapshotRange = range ?? 'month';
+    const r: SnapshotRange = defaultRange;
 
     const start = new Date(now);
     if (r === 'day') {
@@ -68,15 +90,14 @@ export class DashboardService {
     } else if (r === 'year') {
       start.setFullYear(start.getFullYear() - 1);
     } else {
-      // month
       start.setMonth(start.getMonth() - 1);
     }
 
-    return { range: r, start, end };
+    return { range: r, start, end, isCustom: false };
   }
 
   async getSnapshot(userId: string, version: string, opts?: SnapshotOptions) {
-    const { range, start, end } = this.resolveRange(opts?.range);
+    const { range, start, end, isCustom } = this.resolveRange(opts);
 
     const chartGranularity: 'hour' | 'day' | 'month' =
       range === 'day' ? 'hour' : range === 'year' ? 'month' : 'day';
@@ -125,7 +146,10 @@ export class DashboardService {
     const recurrentesPage = clampInt(opts?.recurrentesPage, 1, 1, 10_000);
     const recurrentesSkip = (recurrentesPage - 1) * recurrentesLimit;
 
-    const cacheKey = `${userId}:${version}:${range}:tx:${recentLimit}:${recentPage}:sub:${subaccountsLimit}:${subaccountsPage}:rec:${recurrentesLimit}:${recurrentesPage}`;
+    const tipo = opts?.tipoTransaccion ?? 'ambos';
+    const moneda = (opts?.moneda ?? '').trim();
+    const customKey = isCustom ? `${opts?.fechaInicio ?? ''}_${opts?.fechaFin ?? ''}` : '';
+    const cacheKey = `${userId}:${version}:${range}:${customKey}:tipo:${tipo}:moneda:${moneda}:tx:${recentLimit}:${recentPage}:sub:${subaccountsLimit}:${subaccountsPage}:rec:${recurrentesLimit}:${recurrentesPage}`;
     const cached = this.microCache.get(cacheKey);
     const nowMs = Date.now();
     if (cached && nowMs < cached.expiresAt) {
@@ -157,6 +181,13 @@ export class DashboardService {
         unlimited,
       };
     };
+
+    const tipoMatch = tipo !== 'ambos' ? { tipo } : {};
+    const monedaMatch = moneda
+      ? {
+          $or: [{ moneda }, { monedaConvertida: moneda }],
+        }
+      : {};
 
     const [cuenta, subcuentas, recurrentes, recentTransactions, periodAgg, chartPoints] = await Promise.all([
       this.cuentaModel
@@ -192,7 +223,7 @@ export class DashboardService {
 
       this.transactionModel
         .aggregate([
-          { $match: { userId, createdAt: { $gte: start, $lte: end } } },
+          { $match: { userId, createdAt: { $gte: start, $lte: end }, ...tipoMatch, ...monedaMatch } },
           {
             $project: {
               tipo: 1,
@@ -212,11 +243,11 @@ export class DashboardService {
 
       this.transactionModel
         .aggregate([
-          { $match: { userId, createdAt: { $gte: start, $lte: end } } },
+          { $match: { userId, createdAt: { $gte: start, $lte: end }, ...tipoMatch, ...monedaMatch } },
           {
             $project: {
               tipo: 1,
-              amount: { $ifNull: ['$montoConvertido', '$monto'] },
+              amount: { $abs: { $ifNull: ['$montoConvertido', '$monto'] } },
               bucket: {
                 $dateToString: { format: chartDateFormat, date: '$createdAt' },
               },
@@ -281,6 +312,12 @@ export class DashboardService {
             { key: '6months', label: '6 meses' },
             { key: 'year', label: 'Año' },
           ],
+        },
+        query: {
+          tipoTransaccion: tipo,
+          moneda: moneda || null,
+          fechaInicio: opts?.fechaInicio ?? null,
+          fechaFin: opts?.fechaFin ?? null,
         },
       },
       viewer: {
@@ -357,7 +394,7 @@ export class DashboardService {
         points: (chartPoints ?? []).map((p: any) => ({
           x: p._id,
           in: p.ingreso,
-          out: p.egreso,
+          out: -Math.abs(p.egreso),
         })),
       },
     };

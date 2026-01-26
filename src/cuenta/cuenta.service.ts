@@ -34,10 +34,15 @@ export class CuentaService {
     // Buscar usuario para extraer premiumSubscriptionStatus y premiumUntil
     const usuario = await this.userModel.findOne({ id: userId });
     const cuentaObj = cuenta.toObject();
-    return Object.assign({}, cuentaObj, {
+    return {
+      // Backward-compatible (se mantiene el objeto original)
+      ...cuentaObj,
+      // Shape estandarizado (recomendado)
+      saldo: cuentaObj?.cantidad ?? 0,
+      moneda: cuentaObj?.moneda ?? (usuario as any)?.monedaPreferencia ?? (usuario as any)?.monedaPrincipal ?? 'MXN',
       premiumSubscriptionStatus: usuario?.premiumSubscriptionStatus || null,
       premiumUntil: usuario?.premiumUntil || null,
-    });
+    };
   }
 
   async obtenerVistaPrevia(userId: string, nuevaMoneda: string) {
