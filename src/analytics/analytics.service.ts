@@ -300,40 +300,63 @@ export class AnalyticsService {
     const { fechaInicio, fechaFin } = this.calcularRangoFechas(filtros);
     const periodoAnalisis = this.determinarPeriodoAnalisis(fechaInicio, fechaFin);
 
+    // Preferir granularidad según el filtro si se proporciona
+    const rangoTiempo = filtros.rangoTiempo ?? 'mes';
+
     // Definir el formato de agrupación según el periodo
     let formatoFecha: string;
     let intervalo: number;
 
-    switch (periodoAnalisis) {
-      case 'diario':
-        formatoFecha = '%Y-%m-%d';
-        intervalo = 24 * 60 * 60 * 1000; // 1 día en ms
-        break;
-      case 'semanal':
-        formatoFecha = '%Y-%U'; // Año-Semana
-        intervalo = 7 * 24 * 60 * 60 * 1000; // 1 semana en ms
-        break;
-      case 'mensual':
-        formatoFecha = '%Y-%m';
-        intervalo = 30 * 24 * 60 * 60 * 1000; // 30 días en ms
-        break;
+    if (rangoTiempo === 'año') {
+      formatoFecha = '%Y-%m';
+      intervalo = 30 * 24 * 60 * 60 * 1000;
+    } else if (rangoTiempo === 'dia') {
+      formatoFecha = '%Y-%m-%d';
+      intervalo = 24 * 60 * 60 * 1000;
+    } else {
+      // semana/mes/3meses/6meses/personalizado: daily buckets
+      formatoFecha = '%Y-%m-%d';
+      intervalo = 24 * 60 * 60 * 1000;
     }
+
+    // Filtro opcional de monedas (match tanto moneda como monedaConvertida)
+    const monedaMatch = Array.isArray((filtros as any)?.monedas) && (filtros as any).monedas.length
+      ? {
+          $or: [
+            { moneda: { $in: (filtros as any).monedas } },
+            { monedaConvertida: { $in: (filtros as any).monedas } },
+          ],
+        }
+      : {};
+
+    const tipoMatch = filtros.tipoTransaccion && filtros.tipoTransaccion !== 'ambos'
+      ? { tipo: filtros.tipoTransaccion }
+      : {};
 
     // Pipeline de agregación para datos temporales
     const pipeline = [
       {
         $match: {
           userId,
-          createdAt: { $gte: fechaInicio, $lte: fechaFin }
+          createdAt: { $gte: fechaInicio, $lte: fechaFin },
+          ...tipoMatch,
+          ...monedaMatch,
         }
+      },
+      {
+        $project: {
+          tipo: 1,
+          amount: { $abs: { $ifNull: ['$montoConvertido', '$monto'] } },
+          bucket: { $dateToString: { format: formatoFecha, date: '$createdAt' } },
+        },
       },
       {
         $group: {
           _id: {
-            fecha: { $dateToString: { format: formatoFecha, date: '$createdAt' } },
+            fecha: '$bucket',
             tipo: '$tipo'
           },
-          monto: { $sum: '$monto' },
+          monto: { $sum: '$amount' },
           cantidad: { $sum: 1 }
         }
       },
@@ -369,11 +392,19 @@ export class AnalyticsService {
     // Calcular promedios
     const promedios = this.calcularPromedios(datos);
 
+    const points = datos.map((d) => ({
+      x: d.fecha,
+      in: d.ingresos,
+      out: -Math.abs(d.gastos),
+    }));
+
     return {
       periodoAnalisis,
+      range: rangoTiempo,
+      points,
       datos,
       tendencias,
-      promedios
+      promedios,
     };
   }
 
@@ -556,11 +587,25 @@ export class AnalyticsService {
   }
 
   private calcularRangoFechas(filtros: AnalyticsFiltersDto): { fechaInicio: Date; fechaFin: Date } {
-    if (filtros.rangoTiempo === 'personalizado' && filtros.fechaInicio && filtros.fechaFin) {
-      return {
-        fechaInicio: new Date(filtros.fechaInicio),
-        fechaFin: new Date(filtros.fechaFin)
-      };
+    const parseDateInput = (value: string, isEnd: boolean): Date => {
+      // Si viene como YYYY-MM-DD, lo interpretamos como día completo (UTC) para evitar ambigüedad.
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return new Date(isEnd ? `${value}T23:59:59.999Z` : `${value}T00:00:00.000Z`);
+      }
+      return new Date(value);
+    };
+
+    // Si vienen fechas explícitas, siempre priorizarlas (ignorando rangoTiempo)
+    if (filtros.fechaInicio && filtros.fechaFin) {
+      const fechaInicio = parseDateInput(filtros.fechaInicio, false);
+      const fechaFin = parseDateInput(filtros.fechaFin, true);
+      if (!Number.isFinite(fechaInicio.getTime()) || !Number.isFinite(fechaFin.getTime())) {
+        throw new BadRequestException('fechaInicio/fechaFin inválidas');
+      }
+      if (fechaInicio.getTime() > fechaFin.getTime()) {
+        throw new BadRequestException('fechaInicio no puede ser mayor que fechaFin');
+      }
+      return { fechaInicio, fechaFin };
     }
 
     const ahora = new Date();
@@ -570,7 +615,10 @@ export class AnalyticsService {
       case 'dia':
         fechaInicio = new Date(ahora);
         fechaInicio.setHours(0, 0, 0, 0);
-        break;
+        // Para día, cubrir el día completo
+        const finDia = new Date(ahora);
+        finDia.setHours(23, 59, 59, 999);
+        return { fechaInicio, fechaFin: finDia };
       case 'semana':
         fechaInicio = new Date(ahora);
         fechaInicio.setDate(ahora.getDate() - 7);
@@ -606,6 +654,13 @@ export class AnalyticsService {
       userId,
       createdAt: { $gte: fechaInicio, $lte: fechaFin }
     };
+
+    if (filtros.monedas?.length) {
+      query.$or = [
+        { moneda: { $in: filtros.monedas } },
+        { monedaConvertida: { $in: filtros.monedas } },
+      ];
+    }
 
     if (filtros.subcuentas?.length) {
       query.subCuentaId = { $in: filtros.subcuentas };
