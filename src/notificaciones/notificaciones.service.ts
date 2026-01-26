@@ -22,6 +22,42 @@ export class NotificacionesService {
     });
   }
 
+  private async sleep(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private isTransientExpoError(error: any): boolean {
+    const status = Number(error?.statusCode);
+    if (status === 503 || status === 502 || status === 504) return true;
+    const msg = String(error?.message ?? error?.errorText ?? '').toLowerCase();
+    return (
+      msg.includes('upstream') ||
+      msg.includes('disconnect') ||
+      msg.includes('reset before headers') ||
+      msg.includes('timeout')
+    );
+  }
+
+  private async sendChunkWithRetry(chunk: ExpoPushMessage[], maxAttempts = 3): Promise<ExpoPushTicket[]> {
+    let lastError: any;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await this.expo.sendPushNotificationsAsync(chunk);
+      } catch (error) {
+        lastError = error;
+        if (!this.isTransientExpoError(error) || attempt === maxAttempts) {
+          throw error;
+        }
+        const backoffMs = 250 * Math.pow(2, attempt - 1);
+        this.logger.warn(
+          `⚠️ Expo push transient error (attempt ${attempt}/${maxAttempts}). Retrying in ${backoffMs}ms...`,
+        );
+        await this.sleep(backoffMs);
+      }
+    }
+    throw lastError;
+  }
+
   // Registrar token de EXPO para un usuario
   async registrarExpoPushToken(userId: string, expoPushToken: string): Promise<{ registrado: boolean }> {
     if (!Expo.isExpoPushToken(expoPushToken)) {
@@ -92,7 +128,7 @@ export class NotificacionesService {
       const tickets: ExpoPushTicket[] = [];
 
       for (const chunk of chunks) {
-        const ticketChunk = await this.expo.sendPushNotificationsAsync(chunk);
+        const ticketChunk = await this.sendChunkWithRetry(chunk);
         tickets.push(...ticketChunk);
       }
 
@@ -103,7 +139,8 @@ export class NotificacionesService {
       return { enviado: true, tickets };
     } catch (error) {
       this.logger.error(`❌ Error enviando notificación a usuario ${userId}:`, error);
-      throw error;
+      // No lanzar: evitar que CRON/tareas fallen por problemas transitorios de Expo.
+      return { enviado: false };
     }
   }
 
