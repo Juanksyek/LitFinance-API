@@ -18,6 +18,10 @@ export class DashboardController {
     @Res() res: Response,
     @Headers('if-none-match') ifNoneMatch?: string,
     @Query('range') range?: 'day' | 'week' | 'month' | '3months' | '6months' | 'year',
+    @Query('fechaInicio') fechaInicio?: string,
+    @Query('fechaFin') fechaFin?: string,
+    @Query('tipoTransaccion') tipoTransaccion?: 'ingreso' | 'egreso' | 'ambos',
+    @Query('moneda') moneda?: string,
     @Query('recentLimit') recentLimit?: string,
     @Query('recentPage') recentPage?: string,
     @Query('subaccountsLimit') subaccountsLimit?: string,
@@ -88,6 +92,10 @@ export class DashboardController {
 
     const snapshot = await this.dashboardService.getSnapshot(String(userId), version, {
       range: safeRange,
+      fechaInicio,
+      fechaFin,
+      tipoTransaccion,
+      moneda,
       recentLimit: safeRecentLimit,
       recentPage: safeRecentPage,
       subaccountsLimit: safeSubaccountsLimit,
