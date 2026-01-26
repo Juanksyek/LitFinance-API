@@ -28,6 +28,29 @@ export class StripeController {
 
   private readonly logger = new Logger(StripeController.name);
 
+  private toValidDateOrNull(value: unknown): Date | null {
+    if (value === null || value === undefined) return null;
+    if (value instanceof Date) return Number.isFinite(value.getTime()) ? value : null;
+
+    // Stripe timestamps are usually unix seconds. Sometimes they can arrive as strings.
+    const n = typeof value === 'string' ? Number(value) : (value as any);
+    if (typeof n === 'number' && Number.isFinite(n)) {
+      // Heuristic: if it's already in ms, keep it; else treat as seconds.
+      const ms = n > 1e12 ? n : n * 1000;
+      const d = new Date(ms);
+      return Number.isFinite(d.getTime()) ? d : null;
+    }
+
+    return null;
+  }
+
+  private safeIso(date: Date | null | undefined): string {
+    if (!date) return 'null';
+    const t = date.getTime();
+    if (!Number.isFinite(t)) return 'null';
+    return date.toISOString();
+  }
+
   private getAuthUserId(req: any) {
     const id = req.user?.id;
     if (!id) throw new BadRequestException('req.user.id missing');
@@ -852,17 +875,19 @@ export class StripeController {
           
           if (user) {
             const wasPremium = user.isPremium ?? false;
-            const currentPeriodEnd = new Date(subscription.current_period_end * 1000);
+            const resolvedPeriodEnd =
+              this.toValidDateOrNull((subscription as any)?.current_period_end) ??
+              (await this.stripeSvc.resolveSubscriptionPeriodEnd(subscription).catch(() => null));
             
             this.logger.log(
               `[invoice.paid] Actualizando usuario: subscriptionId=${subscriptionId}, status=${subscription.status || 'active'}, ` +
-              `periodEnd=${currentPeriodEnd.toISOString()}`,
+              `periodEnd=${this.safeIso(resolvedPeriodEnd)}`,
             );
             // Guardar periodo de suscripción (sin mezclar con Jar)
             await this.patchUser(user, {
               premiumSubscriptionId: subscriptionId,
               premiumSubscriptionStatus: subscription.status || 'active',
-              premiumSubscriptionUntil: currentPeriodEnd,
+              premiumSubscriptionUntil: resolvedPeriodEnd ?? (user as any).premiumSubscriptionUntil ?? null,
             });
             
             // Reconciliar y detectar cambio premium
@@ -885,9 +910,11 @@ export class StripeController {
       case 'customer.subscription.updated': {
         const sub: any = event.data.object;
         const customerId = sub.customer;
-        const currentPeriodEnd = new Date(sub.current_period_end * 1000);
+        const currentPeriodEnd = this.toValidDateOrNull(sub?.current_period_end);
         
-        this.logger.log(`[customer.subscription.updated] customerId: ${customerId}, subId: ${sub.id}, status: ${sub.status}, current_period_end: ${currentPeriodEnd.toISOString()}`);
+        this.logger.log(
+          `[customer.subscription.updated] customerId: ${customerId}, subId: ${sub.id}, status: ${sub.status}, current_period_end: ${this.safeIso(currentPeriodEnd)}`,
+        );
         const user = await this.findByStripeCustomerId(customerId);
         if (user) {
           const wasPremium = user.isPremium ?? false;
@@ -896,7 +923,7 @@ export class StripeController {
           await this.patchUser(user, {
             premiumSubscriptionId: sub.id,
             premiumSubscriptionStatus: sub.status,
-            premiumSubscriptionUntil: currentPeriodEnd,
+            premiumSubscriptionUntil: currentPeriodEnd ?? (user as any).premiumSubscriptionUntil ?? null,
           });
           
           // Reconciliar y detectar cambio premium
