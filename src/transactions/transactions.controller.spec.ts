@@ -32,9 +32,15 @@ describe('TransactionsController', () => {
     const rango = '2023-01-01_2023-01-31';
     mockService.listar.mockResolvedValue(['mock']);
 
-    const result = await controller.listar(mockReq, rango);
+    const result = await controller.listar(mockReq, rango, undefined, undefined, undefined, undefined);
     expect(result).toEqual(['mock']);
-    expect(mockService.listar).toHaveBeenCalledWith('usuario123', rango);
+    expect(mockService.listar).toHaveBeenCalledWith('usuario123', {
+      rango,
+      fechaInicio: undefined,
+      fechaFin: undefined,
+      moneda: undefined,
+      withTotals: false,
+    });
   });
 
   it('eliminar() debe invocar al servicio con id y userId', async () => {
