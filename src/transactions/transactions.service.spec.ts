@@ -11,9 +11,9 @@ describe('TransactionsService', () => {
   let service: TransactionsService;
 
   const mockTransactionModel = {
-    findOneAndDelete: jest.fn(),
     findOne: jest.fn(),
     findOneAndUpdate: jest.fn(),
+    deleteOne: jest.fn(),
     find: jest.fn(() => ({
       sort: jest.fn(() => ({
         exec: jest.fn().mockResolvedValue([]),
@@ -45,6 +45,8 @@ describe('TransactionsService', () => {
 
   const mockHistorialService = {
     registrarMovimiento: jest.fn(),
+    upsertMovimientoTransaccion: jest.fn(),
+    marcarTransaccionEliminada: jest.fn(),
   };
 
   const mockConversionService = {
@@ -83,13 +85,17 @@ describe('TransactionsService', () => {
   });
 
   it('debe eliminar una transacción correctamente', async () => {
-    mockTransactionModel.findOneAndDelete.mockResolvedValueOnce({
+    mockTransactionModel.findOne.mockResolvedValueOnce({
       transaccionId: 'ABC123',
       userId: 'user1',
       subCuentaId: null,
       concepto: 'x',
       monto: 100,
+      tipo: 'ingreso',
+      afectaCuenta: false,
+      toObject: function () { return this; },
     });
+    mockTransactionModel.deleteOne.mockResolvedValueOnce({ deletedCount: 1 });
 
     const result = await service.eliminar('ABC123', 'user1');
 
@@ -98,7 +104,7 @@ describe('TransactionsService', () => {
   });
 
   it('debe lanzar error si no encuentra transacción al eliminar', async () => {
-    mockTransactionModel.findOneAndDelete.mockResolvedValueOnce(null);
+    mockTransactionModel.findOne.mockResolvedValueOnce(null);
 
     await expect(service.eliminar('NOEXISTE', 'user')).rejects.toThrow(NotFoundException);
   });

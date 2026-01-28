@@ -696,7 +696,9 @@ export class AnalyticsService {
   private construirQueryHistorial(userId: string, filtros: AnalyticsFiltersDto, fechaInicio: Date, fechaFin: Date): any {
     const query: any = {
       userId,
-      createdAt: { $gte: fechaInicio, $lte: fechaFin }
+      fecha: { $gte: fechaInicio, $lte: fechaFin },
+      // No contar historial marcado como eliminado (auditoría de transacciones)
+      'metadata.audit.status': { $ne: 'deleted' },
     };
 
     if (!filtros.incluirRecurrentes) {
@@ -980,7 +982,7 @@ export class AnalyticsService {
       movimientos.push({
         id: tx.transaccionId,
         tipo: tx.tipo,
-        fecha: tx.createdAt,
+        fecha: (tx.fecha ?? tx.createdAt) ? new Date(tx.fecha ?? tx.createdAt) : new Date(),
         monto: tx.monto,
         moneda: 'USD', // Se puede mejorar
         simbolo: '$',
@@ -1003,7 +1005,7 @@ export class AnalyticsService {
       movimientos.push({
         id: hist.id,
         tipo: hist.tipo === 'ingreso' ? 'ingreso' : 'egreso',
-        fecha: hist.createdAt,
+        fecha: (hist.fecha ?? hist.createdAt) ? new Date(hist.fecha ?? hist.createdAt) : new Date(),
         monto: hist.monto,
         moneda: 'USD',
         simbolo: '$',

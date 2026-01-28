@@ -1,4 +1,4 @@
-import { IsIn, IsNumber, IsOptional, IsString, IsBoolean } from 'class-validator';
+import { IsIn, IsNumber, IsOptional, IsString, IsBoolean, IsDateString } from 'class-validator';
 
 export class CreateTransactionDto {
   @IsIn(['ingreso', 'egreso'])
@@ -32,6 +32,11 @@ export class CreateTransactionDto {
 
   @IsBoolean()
   afectaCuenta: boolean;
+
+  // Fecha efectiva del movimiento (opcional). Si se omite, se usa la fecha actual.
+  @IsOptional()
+  @IsDateString()
+  fecha?: string;
 
   @IsString()
   @IsOptional()

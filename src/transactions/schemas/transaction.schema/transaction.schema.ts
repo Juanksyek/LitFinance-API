@@ -28,6 +28,15 @@ export class Transaction {
   @Prop({ required: true })
   userId: string;
 
+  // Fecha efectiva del movimiento (para registrar gastos/ingresos atrasados).
+  // NOTA: createdAt/updatedAt (timestamps) sigue representando el registro en BD.
+  @Prop()
+  fecha?: Date;
+
+  // Fecha real de registro (auditoría). Útil cuando fecha (efectiva) != createdAt.
+  @Prop()
+  registradoEn?: Date;
+
   @Prop()
   cuentaId?: string;
 
@@ -49,6 +58,19 @@ export class Transaction {
 
   @Prop()
   fechaConversion?: Date; // Fecha de la conversión
+
+  // Conversión para ajustes en subcuenta (cuando moneda de transacción != moneda de subcuenta)
+  @Prop()
+  montoSubcuentaConvertido?: number;
+
+  @Prop()
+  monedaSubcuentaConvertida?: string;
+
+  @Prop()
+  tasaConversionSubcuenta?: number;
+
+  @Prop()
+  fechaConversionSubcuenta?: Date;
 }
 
 export const TransactionSchema = SchemaFactory.createForClass(Transaction);
