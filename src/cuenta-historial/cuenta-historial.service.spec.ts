@@ -38,14 +38,20 @@ describe('CuentaHistorialService', () => {
         {
           provide: getModelToken('ConceptoPersonalizado'),
           useValue: {
-            find: jest.fn(),
+            find: jest.fn(() => ({
+              lean: jest.fn().mockResolvedValue([
+                { id: 'concepto123', nombre: 'Concepto Mock' },
+              ]),
+            })),
             findById: jest.fn(),
           },
         },
         {
           provide: getModelToken('HistorialRecurrente'),
           useValue: {
-            find: jest.fn(),
+            find: jest.fn(() => ({
+              lean: jest.fn().mockResolvedValue([]),
+            })),
             findById: jest.fn(),
           },
         },
