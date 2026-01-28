@@ -28,6 +28,80 @@ export class CuentaHistorialService {
     return await nuevo.save();
   }
 
+  /**
+   * Crea o actualiza (idempotente) un movimiento de historial asociado a una transacción.
+   * Se usa para mantener un solo registro por transacción (evitar duplicados) y habilitar distintivos.
+   */
+  async upsertMovimientoTransaccion(params: {
+    transaccionId: string;
+    movimiento: CreateCuentaHistorialDto;
+    audit?: Record<string, any>;
+  }): Promise<any> {
+    const { transaccionId, movimiento, audit } = params;
+    const id = await generateUniqueId(this.historialModel);
+
+    const mergedMetadata = {
+      ...(movimiento.metadata ?? {}),
+      audit: {
+        ...((movimiento.metadata ?? {}) as any)?.audit,
+        ...(audit ?? {}),
+        transaccionId,
+        status: (audit as any)?.status ?? ((movimiento.metadata ?? {}) as any)?.audit?.status ?? 'active',
+      },
+    };
+
+    return await this.historialModel.findOneAndUpdate(
+      { cuentaId: movimiento.cuentaId, userId: movimiento.userId, 'metadata.audit.transaccionId': transaccionId },
+      {
+        $set: {
+          ...movimiento,
+          metadata: mergedMetadata,
+        },
+        $setOnInsert: { id },
+      },
+      { new: true, upsert: true },
+    );
+  }
+
+  async marcarTransaccionEliminada(params: {
+    cuentaId: string;
+    userId: string;
+    transaccionId: string;
+    deletedAt?: Date;
+    extra?: Record<string, any>;
+    descripcion?: string;
+  }): Promise<any> {
+    const { cuentaId, userId, transaccionId, deletedAt, extra, descripcion } = params;
+    const id = await generateUniqueId(this.historialModel);
+
+    return await this.historialModel.findOneAndUpdate(
+      { cuentaId, userId, 'metadata.audit.transaccionId': transaccionId },
+      {
+        $set: {
+          ...(descripcion ? { descripcion } : {}),
+          metadata: {
+            audit: {
+              transaccionId,
+              status: 'deleted',
+              deletedAt: (deletedAt ?? new Date()).toISOString(),
+              ...(extra ?? {}),
+            },
+          },
+        },
+        $setOnInsert: {
+          id,
+          cuentaId,
+          userId,
+          monto: 0,
+          tipo: 'ajuste_subcuenta',
+          descripcion: descripcion ?? 'Transacción eliminada',
+          fecha: (deletedAt ?? new Date()).toISOString(),
+        },
+      },
+      { new: true, upsert: true },
+    );
+  }
+
   async buscarHistorial(cuentaId: string, page = 1, limit = 10, search?: string) {
     const filtro: any = { cuentaId };
 
@@ -55,6 +129,7 @@ export class CuentaHistorialService {
     }
 
     const enriched = data.map((item) => ({
+      ...(item as any),
       ...item,
       motivo: item.motivo ?? null,
       detalles: {
@@ -62,6 +137,24 @@ export class CuentaHistorialService {
         etiqueta: item.tipo === 'ajuste_subcuenta' ? 'Ajuste' : 'Manual',
         resumen: `${item.descripcion} (${item.monto})`,
         conceptoNombre: item.conceptoId ? conceptosMap.get(item.conceptoId) : undefined,
+        distintivo: (() => {
+          const audit = (item as any)?.metadata?.audit;
+          if (!audit) return null;
+
+          if (audit.status === 'deleted') {
+            return { tipo: 'deleted', label: 'Eliminado' };
+          }
+
+          if (audit.editedAt) {
+            return { tipo: 'edited', label: 'Editado' };
+          }
+
+          if (audit.backdated) {
+            return { tipo: 'backdated', label: 'Otra fecha' };
+          }
+
+          return null;
+        })(),
       },
     }));
 
