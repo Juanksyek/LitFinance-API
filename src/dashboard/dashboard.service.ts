@@ -215,15 +215,25 @@ export class DashboardService {
 
       this.transactionModel
         .find({ userId })
-        .select('transaccionId tipo monto montoConvertido moneda monedaConvertida concepto cuentaId subCuentaId createdAt')
-        .sort({ createdAt: -1 })
+        .select('transaccionId tipo monto montoConvertido moneda monedaConvertida concepto cuentaId subCuentaId fecha registradoEn createdAt')
+        .sort({ fecha: -1, createdAt: -1 })
         .skip(recentSkip)
         .limit(recentLimit)
         .lean(),
 
       this.transactionModel
         .aggregate([
-          { $match: { userId, createdAt: { $gte: start, $lte: end }, ...tipoMatch, ...monedaMatch } },
+          {
+            $match: {
+              userId,
+              ...tipoMatch,
+              ...monedaMatch,
+              $or: [
+                { fecha: { $gte: start, $lte: end } },
+                { fecha: { $exists: false }, createdAt: { $gte: start, $lte: end } },
+              ],
+            },
+          },
           {
             $project: {
               tipo: 1,
@@ -243,13 +253,24 @@ export class DashboardService {
 
       this.transactionModel
         .aggregate([
-          { $match: { userId, createdAt: { $gte: start, $lte: end }, ...tipoMatch, ...monedaMatch } },
+          {
+            $match: {
+              userId,
+              ...tipoMatch,
+              ...monedaMatch,
+              $or: [
+                { fecha: { $gte: start, $lte: end } },
+                { fecha: { $exists: false }, createdAt: { $gte: start, $lte: end } },
+              ],
+            },
+          },
           {
             $project: {
               tipo: 1,
               amount: { $abs: { $ifNull: ['$montoConvertido', '$monto'] } },
+              effectiveDate: { $ifNull: ['$fecha', '$createdAt'] },
               bucket: {
-                $dateToString: { format: chartDateFormat, date: '$createdAt' },
+                $dateToString: { format: chartDateFormat, date: { $ifNull: ['$fecha', '$createdAt'] } },
               },
             },
           },
@@ -358,6 +379,10 @@ export class DashboardService {
         pausadoPorPlan: !!r.pausadoPorPlan,
       })),
       recentTransactions: (recentTransactions ?? []).map((t: any) => ({
+        // Fecha efectiva vs fecha de registro
+        fechaEfectiva: (t.fecha ?? t.createdAt) ?? null,
+        registradoEn: (t.registradoEn ?? t.createdAt) ?? null,
+        isBackdated: !!(t.fecha && t.registradoEn && String(new Date(t.fecha).toISOString()).slice(0, 10) !== String(new Date(t.registradoEn).toISOString()).slice(0, 10)),
         id: t.transaccionId,
         tipo: t.tipo,
         monto: t.monto,
