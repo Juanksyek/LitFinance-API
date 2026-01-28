@@ -226,7 +226,10 @@ export class AuthService {
 
         // Bloquear acceso si el usuario no confirmó su correo
         if (!user.isActive) {
-            throw new UnauthorizedException('Cuenta no activada. Revisa tu correo para confirmar la cuenta.');
+            throw new UnauthorizedException({
+                code: 'ACCOUNT_NOT_ACTIVATED',
+                message: 'Tu cuenta aún no ha sido activada. Revisa tu correo para confirmar la cuenta.'
+            });
         }
 
         // Forzar monedaPrincipal y monedaPreferencia a 'MXN' si no existen
