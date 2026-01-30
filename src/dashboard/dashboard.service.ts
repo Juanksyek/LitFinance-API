@@ -278,7 +278,9 @@ export class DashboardService {
     const [
       cuenta,
       subcuentas,
+      subcuentasTotalCount,
       recurrentes,
+      recurrentesTotalCount,
       recentTransactions,
       periodAgg,
       chartPoints,
@@ -298,6 +300,8 @@ export class DashboardService {
         .limit(subaccountsLimit)
         .lean(),
 
+      this.subcuentaModel.countDocuments({ userId }),
+
       this.recurrenteModel
         .find({ userId })
         .select(
@@ -307,6 +311,8 @@ export class DashboardService {
         .skip(recurrentesSkip)
         .limit(recurrentesLimit)
         .lean(),
+
+      this.recurrenteModel.countDocuments({ userId }),
 
       this.transactionModel
         .find({ userId })
@@ -440,6 +446,45 @@ export class DashboardService {
         .exec(),
     ]);
 
+    // Enforzar (en respuesta) qué recursos deben considerarse pausados por plan.
+    // Nota: esto no hace update en DB; solo devuelve flags e IDs para UI.
+    const resolvePlanLimit = (raw: unknown, fallback: number) => {
+      const n = Number(raw);
+      if (!Number.isFinite(n)) return fallback;
+      if (n === -1) return Infinity;
+      if (n <= 0) return fallback;
+      return n;
+    };
+
+    const planSubLimit = resolvePlanLimit((planConfig as any)?.subcuentasPorUsuario, 5);
+    const planRecLimit = resolvePlanLimit((planConfig as any)?.recurrentesPorUsuario, 10);
+
+    const subcuentasCount = Number(subcuentasTotalCount ?? 0);
+    const recurrentesCount = Number(recurrentesTotalCount ?? 0);
+
+    const subcuentasToPauseOnPage: string[] = [];
+    const recurrentesToPauseOnPage: string[] = [];
+
+    const subcuentasWithPause = (subcuentas ?? []).map((s: any, localIndex: number) => {
+      const globalIndex = subaccountsSkip + localIndex;
+      const shouldBePaused = planSubLimit !== Infinity && subcuentasCount > planSubLimit && globalIndex >= planSubLimit;
+      if (shouldBePaused) subcuentasToPauseOnPage.push(String(s.subCuentaId));
+      return {
+        ...s,
+        pausadaPorPlan: shouldBePaused || !!s.pausadaPorPlan,
+      };
+    });
+
+    const recurrentesWithPause = (recurrentes ?? []).map((r: any, localIndex: number) => {
+      const globalIndex = recurrentesSkip + localIndex;
+      const shouldBePaused = planRecLimit !== Infinity && recurrentesCount > planRecLimit && globalIndex >= planRecLimit;
+      if (shouldBePaused) recurrentesToPauseOnPage.push(String(r.recurrenteId));
+      return {
+        ...r,
+        pausadoPorPlan: shouldBePaused || !!r.pausadoPorPlan,
+      };
+    });
+
     const buildTotals = (rows: any[]) => {
       const activeByCurrency: Array<{ moneda: string; total: number; count: number }> = [];
       const pausedByCurrency: Array<{ moneda: string; total: number; count: number }> = [];
@@ -485,6 +530,20 @@ export class DashboardService {
         version,
         generatedAt: new Date().toISOString(),
         plan: { type: planType, isPremium },
+        planEnforcement: {
+          subcuentas: {
+            limit: planSubLimit === Infinity ? -1 : planSubLimit,
+            total: subcuentasCount,
+            overLimit: planSubLimit !== Infinity && subcuentasCount > planSubLimit,
+            toPauseOnThisPage: subcuentasToPauseOnPage,
+          },
+          recurrentes: {
+            limit: planRecLimit === Infinity ? -1 : planRecLimit,
+            total: recurrentesCount,
+            overLimit: planRecLimit !== Infinity && recurrentesCount > planRecLimit,
+            toPauseOnThisPage: recurrentesToPauseOnPage,
+          },
+        },
         limits: {
           maxSubcuentas: planConfig?.subcuentasPorUsuario ?? null,
           maxRecurrentes: planConfig?.recurrentesPorUsuario ?? null,
@@ -534,7 +593,7 @@ export class DashboardService {
         ingresosPeriodo,
         egresosPeriodo,
       },
-      subaccountsSummary: (subcuentas ?? []).map((s: any) => ({
+      subaccountsSummary: (subcuentasWithPause ?? []).map((s: any) => ({
         id: s.subCuentaId,
         nombre: s.nombre,
         saldo: s.cantidad,
@@ -545,7 +604,7 @@ export class DashboardService {
         simbolo: s.simbolo ?? null,
       })),
       subaccountsTotals,
-      recurrentesSummary: (recurrentes ?? []).map((r: any) => ({
+      recurrentesSummary: (recurrentesWithPause ?? []).map((r: any) => ({
         id: r.recurrenteId,
         nombre: r.nombre,
         color: r?.plataforma?.color ?? null,
