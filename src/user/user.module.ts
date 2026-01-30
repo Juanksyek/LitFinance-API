@@ -14,6 +14,7 @@ import { TransactionsModule } from 'src/transactions/transactions.module';
 import { CuentaHistorialModule } from '../cuenta-historial/cuenta-historial.module';
 import { MonedaModule } from '../moneda/moneda.module';
 import { UtilsModule } from '../utils/utils.module';
+import { PlanConfigModule } from '../plan-config/plan-config.module';
 
 import { Cuenta, CuentaSchema } from '../cuenta/schemas/cuenta.schema/cuenta.schema';
 import { Transaction, TransactionSchema } from '../transactions/schemas/transaction.schema/transaction.schema';
@@ -41,6 +42,7 @@ import { DashboardVersionService } from './services/dashboard-version.service';
     CuentaHistorialModule,
     MonedaModule,
     forwardRef(() => StripeModule),
+    PlanConfigModule,
     UtilsModule
   ],
   controllers: [UserController],
