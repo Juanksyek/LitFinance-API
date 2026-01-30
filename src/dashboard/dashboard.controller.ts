@@ -34,6 +34,72 @@ export class DashboardController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get('expenses-chart')
+  async expensesChart(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('range') range?: string,
+    @Query('fechaInicio') fechaInicio?: string,
+    @Query('fechaFin') fechaFin?: string,
+    @Query('tipoTransaccion') tipoTransaccion?: 'ingreso' | 'egreso' | 'ambos',
+    @Query('moneda') moneda?: string,
+  ) {
+    const user: any = (req as any)?.user;
+    const userId = user?.id;
+
+    if (!userId) {
+      throw new UnauthorizedException();
+    }
+
+    const rl = this.rateLimit.check(String(userId));
+    if (!rl.allowed) {
+      res.setHeader('Retry-After', String(rl.retryAfterSeconds));
+      return res.status(HttpStatus.TOO_MANY_REQUESTS).json({
+        statusCode: 429,
+        code: 'RATE_LIMITED',
+        message: 'Too Many Requests',
+        retryAfterSeconds: rl.retryAfterSeconds,
+      });
+    }
+
+    const safeRange = this.normalizeRange(range);
+    const payload = await this.dashboardService.getExpensesChart(String(userId), {
+      range: safeRange,
+      fechaInicio,
+      fechaFin,
+      tipoTransaccion,
+      moneda,
+    });
+
+    return res.status(HttpStatus.OK).json(payload);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('totals')
+  async totals(@Req() req: Request, @Res() res: Response) {
+    const user: any = (req as any)?.user;
+    const userId = user?.id;
+
+    if (!userId) {
+      throw new UnauthorizedException();
+    }
+
+    const rl = this.rateLimit.check(String(userId));
+    if (!rl.allowed) {
+      res.setHeader('Retry-After', String(rl.retryAfterSeconds));
+      return res.status(HttpStatus.TOO_MANY_REQUESTS).json({
+        statusCode: 429,
+        code: 'RATE_LIMITED',
+        message: 'Too Many Requests',
+        retryAfterSeconds: rl.retryAfterSeconds,
+      });
+    }
+
+    const payload = await this.dashboardService.getTotals(String(userId));
+    return res.status(HttpStatus.OK).json(payload);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('snapshot')
   async snapshot(
     @Req() req: Request,
