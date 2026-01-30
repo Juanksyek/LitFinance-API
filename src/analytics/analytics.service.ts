@@ -307,7 +307,7 @@ export class AnalyticsService {
     let formatoFecha: string;
     let intervalo: number;
 
-    if (rangoTiempo === 'año') {
+    if (rangoTiempo === 'año' || rangoTiempo === 'desdeSiempre') {
       formatoFecha = '%Y-%m';
       intervalo = 30 * 24 * 60 * 60 * 1000;
     } else if (rangoTiempo === 'dia') {
@@ -334,20 +334,34 @@ export class AnalyticsService {
       : {};
 
     // Pipeline de agregación para datos temporales
+    // Usar fecha efectiva (Transaction.fecha) con fallback a createdAt.
+    const andMatch: any[] = [
+      {
+        $or: [
+          { fecha: { $gte: fechaInicio, $lte: fechaFin } },
+          { fecha: { $exists: false }, createdAt: { $gte: fechaInicio, $lte: fechaFin } },
+        ],
+      },
+    ];
+
+    if (Object.keys(monedaMatch).length) {
+      andMatch.push(monedaMatch);
+    }
+
     const pipeline = [
       {
         $match: {
           userId,
-          createdAt: { $gte: fechaInicio, $lte: fechaFin },
           ...tipoMatch,
-          ...monedaMatch,
-        }
+          ...(andMatch.length ? { $and: andMatch } : {}),
+        },
       },
       {
         $project: {
           tipo: 1,
           amount: { $abs: { $ifNull: ['$montoConvertido', '$monto'] } },
-          bucket: { $dateToString: { format: formatoFecha, date: '$createdAt' } },
+          effectiveDate: { $ifNull: ['$fecha', '$createdAt'] },
+          bucket: { $dateToString: { format: formatoFecha, date: { $ifNull: ['$fecha', '$createdAt'] } } },
         },
       },
       {
@@ -639,6 +653,10 @@ export class AnalyticsService {
         fechaInicio = new Date(ahora);
         fechaInicio.setFullYear(ahora.getFullYear() - 1);
         break;
+      case 'desdeSiempre':
+        // Desde siempre: un inicio temprano para cubrir histórico completo.
+        fechaInicio = new Date('2000-01-01T00:00:00.000Z');
+        break;
       default:
         // Por defecto: último mes
         fechaInicio = new Date(ahora);
@@ -650,16 +668,25 @@ export class AnalyticsService {
   }
 
   private construirQueryTransacciones(userId: string, filtros: AnalyticsFiltersDto, fechaInicio: Date, fechaFin: Date): any {
-    const query: any = {
-      userId,
-      createdAt: { $gte: fechaInicio, $lte: fechaFin }
-    };
+    const query: any = { userId };
+
+    const and: any[] = [];
+
+    // Usar fecha efectiva (Transaction.fecha) con fallback a createdAt si no existe.
+    and.push({
+      $or: [
+        { fecha: { $gte: fechaInicio, $lte: fechaFin } },
+        { fecha: { $exists: false }, createdAt: { $gte: fechaInicio, $lte: fechaFin } },
+      ],
+    });
 
     if (filtros.monedas?.length) {
-      query.$or = [
-        { moneda: { $in: filtros.monedas } },
-        { monedaConvertida: { $in: filtros.monedas } },
-      ];
+      and.push({
+        $or: [
+          { moneda: { $in: filtros.monedas } },
+          { monedaConvertida: { $in: filtros.monedas } },
+        ],
+      });
     }
 
     if (filtros.subcuentas?.length) {
@@ -688,6 +715,10 @@ export class AnalyticsService {
 
     if (filtros.soloTransaccionesManuales) {
       query.esRecurrente = { $ne: true };
+    }
+
+    if (and.length) {
+      query.$and = and;
     }
 
     return query;
@@ -905,6 +936,8 @@ export class AnalyticsService {
         return 'Últimos 6 meses';
       case 'año':
         return 'Último año';
+      case 'desdeSiempre':
+        return 'Desde siempre';
       case 'personalizado':
         return 'Período personalizado';
       default:
