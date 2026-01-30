@@ -188,11 +188,14 @@ export class DashboardService {
     };
 
     const tipoMatch = tipo !== 'ambos' ? { tipo } : {};
-    const monedaMatch = moneda
-      ? {
-          $or: [{ moneda }, { monedaConvertida: moneda }],
-        }
-      : {};
+    const monedaClause = moneda ? { $or: [{ moneda }, { monedaConvertida: moneda }] } : null;
+    const dateClause = {
+      $or: [
+        { fecha: { $gte: start, $lte: end } },
+        { fecha: { $exists: false }, createdAt: { $gte: start, $lte: end } },
+      ],
+    };
+    const andMatch = monedaClause ? { $and: [dateClause, monedaClause] } : dateClause;
 
     const [
       cuenta,
@@ -241,11 +244,7 @@ export class DashboardService {
             $match: {
               userId,
               ...tipoMatch,
-              ...monedaMatch,
-              $or: [
-                { fecha: { $gte: start, $lte: end } },
-                { fecha: { $exists: false }, createdAt: { $gte: start, $lte: end } },
-              ],
+              ...andMatch,
             },
           },
           {
@@ -271,11 +270,7 @@ export class DashboardService {
             $match: {
               userId,
               ...tipoMatch,
-              ...monedaMatch,
-              $or: [
-                { fecha: { $gte: start, $lte: end } },
-                { fecha: { $exists: false }, createdAt: { $gte: start, $lte: end } },
-              ],
+              ...andMatch,
             },
           },
           {
@@ -558,5 +553,210 @@ export class DashboardService {
 
     this.microCache.set(cacheKey, { expiresAt: nowMs + this.microCacheTtlMs, data: snapshot });
     return snapshot;
+  }
+
+  async getExpensesChart(userId: string, opts?: SnapshotOptions) {
+    const { range, start, end, isCustom } = this.resolveRange(opts);
+
+    const chartGranularity: 'hour' | 'day' | 'month' =
+      range === 'day' ? 'hour' : range === 'year' || range === 'all' ? 'month' : 'day';
+
+    const chartDateFormat =
+      chartGranularity === 'hour'
+        ? '%Y-%m-%dT%H:00'
+        : chartGranularity === 'month'
+          ? '%Y-%m'
+          : '%Y-%m-%d';
+
+    const chartMaxPoints =
+      chartGranularity === 'hour'
+        ? 48
+        : chartGranularity === 'month'
+          ? range === 'all'
+            ? 240
+            : 24
+          : range === '6months'
+            ? 250
+            : range === '3months'
+              ? 120
+              : range === 'month'
+                ? 60
+                : 30;
+
+    const tipo = opts?.tipoTransaccion ?? 'ambos';
+    const moneda = (opts?.moneda ?? '').trim();
+    const tipoMatch = tipo !== 'ambos' ? { tipo } : {};
+
+    const monedaClause = moneda ? { $or: [{ moneda }, { monedaConvertida: moneda }] } : null;
+    const dateClause = {
+      $or: [
+        { fecha: { $gte: start, $lte: end } },
+        { fecha: { $exists: false }, createdAt: { $gte: start, $lte: end } },
+      ],
+    };
+    const andMatch = monedaClause ? { $and: [dateClause, monedaClause] } : dateClause;
+
+    const rows = await this.transactionModel
+      .aggregate([
+        {
+          $match: {
+            userId,
+            ...tipoMatch,
+            ...andMatch,
+          },
+        },
+        {
+          $project: {
+            tipo: 1,
+            amount: { $abs: { $ifNull: ['$montoConvertido', '$monto'] } },
+            bucket: {
+              $dateToString: { format: chartDateFormat, date: { $ifNull: ['$fecha', '$createdAt'] } },
+            },
+          },
+        },
+        {
+          $group: {
+            _id: '$bucket',
+            ingreso: {
+              $sum: {
+                $cond: [{ $eq: ['$tipo', 'ingreso'] }, '$amount', 0],
+              },
+            },
+            egreso: {
+              $sum: {
+                $cond: [{ $eq: ['$tipo', 'egreso'] }, '$amount', 0],
+              },
+            },
+          },
+        },
+        { $sort: { _id: -1 } },
+        { $limit: chartMaxPoints },
+        { $sort: { _id: 1 } },
+      ])
+      .exec();
+
+    return {
+      meta: {
+        range,
+        isCustom,
+        start: start.toISOString(),
+        end: end.toISOString(),
+        query: {
+          tipoTransaccion: tipo,
+          moneda: moneda || null,
+          fechaInicio: opts?.fechaInicio ?? null,
+          fechaFin: opts?.fechaFin ?? null,
+        },
+        chart: {
+          granularity: chartGranularity,
+          maxPoints: chartMaxPoints,
+        },
+      },
+      points: (rows ?? []).map((p: any) => ({
+        date: p?._id,
+        ingreso: Number(p?.ingreso ?? 0),
+        egreso: Number(p?.egreso ?? 0),
+      })),
+    };
+  }
+
+  async getTotals(userId: string) {
+    const [subcuentasTotalsAgg, recurrentesTotalsAgg] = await Promise.all([
+      this.subcuentaModel
+        .aggregate([
+          { $match: { userId } },
+          {
+            $project: {
+              moneda: 1,
+              cantidad: 1,
+              activa: { $ifNull: ['$activa', true] },
+              pausadaPorPlan: { $ifNull: ['$pausadaPorPlan', false] },
+            },
+          },
+          {
+            $addFields: {
+              bucket: {
+                $cond: [
+                  { $eq: ['$pausadaPorPlan', true] },
+                  'paused',
+                  { $cond: [{ $eq: ['$activa', true] }, 'active', 'inactive'] },
+                ],
+              },
+            },
+          },
+          { $match: { bucket: { $in: ['active', 'paused'] } } },
+          {
+            $group: {
+              _id: { bucket: '$bucket', moneda: '$moneda' },
+              total: { $sum: '$cantidad' },
+              count: { $sum: 1 },
+            },
+          },
+          { $sort: { '_id.bucket': 1, '_id.moneda': 1 } },
+        ])
+        .exec(),
+
+      this.recurrenteModel
+        .aggregate([
+          { $match: { userId } },
+          {
+            $project: {
+              moneda: 1,
+              monto: 1,
+              pausado: { $ifNull: ['$pausado', false] },
+              pausadoPorPlan: { $ifNull: ['$pausadoPorPlan', false] },
+            },
+          },
+          {
+            $addFields: {
+              bucket: { $cond: [{ $or: ['$pausado', '$pausadoPorPlan'] }, 'paused', 'active'] },
+            },
+          },
+          {
+            $group: {
+              _id: { bucket: '$bucket', moneda: '$moneda' },
+              total: { $sum: '$monto' },
+              count: { $sum: 1 },
+            },
+          },
+          { $sort: { '_id.bucket': 1, '_id.moneda': 1 } },
+        ])
+        .exec(),
+    ]);
+
+    const buildTotals = (rows: any[]) => {
+      const activeByCurrency: Array<{ moneda: string; total: number; count: number }> = [];
+      const pausedByCurrency: Array<{ moneda: string; total: number; count: number }> = [];
+      for (const r of rows ?? []) {
+        const bucket = String(r?._id?.bucket ?? '');
+        const moneda = String(r?._id?.moneda ?? '');
+        const item = {
+          moneda,
+          total: Number(r?.total ?? 0),
+          count: Number(r?.count ?? 0),
+        };
+        if (bucket === 'active') activeByCurrency.push(item);
+        if (bucket === 'paused') pausedByCurrency.push(item);
+      }
+      const sumTotal = (arr: Array<{ total: number }>) => arr.reduce((s, x) => s + Number(x.total ?? 0), 0);
+      const sumCount = (arr: Array<{ count: number }>) => arr.reduce((s, x) => s + Number(x.count ?? 0), 0);
+      return {
+        active: {
+          total: sumTotal(activeByCurrency),
+          count: sumCount(activeByCurrency),
+          byCurrency: activeByCurrency,
+        },
+        paused: {
+          total: sumTotal(pausedByCurrency),
+          count: sumCount(pausedByCurrency),
+          byCurrency: pausedByCurrency,
+        },
+      };
+    };
+
+    return {
+      subaccountsTotals: buildTotals(subcuentasTotalsAgg as any),
+      recurrentesTotals: buildTotals(recurrentesTotalsAgg as any),
+    };
   }
 }
