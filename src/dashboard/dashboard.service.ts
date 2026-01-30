@@ -11,6 +11,13 @@ import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.ser
 
 type SnapshotRange = 'day' | 'week' | 'month' | '3months' | '6months' | 'year' | 'all';
 
+type BalancePeriodo = 'dia' | 'semana' | 'mes' | '3meses' | '6meses' | 'año';
+
+type BalanceCardOptions = {
+  periodo?: BalancePeriodo;
+  moneda?: string;
+};
+
 type SnapshotOptions = {
   range?: SnapshotRange;
   fechaInicio?: string;
@@ -97,6 +104,77 @@ export class DashboardService {
     }
 
     return { range: r, start, end, isCustom: false };
+  }
+
+  private resolveBalancePeriodo(periodo?: BalancePeriodo): SnapshotRange {
+    const p = periodo ?? 'mes';
+    if (p === 'dia') return 'day';
+    if (p === 'semana') return 'week';
+    if (p === 'mes') return 'month';
+    if (p === '3meses') return '3months';
+    if (p === '6meses') return '6months';
+    return 'year';
+  }
+
+  private buildBalancePeriodLabels() {
+    return {
+      dia: 'Día',
+      semana: 'Semana',
+      mes: 'Mes',
+      '3meses': '3 Meses',
+      '6meses': '6 Meses',
+      año: 'Año',
+    } as const;
+  }
+
+  private async aggregatePeriodTotals(params: {
+    userId: string;
+    start: Date;
+    end: Date;
+    tipoTransaccion?: 'ingreso' | 'egreso' | 'ambos';
+    moneda?: string;
+  }) {
+    const tipo = params.tipoTransaccion ?? 'ambos';
+    const moneda = (params.moneda ?? '').trim();
+    const tipoMatch = tipo !== 'ambos' ? { tipo } : {};
+
+    const monedaClause = moneda ? { $or: [{ moneda }, { monedaConvertida: moneda }] } : null;
+    const dateClause = {
+      $or: [
+        { fecha: { $gte: params.start, $lte: params.end } },
+        { fecha: { $exists: false }, createdAt: { $gte: params.start, $lte: params.end } },
+      ],
+    };
+    const andMatch = monedaClause ? { $and: [dateClause, monedaClause] } : dateClause;
+
+    const rows = await this.transactionModel
+      .aggregate([
+        {
+          $match: {
+            userId: params.userId,
+            ...tipoMatch,
+            ...andMatch,
+          },
+        },
+        {
+          $project: {
+            tipo: 1,
+            amount: { $abs: { $ifNull: ['$montoConvertido', '$monto'] } },
+          },
+        },
+        {
+          $group: {
+            _id: '$tipo',
+            total: { $sum: '$amount' },
+          },
+        },
+      ])
+      .exec();
+
+    const ingresos = Number((rows ?? []).find((x: any) => x._id === 'ingreso')?.total ?? 0);
+    const egresos = Number((rows ?? []).find((x: any) => x._id === 'egreso')?.total ?? 0);
+
+    return { ingresos, egresos };
   }
 
   async getSnapshot(userId: string, version: string, opts?: SnapshotOptions) {
@@ -238,31 +316,7 @@ export class DashboardService {
         .limit(recentLimit)
         .lean(),
 
-      this.transactionModel
-        .aggregate([
-          {
-            $match: {
-              userId,
-              ...tipoMatch,
-              ...andMatch,
-            },
-          },
-          {
-            $project: {
-              tipo: 1,
-              amount: {
-                $ifNull: ['$montoConvertido', '$monto'],
-              },
-            },
-          },
-          {
-            $group: {
-              _id: '$tipo',
-              total: { $sum: '$amount' },
-            },
-          },
-        ])
-        .exec(),
+      this.aggregatePeriodTotals({ userId, start, end, tipoTransaccion: tipo, moneda }),
 
       this.transactionModel
         .aggregate([
@@ -423,8 +477,8 @@ export class DashboardService {
       ? await this.cuentaHistorialService.buscarHistorial(String(cuenta.id), recentPage, recentLimit)
       : { total: 0, page: recentPage, limit: recentLimit, data: [] };
 
-    const ingresosPeriodo = Number(periodAgg?.find((x: any) => x._id === 'ingreso')?.total ?? 0);
-    const egresosPeriodo = Number(periodAgg?.find((x: any) => x._id === 'egreso')?.total ?? 0);
+    const ingresosPeriodo = Number((periodAgg as any)?.ingresos ?? 0);
+    const egresosPeriodo = Number((periodAgg as any)?.egresos ?? 0);
 
     const snapshot = {
       meta: {
@@ -553,6 +607,54 @@ export class DashboardService {
 
     this.microCache.set(cacheKey, { expiresAt: nowMs + this.microCacheTtlMs, data: snapshot });
     return snapshot;
+  }
+
+  async getBalanceCard(userId: string, opts?: BalanceCardOptions) {
+    const periodo: BalancePeriodo = opts?.periodo ?? 'mes';
+    const range = this.resolveBalancePeriodo(periodo);
+    const { start, end } = this.resolveRange({ range });
+
+    const labels = this.buildBalancePeriodLabels();
+
+    const cuenta = await this.cuentaModel
+      .findOne({ userId, isPrincipal: true })
+      .select('id moneda cantidad simbolo color nombre')
+      .lean();
+
+    const monedaFiltro = (opts?.moneda ?? '').trim();
+    const totals = await this.aggregatePeriodTotals({
+      userId,
+      start,
+      end,
+      tipoTransaccion: 'ambos',
+      moneda: monedaFiltro || undefined,
+    });
+
+    return {
+      meta: {
+        periodo: {
+          key: periodo,
+          label: (labels as any)[periodo] ?? 'Mes',
+        },
+        start: start.toISOString(),
+        end: end.toISOString(),
+        periods: {
+          selected: periodo,
+          available: Object.entries(labels).map(([key, label]) => ({ key, label })),
+        },
+        query: {
+          moneda: monedaFiltro || null,
+        },
+      },
+      account: {
+        saldo: Number((cuenta as any)?.cantidad ?? 0),
+        moneda: String((cuenta as any)?.moneda ?? 'MXN'),
+      },
+      totals: {
+        ingresos: Number(totals.ingresos ?? 0),
+        egresos: Number(totals.egresos ?? 0),
+      },
+    };
   }
 
   async getExpensesChart(userId: string, opts?: SnapshotOptions) {
