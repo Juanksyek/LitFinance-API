@@ -33,6 +33,135 @@ export class DashboardController {
     return undefined;
   }
 
+  private normalizePeriodoBalance(
+    value?: string,
+  ):
+    | 'dia'
+    | 'semana'
+    | 'mes'
+    | '3meses'
+    | '6meses'
+    | 'año'
+    | undefined {
+    if (!value) return undefined;
+    const raw = String(value).trim();
+    if (!raw) return undefined;
+
+    const lower = raw.toLowerCase();
+    const compact = lower.replace(/\s+/g, '');
+
+    // Aceptar español y algunos equivalentes en inglés
+    if (compact === 'dia' || compact === 'day') return 'dia';
+    if (compact === 'semana' || compact === 'week') return 'semana';
+    if (compact === 'mes' || compact === 'month') return 'mes';
+    if (compact === '3meses' || compact === '3months') return '3meses';
+    if (compact === '6meses' || compact === '6months') return '6meses';
+    if (compact === 'año' || compact === 'ano' || compact === 'year') return 'año';
+
+    return undefined;
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('expenses-chart')
+  async expensesChart(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('range') range?: string,
+    @Query('fechaInicio') fechaInicio?: string,
+    @Query('fechaFin') fechaFin?: string,
+    @Query('tipoTransaccion') tipoTransaccion?: 'ingreso' | 'egreso' | 'ambos',
+    @Query('moneda') moneda?: string,
+  ) {
+    const user: any = (req as any)?.user;
+    const userId = user?.id;
+
+    if (!userId) {
+      throw new UnauthorizedException();
+    }
+
+    const rl = this.rateLimit.check(String(userId));
+    if (!rl.allowed) {
+      res.setHeader('Retry-After', String(rl.retryAfterSeconds));
+      return res.status(HttpStatus.TOO_MANY_REQUESTS).json({
+        statusCode: 429,
+        code: 'RATE_LIMITED',
+        message: 'Too Many Requests',
+        retryAfterSeconds: rl.retryAfterSeconds,
+      });
+    }
+
+    const safeRange = this.normalizeRange(range);
+    const payload = await this.dashboardService.getExpensesChart(String(userId), {
+      range: safeRange,
+      fechaInicio,
+      fechaFin,
+      tipoTransaccion,
+      moneda,
+    });
+
+    return res.status(HttpStatus.OK).json(payload);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('balance-card')
+  async balanceCard(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('periodo') periodo?: string,
+    @Query('moneda') moneda?: string,
+  ) {
+    const user: any = (req as any)?.user;
+    const userId = user?.id;
+
+    if (!userId) {
+      throw new UnauthorizedException();
+    }
+
+    const rl = this.rateLimit.check(String(userId));
+    if (!rl.allowed) {
+      res.setHeader('Retry-After', String(rl.retryAfterSeconds));
+      return res.status(HttpStatus.TOO_MANY_REQUESTS).json({
+        statusCode: 429,
+        code: 'RATE_LIMITED',
+        message: 'Too Many Requests',
+        retryAfterSeconds: rl.retryAfterSeconds,
+      });
+    }
+
+    const safePeriodo = this.normalizePeriodoBalance(periodo) ?? 'mes';
+    const payload = await this.dashboardService.getBalanceCard(String(userId), {
+      periodo: safePeriodo,
+      moneda,
+    });
+
+    return res.status(HttpStatus.OK).json(payload);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('totals')
+  async totals(@Req() req: Request, @Res() res: Response) {
+    const user: any = (req as any)?.user;
+    const userId = user?.id;
+
+    if (!userId) {
+      throw new UnauthorizedException();
+    }
+
+    const rl = this.rateLimit.check(String(userId));
+    if (!rl.allowed) {
+      res.setHeader('Retry-After', String(rl.retryAfterSeconds));
+      return res.status(HttpStatus.TOO_MANY_REQUESTS).json({
+        statusCode: 429,
+        code: 'RATE_LIMITED',
+        message: 'Too Many Requests',
+        retryAfterSeconds: rl.retryAfterSeconds,
+      });
+    }
+
+    const payload = await this.dashboardService.getTotals(String(userId));
+    return res.status(HttpStatus.OK).json(payload);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('snapshot')
   async snapshot(

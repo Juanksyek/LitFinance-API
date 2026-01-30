@@ -11,6 +11,13 @@ import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.ser
 
 type SnapshotRange = 'day' | 'week' | 'month' | '3months' | '6months' | 'year' | 'all';
 
+type BalancePeriodo = 'dia' | 'semana' | 'mes' | '3meses' | '6meses' | 'año';
+
+type BalanceCardOptions = {
+  periodo?: BalancePeriodo;
+  moneda?: string;
+};
+
 type SnapshotOptions = {
   range?: SnapshotRange;
   fechaInicio?: string;
@@ -97,6 +104,77 @@ export class DashboardService {
     }
 
     return { range: r, start, end, isCustom: false };
+  }
+
+  private resolveBalancePeriodo(periodo?: BalancePeriodo): SnapshotRange {
+    const p = periodo ?? 'mes';
+    if (p === 'dia') return 'day';
+    if (p === 'semana') return 'week';
+    if (p === 'mes') return 'month';
+    if (p === '3meses') return '3months';
+    if (p === '6meses') return '6months';
+    return 'year';
+  }
+
+  private buildBalancePeriodLabels() {
+    return {
+      dia: 'Día',
+      semana: 'Semana',
+      mes: 'Mes',
+      '3meses': '3 Meses',
+      '6meses': '6 Meses',
+      año: 'Año',
+    } as const;
+  }
+
+  private async aggregatePeriodTotals(params: {
+    userId: string;
+    start: Date;
+    end: Date;
+    tipoTransaccion?: 'ingreso' | 'egreso' | 'ambos';
+    moneda?: string;
+  }) {
+    const tipo = params.tipoTransaccion ?? 'ambos';
+    const moneda = (params.moneda ?? '').trim();
+    const tipoMatch = tipo !== 'ambos' ? { tipo } : {};
+
+    const monedaClause = moneda ? { $or: [{ moneda }, { monedaConvertida: moneda }] } : null;
+    const dateClause = {
+      $or: [
+        { fecha: { $gte: params.start, $lte: params.end } },
+        { fecha: { $exists: false }, createdAt: { $gte: params.start, $lte: params.end } },
+      ],
+    };
+    const andMatch = monedaClause ? { $and: [dateClause, monedaClause] } : dateClause;
+
+    const rows = await this.transactionModel
+      .aggregate([
+        {
+          $match: {
+            userId: params.userId,
+            ...tipoMatch,
+            ...andMatch,
+          },
+        },
+        {
+          $project: {
+            tipo: 1,
+            amount: { $abs: { $ifNull: ['$montoConvertido', '$monto'] } },
+          },
+        },
+        {
+          $group: {
+            _id: '$tipo',
+            total: { $sum: '$amount' },
+          },
+        },
+      ])
+      .exec();
+
+    const ingresos = Number((rows ?? []).find((x: any) => x._id === 'ingreso')?.total ?? 0);
+    const egresos = Number((rows ?? []).find((x: any) => x._id === 'egreso')?.total ?? 0);
+
+    return { ingresos, egresos };
   }
 
   async getSnapshot(userId: string, version: string, opts?: SnapshotOptions) {
@@ -188,11 +266,14 @@ export class DashboardService {
     };
 
     const tipoMatch = tipo !== 'ambos' ? { tipo } : {};
-    const monedaMatch = moneda
-      ? {
-          $or: [{ moneda }, { monedaConvertida: moneda }],
-        }
-      : {};
+    const monedaClause = moneda ? { $or: [{ moneda }, { monedaConvertida: moneda }] } : null;
+    const dateClause = {
+      $or: [
+        { fecha: { $gte: start, $lte: end } },
+        { fecha: { $exists: false }, createdAt: { $gte: start, $lte: end } },
+      ],
+    };
+    const andMatch = monedaClause ? { $and: [dateClause, monedaClause] } : dateClause;
 
     const [
       cuenta,
@@ -235,35 +316,7 @@ export class DashboardService {
         .limit(recentLimit)
         .lean(),
 
-      this.transactionModel
-        .aggregate([
-          {
-            $match: {
-              userId,
-              ...tipoMatch,
-              ...monedaMatch,
-              $or: [
-                { fecha: { $gte: start, $lte: end } },
-                { fecha: { $exists: false }, createdAt: { $gte: start, $lte: end } },
-              ],
-            },
-          },
-          {
-            $project: {
-              tipo: 1,
-              amount: {
-                $ifNull: ['$montoConvertido', '$monto'],
-              },
-            },
-          },
-          {
-            $group: {
-              _id: '$tipo',
-              total: { $sum: '$amount' },
-            },
-          },
-        ])
-        .exec(),
+      this.aggregatePeriodTotals({ userId, start, end, tipoTransaccion: tipo, moneda }),
 
       this.transactionModel
         .aggregate([
@@ -271,11 +324,7 @@ export class DashboardService {
             $match: {
               userId,
               ...tipoMatch,
-              ...monedaMatch,
-              $or: [
-                { fecha: { $gte: start, $lte: end } },
-                { fecha: { $exists: false }, createdAt: { $gte: start, $lte: end } },
-              ],
+              ...andMatch,
             },
           },
           {
@@ -428,8 +477,8 @@ export class DashboardService {
       ? await this.cuentaHistorialService.buscarHistorial(String(cuenta.id), recentPage, recentLimit)
       : { total: 0, page: recentPage, limit: recentLimit, data: [] };
 
-    const ingresosPeriodo = Number(periodAgg?.find((x: any) => x._id === 'ingreso')?.total ?? 0);
-    const egresosPeriodo = Number(periodAgg?.find((x: any) => x._id === 'egreso')?.total ?? 0);
+    const ingresosPeriodo = Number((periodAgg as any)?.ingresos ?? 0);
+    const egresosPeriodo = Number((periodAgg as any)?.egresos ?? 0);
 
     const snapshot = {
       meta: {
@@ -558,5 +607,258 @@ export class DashboardService {
 
     this.microCache.set(cacheKey, { expiresAt: nowMs + this.microCacheTtlMs, data: snapshot });
     return snapshot;
+  }
+
+  async getBalanceCard(userId: string, opts?: BalanceCardOptions) {
+    const periodo: BalancePeriodo = opts?.periodo ?? 'mes';
+    const range = this.resolveBalancePeriodo(periodo);
+    const { start, end } = this.resolveRange({ range });
+
+    const labels = this.buildBalancePeriodLabels();
+
+    const cuenta = await this.cuentaModel
+      .findOne({ userId, isPrincipal: true })
+      .select('id moneda cantidad simbolo color nombre')
+      .lean();
+
+    const monedaFiltro = (opts?.moneda ?? '').trim();
+    const totals = await this.aggregatePeriodTotals({
+      userId,
+      start,
+      end,
+      tipoTransaccion: 'ambos',
+      moneda: monedaFiltro || undefined,
+    });
+
+    return {
+      meta: {
+        periodo: {
+          key: periodo,
+          label: (labels as any)[periodo] ?? 'Mes',
+        },
+        start: start.toISOString(),
+        end: end.toISOString(),
+        periods: {
+          selected: periodo,
+          available: Object.entries(labels).map(([key, label]) => ({ key, label })),
+        },
+        query: {
+          moneda: monedaFiltro || null,
+        },
+      },
+      account: {
+        saldo: Number((cuenta as any)?.cantidad ?? 0),
+        moneda: String((cuenta as any)?.moneda ?? 'MXN'),
+      },
+      totals: {
+        ingresos: Number(totals.ingresos ?? 0),
+        egresos: Number(totals.egresos ?? 0),
+      },
+    };
+  }
+
+  async getExpensesChart(userId: string, opts?: SnapshotOptions) {
+    const { range, start, end, isCustom } = this.resolveRange(opts);
+
+    const chartGranularity: 'hour' | 'day' | 'month' =
+      range === 'day' ? 'hour' : range === 'year' || range === 'all' ? 'month' : 'day';
+
+    const chartDateFormat =
+      chartGranularity === 'hour'
+        ? '%Y-%m-%dT%H:00'
+        : chartGranularity === 'month'
+          ? '%Y-%m'
+          : '%Y-%m-%d';
+
+    const chartMaxPoints =
+      chartGranularity === 'hour'
+        ? 48
+        : chartGranularity === 'month'
+          ? range === 'all'
+            ? 240
+            : 24
+          : range === '6months'
+            ? 250
+            : range === '3months'
+              ? 120
+              : range === 'month'
+                ? 60
+                : 30;
+
+    const tipo = opts?.tipoTransaccion ?? 'ambos';
+    const moneda = (opts?.moneda ?? '').trim();
+    const tipoMatch = tipo !== 'ambos' ? { tipo } : {};
+
+    const monedaClause = moneda ? { $or: [{ moneda }, { monedaConvertida: moneda }] } : null;
+    const dateClause = {
+      $or: [
+        { fecha: { $gte: start, $lte: end } },
+        { fecha: { $exists: false }, createdAt: { $gte: start, $lte: end } },
+      ],
+    };
+    const andMatch = monedaClause ? { $and: [dateClause, monedaClause] } : dateClause;
+
+    const rows = await this.transactionModel
+      .aggregate([
+        {
+          $match: {
+            userId,
+            ...tipoMatch,
+            ...andMatch,
+          },
+        },
+        {
+          $project: {
+            tipo: 1,
+            amount: { $abs: { $ifNull: ['$montoConvertido', '$monto'] } },
+            bucket: {
+              $dateToString: { format: chartDateFormat, date: { $ifNull: ['$fecha', '$createdAt'] } },
+            },
+          },
+        },
+        {
+          $group: {
+            _id: '$bucket',
+            ingreso: {
+              $sum: {
+                $cond: [{ $eq: ['$tipo', 'ingreso'] }, '$amount', 0],
+              },
+            },
+            egreso: {
+              $sum: {
+                $cond: [{ $eq: ['$tipo', 'egreso'] }, '$amount', 0],
+              },
+            },
+          },
+        },
+        { $sort: { _id: -1 } },
+        { $limit: chartMaxPoints },
+        { $sort: { _id: 1 } },
+      ])
+      .exec();
+
+    return {
+      meta: {
+        range,
+        isCustom,
+        start: start.toISOString(),
+        end: end.toISOString(),
+        query: {
+          tipoTransaccion: tipo,
+          moneda: moneda || null,
+          fechaInicio: opts?.fechaInicio ?? null,
+          fechaFin: opts?.fechaFin ?? null,
+        },
+        chart: {
+          granularity: chartGranularity,
+          maxPoints: chartMaxPoints,
+        },
+      },
+      points: (rows ?? []).map((p: any) => ({
+        date: p?._id,
+        ingreso: Number(p?.ingreso ?? 0),
+        egreso: Number(p?.egreso ?? 0),
+      })),
+    };
+  }
+
+  async getTotals(userId: string) {
+    const [subcuentasTotalsAgg, recurrentesTotalsAgg] = await Promise.all([
+      this.subcuentaModel
+        .aggregate([
+          { $match: { userId } },
+          {
+            $project: {
+              moneda: 1,
+              cantidad: 1,
+              activa: { $ifNull: ['$activa', true] },
+              pausadaPorPlan: { $ifNull: ['$pausadaPorPlan', false] },
+            },
+          },
+          {
+            $addFields: {
+              bucket: {
+                $cond: [
+                  { $eq: ['$pausadaPorPlan', true] },
+                  'paused',
+                  { $cond: [{ $eq: ['$activa', true] }, 'active', 'inactive'] },
+                ],
+              },
+            },
+          },
+          { $match: { bucket: { $in: ['active', 'paused'] } } },
+          {
+            $group: {
+              _id: { bucket: '$bucket', moneda: '$moneda' },
+              total: { $sum: '$cantidad' },
+              count: { $sum: 1 },
+            },
+          },
+          { $sort: { '_id.bucket': 1, '_id.moneda': 1 } },
+        ])
+        .exec(),
+
+      this.recurrenteModel
+        .aggregate([
+          { $match: { userId } },
+          {
+            $project: {
+              moneda: 1,
+              monto: 1,
+              pausado: { $ifNull: ['$pausado', false] },
+              pausadoPorPlan: { $ifNull: ['$pausadoPorPlan', false] },
+            },
+          },
+          {
+            $addFields: {
+              bucket: { $cond: [{ $or: ['$pausado', '$pausadoPorPlan'] }, 'paused', 'active'] },
+            },
+          },
+          {
+            $group: {
+              _id: { bucket: '$bucket', moneda: '$moneda' },
+              total: { $sum: '$monto' },
+              count: { $sum: 1 },
+            },
+          },
+          { $sort: { '_id.bucket': 1, '_id.moneda': 1 } },
+        ])
+        .exec(),
+    ]);
+
+    const buildTotals = (rows: any[]) => {
+      const activeByCurrency: Array<{ moneda: string; total: number; count: number }> = [];
+      const pausedByCurrency: Array<{ moneda: string; total: number; count: number }> = [];
+      for (const r of rows ?? []) {
+        const bucket = String(r?._id?.bucket ?? '');
+        const moneda = String(r?._id?.moneda ?? '');
+        const item = {
+          moneda,
+          total: Number(r?.total ?? 0),
+          count: Number(r?.count ?? 0),
+        };
+        if (bucket === 'active') activeByCurrency.push(item);
+        if (bucket === 'paused') pausedByCurrency.push(item);
+      }
+      const sumTotal = (arr: Array<{ total: number }>) => arr.reduce((s, x) => s + Number(x.total ?? 0), 0);
+      const sumCount = (arr: Array<{ count: number }>) => arr.reduce((s, x) => s + Number(x.count ?? 0), 0);
+      return {
+        active: {
+          total: sumTotal(activeByCurrency),
+          count: sumCount(activeByCurrency),
+          byCurrency: activeByCurrency,
+        },
+        paused: {
+          total: sumTotal(pausedByCurrency),
+          count: sumCount(pausedByCurrency),
+          byCurrency: pausedByCurrency,
+        },
+      };
+    };
+
+    return {
+      subaccountsTotals: buildTotals(subcuentasTotalsAgg as any),
+      recurrentesTotals: buildTotals(recurrentesTotalsAgg as any),
+    };
   }
 }

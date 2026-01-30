@@ -11,8 +11,8 @@ export class AnalyticsFiltersDto {
   fechaFin?: string;
 
   @IsOptional()
-  @IsIn(['dia', 'semana', 'mes', '3meses', '6meses', 'año', 'personalizado'])
-  rangoTiempo?: 'dia' | 'semana' | 'mes' | '3meses' | '6meses' | 'año' | 'personalizado';
+  @IsIn(['dia', 'semana', 'mes', '3meses', '6meses', 'año', 'personalizado', 'desdeSiempre'])
+  rangoTiempo?: 'dia' | 'semana' | 'mes' | '3meses' | '6meses' | 'año' | 'personalizado' | 'desdeSiempre';
 
   @IsOptional()
   @IsArray()
