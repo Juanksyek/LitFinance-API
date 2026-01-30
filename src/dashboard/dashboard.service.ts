@@ -9,7 +9,7 @@ import { Transaction, TransactionDocument } from '../transactions/schemas/transa
 import { PlanConfigService } from '../plan-config/plan-config.service';
 import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.service';
 
-type SnapshotRange = 'day' | 'week' | 'month' | '3months' | '6months' | 'year';
+type SnapshotRange = 'day' | 'week' | 'month' | '3months' | '6months' | 'year' | 'all';
 
 type SnapshotOptions = {
   range?: SnapshotRange;
@@ -83,6 +83,9 @@ export class DashboardService {
       start.setDate(start.getDate() - 1);
     } else if (r === 'week') {
       start.setDate(start.getDate() - 7);
+    } else if (r === 'all') {
+      // Desde siempre: usar un inicio muy temprano (evita depender de createdAt del usuario)
+      return { range: r, start: new Date('2000-01-01T00:00:00.000Z'), end, isCustom: false };
     } else if (r === '3months') {
       start.setMonth(start.getMonth() - 3);
     } else if (r === '6months') {
@@ -100,7 +103,7 @@ export class DashboardService {
     const { range, start, end, isCustom } = this.resolveRange(opts);
 
     const chartGranularity: 'hour' | 'day' | 'month' =
-      range === 'day' ? 'hour' : range === 'year' ? 'month' : 'day';
+      range === 'day' ? 'hour' : range === 'year' || range === 'all' ? 'month' : 'day';
 
     const chartDateFormat =
       chartGranularity === 'hour'
@@ -113,7 +116,9 @@ export class DashboardService {
       chartGranularity === 'hour'
         ? 48
         : chartGranularity === 'month'
-          ? 24
+          ? range === 'all'
+            ? 240
+            : 24
           : range === '6months'
             ? 250
             : range === '3months'
@@ -189,7 +194,16 @@ export class DashboardService {
         }
       : {};
 
-    const [cuenta, subcuentas, recurrentes, recentTransactions, periodAgg, chartPoints] = await Promise.all([
+    const [
+      cuenta,
+      subcuentas,
+      recurrentes,
+      recentTransactions,
+      periodAgg,
+      chartPoints,
+      subcuentasTotalsAgg,
+      recurrentesTotalsAgg,
+    ] = await Promise.all([
       this.cuentaModel
         .findOne({ userId, isPrincipal: true })
         .select('id moneda cantidad simbolo color nombre')
@@ -289,11 +303,126 @@ export class DashboardService {
               },
             },
           },
-          { $sort: { _id: 1 } },
+          // Si hay límite de puntos, conservar los más recientes
+          { $sort: { _id: -1 } },
           { $limit: chartMaxPoints },
+          { $sort: { _id: 1 } },
+        ])
+        .exec(),
+
+      // Totales de subcuentas (para toda la cuenta, no paginado)
+      this.subcuentaModel
+        .aggregate([
+          {
+            $match: {
+              userId,
+            },
+          },
+          {
+            $project: {
+              moneda: 1,
+              cantidad: 1,
+              activa: { $ifNull: ['$activa', true] },
+              pausadaPorPlan: { $ifNull: ['$pausadaPorPlan', false] },
+            },
+          },
+          {
+            $addFields: {
+              bucket: {
+                $cond: [
+                  { $eq: ['$pausadaPorPlan', true] },
+                  'paused',
+                  {
+                    $cond: [{ $eq: ['$activa', true] }, 'active', 'inactive'],
+                  },
+                ],
+              },
+            },
+          },
+          // Solo buckets solicitados: active y paused
+          {
+            $match: {
+              bucket: { $in: ['active', 'paused'] },
+            },
+          },
+          {
+            $group: {
+              _id: { bucket: '$bucket', moneda: '$moneda' },
+              total: { $sum: '$cantidad' },
+              count: { $sum: 1 },
+            },
+          },
+          { $sort: { '_id.bucket': 1, '_id.moneda': 1 } },
+        ])
+        .exec(),
+
+      // Totales de recurrentes (para todo el usuario, no paginado)
+      this.recurrenteModel
+        .aggregate([
+          {
+            $match: {
+              userId,
+            },
+          },
+          {
+            $project: {
+              moneda: 1,
+              monto: 1,
+              pausado: { $ifNull: ['$pausado', false] },
+              pausadoPorPlan: { $ifNull: ['$pausadoPorPlan', false] },
+            },
+          },
+          {
+            $addFields: {
+              bucket: {
+                $cond: [{ $or: ['$pausado', '$pausadoPorPlan'] }, 'paused', 'active'],
+              },
+            },
+          },
+          {
+            $group: {
+              _id: { bucket: '$bucket', moneda: '$moneda' },
+              total: { $sum: '$monto' },
+              count: { $sum: 1 },
+            },
+          },
+          { $sort: { '_id.bucket': 1, '_id.moneda': 1 } },
         ])
         .exec(),
     ]);
+
+    const buildTotals = (rows: any[]) => {
+      const activeByCurrency: Array<{ moneda: string; total: number; count: number }> = [];
+      const pausedByCurrency: Array<{ moneda: string; total: number; count: number }> = [];
+      for (const r of rows ?? []) {
+        const bucket = String(r?._id?.bucket ?? '');
+        const moneda = String(r?._id?.moneda ?? '');
+        const item = {
+          moneda,
+          total: Number(r?.total ?? 0),
+          count: Number(r?.count ?? 0),
+        };
+        if (bucket === 'active') activeByCurrency.push(item);
+        if (bucket === 'paused') pausedByCurrency.push(item);
+      }
+      const sumTotal = (arr: Array<{ total: number }>) => arr.reduce((s, x) => s + Number(x.total ?? 0), 0);
+      const sumCount = (arr: Array<{ count: number }>) => arr.reduce((s, x) => s + Number(x.count ?? 0), 0);
+      return {
+        active: {
+          total: sumTotal(activeByCurrency),
+          count: sumCount(activeByCurrency),
+          byCurrency: activeByCurrency,
+        },
+        paused: {
+          total: sumTotal(pausedByCurrency),
+          count: sumCount(pausedByCurrency),
+          byCurrency: pausedByCurrency,
+        },
+      };
+    };
+
+    const subaccountsTotals = buildTotals(subcuentasTotalsAgg as any);
+    const recurrentesTotals = buildTotals(recurrentesTotalsAgg as any);
 
     const recentHistory = cuenta?.id
       ? await this.cuentaHistorialService.buscarHistorial(String(cuenta.id), recentPage, recentLimit)
@@ -332,6 +461,7 @@ export class DashboardService {
             { key: '3months', label: '3 meses' },
             { key: '6months', label: '6 meses' },
             { key: 'year', label: 'Año' },
+            { key: 'all', label: 'Desde siempre' },
           ],
         },
         query: {
@@ -365,6 +495,7 @@ export class DashboardService {
         color: s.color ?? null,
         simbolo: s.simbolo ?? null,
       })),
+      subaccountsTotals,
       recurrentesSummary: (recurrentes ?? []).map((r: any) => ({
         id: r.recurrenteId,
         nombre: r.nombre,
@@ -378,6 +509,7 @@ export class DashboardService {
         pausado: !!r.pausado,
         pausadoPorPlan: !!r.pausadoPorPlan,
       })),
+      recurrentesTotals,
       recentTransactions: (recentTransactions ?? []).map((t: any) => ({
         // Fecha efectiva vs fecha de registro
         fechaEfectiva: (t.fecha ?? t.createdAt) ?? null,
