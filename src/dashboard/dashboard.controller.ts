@@ -11,13 +11,35 @@ export class DashboardController {
     private readonly rateLimit: DashboardRateLimitService,
   ) {}
 
+  private normalizeRange(value?: string): 'day' | 'week' | 'month' | '3months' | '6months' | 'year' | 'all' | undefined {
+    if (!value) return undefined;
+    const raw = String(value).trim();
+    if (!raw) return undefined;
+
+    const lower = raw.toLowerCase();
+    const compact = lower.replace(/\s+/g, '');
+
+    if (compact === 'day' || compact === 'dia') return 'day';
+    if (compact === 'week' || compact === 'semana') return 'week';
+    if (compact === 'month' || compact === 'mes') return 'month';
+    if (compact === '3months' || compact === '3meses') return '3months';
+    if (compact === '6months' || compact === '6meses') return '6months';
+    if (compact === 'year' || compact === 'año' || compact === 'ano') return 'year';
+
+    // "Desde siempre" (all time)
+    if (compact === 'all' || compact === 'siempre' || compact === 'desdesiempre') return 'all';
+    if (lower === 'desde siempre') return 'all';
+
+    return undefined;
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('snapshot')
   async snapshot(
     @Req() req: Request,
     @Res() res: Response,
     @Headers('if-none-match') ifNoneMatch?: string,
-    @Query('range') range?: 'day' | 'week' | 'month' | '3months' | '6months' | 'year',
+    @Query('range') range?: string,
     @Query('fechaInicio') fechaInicio?: string,
     @Query('fechaFin') fechaFin?: string,
     @Query('tipoTransaccion') tipoTransaccion?: 'ingreso' | 'egreso' | 'ambos',
@@ -77,15 +99,7 @@ export class DashboardController {
       return res.status(HttpStatus.NOT_MODIFIED).send();
     }
 
-    const safeRange =
-      range === 'day' ||
-      range === 'week' ||
-      range === 'month' ||
-      range === '3months' ||
-      range === '6months' ||
-      range === 'year'
-        ? range
-        : undefined;
+    const safeRange = this.normalizeRange(range);
     const safeRecentLimit = recentLimit ? Number(recentLimit) : undefined;
     const safeSubaccountsLimit = subaccountsLimit ? Number(subaccountsLimit) : undefined;
     const safeRecurrentesLimit = recurrentesLimit ? Number(recurrentesLimit) : undefined;
