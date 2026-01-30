@@ -111,7 +111,7 @@ export interface AnalisisTemporal {
   // Shape adicional para compatibilidad con UI (ExpensesChart):
   // - `range` usa los valores del filtro (dia/semana/mes/3meses/6meses/año/personalizado)
   // - `points` usa `{ x, in, out }` donde `out` es negativo
-  range?: 'dia' | 'semana' | 'mes' | '3meses' | '6meses' | 'año' | 'personalizado';
+  range?: 'dia' | 'semana' | 'mes' | '3meses' | '6meses' | 'año' | 'personalizado' | 'desdeSiempre';
   points?: Array<{ x: string; in: number; out: number }>;
   tendencias: {
     ingresosTendencia: 'ascendente' | 'descendente' | 'estable';
