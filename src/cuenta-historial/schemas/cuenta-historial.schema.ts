@@ -12,6 +12,9 @@ export class CuentaHistorial {
   cuentaId: string;
 
   @Prop({ required: true })
+  userId: string;
+
+  @Prop({ required: true })
   monto: number;
 
   @Prop({
