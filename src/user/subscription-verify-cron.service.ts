@@ -5,6 +5,7 @@ import { Model } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema/user.schema';
 import { StripeService } from '../stripe/stripe.service';
 import { reconcileEntitlements } from './premium-entitlements';
+import { PlanAutoPauseService } from './services/plan-auto-pause.service';
 
 @Injectable()
 export class SubscriptionVerifyCronService {
@@ -13,6 +14,7 @@ export class SubscriptionVerifyCronService {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     private readonly stripeSvc: StripeService,
+    private readonly planAutoPauseService: PlanAutoPauseService,
   ) {}
 
   async verifyOne(params: { subscriptionId?: string; userMongoId?: string }) {
@@ -29,6 +31,13 @@ export class SubscriptionVerifyCronService {
     if (!user) {
       throw new Error('Usuario no encontrado para verificación');
     }
+
+    const userId = String((user as any).id ?? '');
+    if (!userId) {
+      throw new Error('Usuario sin campo id (user.id) para verificación');
+    }
+
+    const wasPremium = !!(user as any).isPremium;
 
     const subId = subscriptionId || (user as any).premiumSubscriptionId;
     if (!subId || typeof subId !== 'string' || subId === 'tipjar') {
@@ -57,6 +66,8 @@ export class SubscriptionVerifyCronService {
       now,
     );
 
+    const isPremiumNow = !!reconciled.isPremium;
+
     const update: any = {
       premiumSubscriptionId: subId,
       premiumSubscriptionStatus: expectedStatus,
@@ -77,6 +88,17 @@ export class SubscriptionVerifyCronService {
 
     await this.userModel.updateOne({ _id: (user as any)._id }, { $set: update });
 
+    // Enforzar límites del plan de forma persistente (pausa/reanuda según plan)
+    try {
+      await this.planAutoPauseService.enforcePlanLimits(
+        userId,
+        (reconciled.planType as any) === 'premium_plan' ? 'premium_plan' : 'free_plan',
+        'subscription.verifyOne',
+      );
+    } catch (err: any) {
+      this.logger.error(`❌ Error en enforcePlanLimits para ${userId}: ${err?.message}`);
+    }
+
     return {
       userMongoId: String((user as any)._id),
       subscriptionId: subId,
@@ -86,6 +108,7 @@ export class SubscriptionVerifyCronService {
       planType: reconciled.planType,
       jarExpiresAt: reconciled.jarExpiresAt,
       jarRemainingMs: reconciled.jarRemainingMs,
+      transitionDetected: wasPremium !== isPremiumNow,
     };
   }
 
@@ -110,7 +133,7 @@ export class SubscriptionVerifyCronService {
         ],
       })
         .select(
-          '_id premiumSubscriptionId premiumSubscriptionStatus premiumSubscriptionUntil ' +
+          '_id id premiumSubscriptionId premiumSubscriptionStatus premiumSubscriptionUntil ' +
             'jarExpiresAt jarRemainingMs premiumUntil isPremium planType premiumBonusDays',
         )
         .limit(50)
@@ -122,9 +145,14 @@ export class SubscriptionVerifyCronService {
       }
 
       const bulkOps: any[] = [];
+      const toEnforce: Array<{ userId: string; planType: 'free_plan' | 'premium_plan'; wasPremium: boolean; isPremiumNow: boolean }> = [];
       for (const u of users) {
         const subId = u.premiumSubscriptionId;
         if (!subId || typeof subId !== 'string') continue;
+
+        const userId = String((u as any).id ?? '');
+        if (!userId) continue;
+        const wasPremium = !!(u as any).isPremium;
         try {
           const subscription = await this.stripeSvc.stripe.subscriptions.retrieve(subId) as any;
           if (!subscription) continue;
@@ -142,6 +170,8 @@ export class SubscriptionVerifyCronService {
             },
             now,
           );
+
+          const isPremiumNow = !!reconciled.isPremium;
 
           const update: any = {
             premiumSubscriptionId: subId,
@@ -162,6 +192,13 @@ export class SubscriptionVerifyCronService {
           if ('premiumSubscriptionUntil' in reconciled) update.premiumSubscriptionUntil = reconciled.premiumSubscriptionUntil;
 
           bulkOps.push({ updateOne: { filter: { _id: u._id }, update: { $set: update } } });
+
+          toEnforce.push({
+            userId,
+            planType: (reconciled.planType as any) === 'premium_plan' ? 'premium_plan' : 'free_plan',
+            wasPremium,
+            isPremiumNow,
+          });
         } catch (err: any) {
           this.logger.warn(`[verifySubscriptions] Error recuperando sub ${subId}: ${err?.message}`);
           continue;
@@ -172,6 +209,15 @@ export class SubscriptionVerifyCronService {
         const res = await this.userModel.bulkWrite(bulkOps, { ordered: false });
         const updated = (res as any).modifiedCount ?? (res as any).nModified ?? 0;
         this.logger.log(`🔧 Sincronizadas: ${updated} suscripciones`);
+
+        // Enforzar límites según plan resultante (best-effort, con cooldown)
+        for (const t of toEnforce) {
+          try {
+            await this.planAutoPauseService.enforcePlanLimits(t.userId, t.planType, 'subscription.verifyBatch');
+          } catch (err: any) {
+            this.logger.error(`❌ Error en enforcePlanLimits para ${t.userId}: ${err?.message}`);
+          }
+        }
       } else {
         this.logger.log('✅ Ninguna actualización necesaria después de verificar subs');
       }
