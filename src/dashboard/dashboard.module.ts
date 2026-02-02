@@ -10,6 +10,7 @@ import { Recurrente, RecurrenteSchema } from '../recurrentes/schemas/recurrente.
 import { Transaction, TransactionSchema } from '../transactions/schemas/transaction.schema/transaction.schema';
 import { PlanConfigModule } from '../plan-config/plan-config.module';
 import { CuentaHistorialModule } from '../cuenta-historial/cuenta-historial.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { CuentaHistorialModule } from '../cuenta-historial/cuenta-historial.modu
     ]),
     PlanConfigModule,
     CuentaHistorialModule,
+    AuthModule,
   ],
   controllers: [DashboardController],
   providers: [DashboardService, DashboardRateLimitService],
