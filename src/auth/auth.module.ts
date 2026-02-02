@@ -34,5 +34,6 @@ import { PasswordResetController } from './password-reset.controller';
   ],
   controllers: [AuthController, PasswordResetController],
   providers: [AuthService, JwtStrategy, PasswordResetService],
+  exports: [AuthService],
 })
 export class AuthModule {}
