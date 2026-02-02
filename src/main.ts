@@ -73,7 +73,7 @@ async function bootstrap() {
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'PUT', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
-    exposedHeaders: ['Authorization'],
+    exposedHeaders: ['Authorization', 'x-access-token', 'x-refresh-token', 'x-session-refreshed'],
     maxAge: 86400, // 24 horas de cache para preflight
   });
 
