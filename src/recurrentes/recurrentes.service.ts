@@ -354,7 +354,11 @@ export class RecurrentesService {
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
 
-    const recurrentes = await this.recurrenteModel.find();
+    const recurrentes = await this.recurrenteModel.find({
+      pausado: { $ne: true },
+      pausadoPorPlan: { $ne: true },
+      estado: { $nin: ['pausado', 'completado'] },
+    });
 
     for (const r of recurrentes) {
       if (!r.recordatorios || r.recordatorios.length === 0) continue;
@@ -386,7 +390,8 @@ export class RecurrentesService {
     const recurrentes = await this.recurrenteModel.find({
       proximaEjecucion: { $gte: hoy, $lt: mañana },
       pausado: { $ne: true },
-      estado: { $nin: ['ejecutando', 'completado'] }, // Excluir completados
+      pausadoPorPlan: { $ne: true },
+      estado: { $nin: ['ejecutando', 'completado', 'pausado'] }, // Excluir completados/pausados
     });
 
     let exitosos = 0;
@@ -825,6 +830,10 @@ export class RecurrentesService {
       throw new NotFoundException('Recurrente no encontrado o no tienes permisos');
     }
 
+    if ((recurrente as any).pausadoPorPlan) {
+      throw new BadRequestException('Este recurrente está pausado por plan y no puede ejecutarse en test');
+    }
+
     // Guardar la fecha original
     const fechaOriginal = recurrente.proximaEjecucion;
 
@@ -835,7 +844,7 @@ export class RecurrentesService {
         { 
           $set: { 
             proximaEjecucion: new Date(),
-            pausado: false // Asegurar que no esté pausado
+            pausado: false // Asegurar que no esté pausado (solo para test)
           } 
         }
       );
