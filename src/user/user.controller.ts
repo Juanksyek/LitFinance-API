@@ -8,12 +8,14 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ToggleFavoritaMonedaDto } from '../moneda/dto/toggle-favorita-moneda.dto';
 import { SubscriptionVerifyCronService } from './subscription-verify-cron.service';
 import { PremiumCronService } from './premium-cron.service';
+import { PlanAutoPauseService } from './services/plan-auto-pause.service';
 
 @Controller('user')
 export class UserController {
     constructor(
         private readonly userService: UserService,
               private readonly cleanupService: CleanupService,
+              private readonly planAutoPauseService: PlanAutoPauseService,
               @Optional() private readonly subscriptionVerifyCronService?: SubscriptionVerifyCronService,
               @Optional() private readonly premiumCronService?: PremiumCronService,
     ) { }
@@ -135,5 +137,43 @@ export class UserController {
                     error: error.message,
                 };
             }
+        }
+
+        /**
+         * 🎯 Forzar en DB la pausa/reanudación por límites del plan (sin esperar a cron).
+         *
+         * POST /user/admin/enforce-plan-limits
+         * Body: { userId: string, targetPlanType?: 'free_plan' | 'premium_plan' }
+         */
+        @UseGuards(JwtAuthGuard, RolesGuard)
+        @Roles('admin')
+        @Post('admin/enforce-plan-limits')
+        async adminEnforcePlanLimits(
+            @Body() body: { userId?: string; targetPlanType?: 'free_plan' | 'premium_plan' },
+        ) {
+            const userId = String(body?.userId ?? '').trim();
+            if (!userId) {
+                return { success: false, message: 'userId es requerido' };
+            }
+
+            let targetPlanType = body?.targetPlanType;
+            if (targetPlanType !== 'free_plan' && targetPlanType !== 'premium_plan') {
+                // Inferir del perfil
+                const profile: any = await this.userService.getProfile(userId);
+                targetPlanType = (profile?.planType === 'premium_plan' ? 'premium_plan' : 'free_plan');
+            }
+
+            const result = await this.planAutoPauseService.enforcePlanLimits(
+                userId,
+                targetPlanType,
+                'admin.enforce',
+            );
+
+            return {
+                success: true,
+                userId,
+                targetPlanType,
+                result,
+            };
         }
 }
