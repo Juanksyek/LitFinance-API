@@ -3,13 +3,66 @@ import { Request, Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { DashboardService } from './dashboard.service';
 import { DashboardRateLimitService } from './dashboard-rate-limit.service';
+import { AuthService } from '../auth/auth.service';
 
 @Controller('dashboard')
 export class DashboardController {
   constructor(
     private readonly dashboardService: DashboardService,
     private readonly rateLimit: DashboardRateLimitService,
+    private readonly authService: AuthService,
   ) {}
+
+  private decodeJwtPayload(token: string): any | null {
+    try {
+      const parts = token.split('.');
+      if (parts.length < 2) return null;
+      const payloadB64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const padded = payloadB64 + '='.repeat((4 - (payloadB64.length % 4)) % 4);
+      const json = Buffer.from(padded, 'base64').toString('utf8');
+      return JSON.parse(json);
+    } catch {
+      return null;
+    }
+  }
+
+  private async maybeRefreshSession(params: {
+    authorization?: string;
+    refreshToken?: string;
+    deviceId?: string;
+    res: Response;
+  }) {
+    const authorization = params.authorization ?? '';
+    const refreshToken = (params.refreshToken ?? '').trim();
+    const deviceId = (params.deviceId ?? 'default').trim() || 'default';
+
+    if (!authorization.toLowerCase().startsWith('bearer ')) return;
+    if (!refreshToken) return;
+
+    const accessToken = authorization.slice(7).trim();
+    const payload = this.decodeJwtPayload(accessToken);
+    const expSeconds = typeof payload?.exp === 'number' ? payload.exp : null;
+    if (!expSeconds) return;
+
+    const msLeft = expSeconds * 1000 - Date.now();
+    const refreshWhenLeftMs = 2 * 60 * 1000; // 2 min
+    if (msLeft > refreshWhenLeftMs) return;
+
+    try {
+      const refreshed = await this.authService.refreshTokens({ refreshToken, deviceId } as any);
+
+      if (refreshed?.accessToken) {
+        params.res.setHeader('Authorization', `Bearer ${refreshed.accessToken}`);
+        params.res.setHeader('x-access-token', refreshed.accessToken);
+      }
+      if (refreshed?.refreshToken) {
+        params.res.setHeader('x-refresh-token', refreshed.refreshToken);
+      }
+      params.res.setHeader('x-session-refreshed', '1');
+    } catch {
+      // Best-effort: si falla el refresh no bloqueamos el dashboard.
+    }
+  }
 
   private normalizeRange(value?: string): 'day' | 'week' | 'month' | '3months' | '6months' | 'year' | 'all' | undefined {
     if (!value) return undefined;
@@ -168,6 +221,9 @@ export class DashboardController {
     @Req() req: Request,
     @Res() res: Response,
     @Headers('if-none-match') ifNoneMatch?: string,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-refresh-token') refreshToken?: string,
+    @Headers('x-device-id') deviceId?: string,
     @Query('range') range?: string,
     @Query('fechaInicio') fechaInicio?: string,
     @Query('fechaFin') fechaFin?: string,
@@ -198,6 +254,16 @@ export class DashboardController {
         retryAfterSeconds: rl.retryAfterSeconds,
       });
     }
+
+    // "Inicio de sesión perpetuo" (best-effort):
+    // si el access token está por expirar y el cliente manda refresh token,
+    // devolvemos tokens nuevos en headers.
+    await this.maybeRefreshSession({
+      authorization,
+      refreshToken,
+      deviceId,
+      res,
+    });
 
     const version = await this.dashboardService.getDashboardVersion(String(userId));
     const etag = `W/"${version}"`;
