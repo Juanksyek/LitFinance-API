@@ -134,4 +134,63 @@ describe('TransactionsService', () => {
     expect(Array.isArray(result)).toBe(true);
     expect(mockTransactionModel.find).toHaveBeenCalled();
   });
+
+  it('editar acepta `transaccionId` como identificador', async () => {
+    const actual = {
+      transaccionId: 'ABC123',
+      userId: 'user1',
+      monto: 100,
+      tipo: 'ingreso',
+      afectaCuenta: false,
+      registradoEn: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      toObject() { return this; },
+    } as any;
+
+    mockTransactionModel.findOne.mockResolvedValueOnce(actual);
+    // findOneAndUpdate should return the updated document
+    const updated = { ...actual, monto: 200 };
+    mockTransactionModel.findOneAndUpdate.mockResolvedValueOnce(updated);
+
+    // stub aplicarBalances to avoid deep model interactions
+    (service as any).aplicarBalances = jest.fn().mockResolvedValue({ cuentaId: 'c1', cuentaDelta: 100, metadata: {} });
+
+    const res = await service.editar('ABC123', { monto: 200 } as any, 'user1');
+
+    expect(res.transaccion).toBeDefined();
+    expect(res.transaccion.monto).toBe(200);
+    expect(mockTransactionModel.findOne).toHaveBeenCalled();
+    expect(mockTransactionModel.findOneAndUpdate).toHaveBeenCalled();
+  });
+
+  it('editar acepta Mongo `_id` como identificador (fallback)', async () => {
+    const mongoId = '507f1f77bcf86cd799439011';
+
+    const actualNull = null;
+    const actualById = {
+      _id: mongoId,
+      transaccionId: 'XYZ999',
+      userId: 'user2',
+      monto: 50,
+      tipo: 'egreso',
+      afectaCuenta: false,
+      registradoEn: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      toObject() { return this; },
+    } as any;
+
+    // First call (transaccionId lookup) returns null, second call (by _id) returns the doc
+    mockTransactionModel.findOne.mockResolvedValueOnce(actualNull).mockResolvedValueOnce(actualById);
+    const updated = { ...actualById, monto: 75 };
+    mockTransactionModel.findOneAndUpdate.mockResolvedValueOnce(updated);
+
+    (service as any).aplicarBalances = jest.fn().mockResolvedValue({ cuentaId: 'c2', cuentaDelta: -25, metadata: {} });
+
+    const res = await service.editar(mongoId, { monto: 75 } as any, 'user2');
+
+    expect(res.transaccion).toBeDefined();
+    expect(res.transaccion.monto).toBe(75);
+    expect(mockTransactionModel.findOne).toHaveBeenCalledTimes(2);
+    expect(mockTransactionModel.findOneAndUpdate).toHaveBeenCalled();
+  });
 });
