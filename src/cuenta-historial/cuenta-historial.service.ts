@@ -32,6 +32,30 @@ export class CuentaHistorialService {
     return await this.historialModel.findOne({ id, userId }).lean();
   }
 
+  async marcarMovimientoEliminadoById(params: {
+    id: string;
+    userId: string;
+    deletedAt?: Date;
+    extra?: Record<string, any>;
+    descripcion?: string;
+  }): Promise<any> {
+    const { id, userId, deletedAt, extra, descripcion } = params;
+    const nowIso = (deletedAt ?? new Date()).toISOString();
+
+    return await this.historialModel.findOneAndUpdate(
+      { id, userId },
+      {
+        $set: {
+          ...(descripcion ? { descripcion } : {}),
+          'metadata.audit.status': 'deleted',
+          'metadata.audit.deletedAt': nowIso,
+          ...(extra ? { 'metadata.audit.extra': extra } : {}),
+        },
+      },
+      { new: true },
+    );
+  }
+
   /**
    * Crea o actualiza (idempotente) un movimiento de historial asociado a una transacción.
    * Se usa para mantener un solo registro por transacción (evitar duplicados) y habilitar distintivos.
