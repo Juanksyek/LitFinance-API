@@ -52,13 +52,7 @@ import { Controller, Post, Get, Body, Param, Patch, Delete, Query, Req, UseGuard
     // Compat: eliminar un movimiento del historial (id corto) restaurando balances via transacción
     @Delete('movimiento/:movimientoId')
     async eliminarDesdeMovimiento(@Param('movimientoId') movimientoId: string, @Req() req) {
-      const movimiento = await this.cuentaHistorialService.findMovimientoById(movimientoId, req.user.id);
-      if (!movimiento) throw new NotFoundException('Movimiento no encontrado');
-
-      const transaccionId = movimiento?.metadata?.audit?.transaccionId;
-      if (!transaccionId) throw new BadRequestException('Este movimiento no es eliminable como transacción');
-
-      return this.transactionsService.eliminar(transaccionId, req.user.id);
+      return this.transactionsService.eliminarMovimiento(movimientoId, req.user.id);
     }
   
     @Get()
