@@ -10,6 +10,7 @@ describe('TransactionsController', () => {
   beforeEach(async () => {
     mockService = {
       eliminar: jest.fn(),
+      eliminarMovimiento: jest.fn(),
       listar: jest.fn(),
       obtenerHistorial: jest.fn(),
       obtener: jest.fn(),

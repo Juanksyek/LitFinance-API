@@ -324,6 +324,79 @@ export class TransactionsService {
     return { message: 'Transacción eliminada correctamente' };
   }
 
+  async eliminarMovimiento(movimientoId: string, userId: string) {
+    const movimiento: any = await this.historialService.findMovimientoById(movimientoId, userId);
+    if (!movimiento) throw new NotFoundException('Movimiento no encontrado');
+
+    const transaccionId = movimiento?.metadata?.audit?.transaccionId;
+    if (!transaccionId) {
+      throw new BadRequestException('Este movimiento no es eliminable como transacción');
+    }
+
+    try {
+      // Prefer the canonical deletion flow (reverts balances based on Transaction doc)
+      return await this.eliminar(transaccionId, userId);
+    } catch (err: any) {
+      // Fallback: if the Transaction doc is missing, restore balances from historial data
+      if (!(err instanceof NotFoundException)) throw err;
+
+      const cuentaId = movimiento.cuentaId;
+      if (!cuentaId) throw new BadRequestException('Movimiento inválido: falta cuentaId');
+
+      // Restore account balance by reversing the movement delta
+      const deltaCuenta = -Number(movimiento.monto ?? 0);
+      if (Number.isNaN(deltaCuenta)) throw new BadRequestException('Movimiento inválido: monto inválido');
+
+      const cuenta = await this.cuentaModel.findOne({ id: cuentaId, userId });
+      if (!cuenta) throw new NotFoundException('Cuenta principal no encontrada');
+
+      if (deltaCuenta < 0 && cuenta.cantidad + deltaCuenta < 0) {
+        throw new BadRequestException(`No puede retirar más de ${cuenta.cantidad} desde la cuenta principal.`);
+      }
+
+      await this.cuentaModel.updateOne({ id: cuentaId, userId }, { $inc: { cantidad: deltaCuenta } });
+
+      // Restore subcuenta (only if conversionSubcuenta exists)
+      const subcuentaId = movimiento.subcuentaId;
+      const conversionSubcuenta = movimiento?.metadata?.conversionSubcuenta;
+      if (subcuentaId && conversionSubcuenta && typeof conversionSubcuenta.montoDestino === 'number') {
+        const subcuenta = await this.subcuentaModel.findOne({ subCuentaId: subcuentaId, userId });
+        if (!subcuenta) throw new NotFoundException('Subcuenta no encontrada');
+
+        // montoDestino ya viene con signo (ingreso +, egreso -). Para eliminar, se revierte.
+        const deltaSubcuenta = -Number(conversionSubcuenta.montoDestino);
+        if (deltaSubcuenta < 0 && subcuenta.cantidad + deltaSubcuenta < 0) {
+          throw new BadRequestException(
+            `No puede retirar más de ${subcuenta.cantidad} desde la subcuenta "${subcuenta.nombre}".`
+          );
+        }
+
+        await this.subcuentaModel.updateOne(
+          { subCuentaId: subcuentaId, userId },
+          { $inc: { cantidad: deltaSubcuenta } },
+        );
+      }
+
+      await this.historialService.marcarMovimientoEliminadoById({
+        id: movimientoId,
+        userId,
+        descripcion: 'Movimiento eliminado',
+        extra: { fallback: true, reason: 'transaction_not_found', transaccionId },
+      });
+
+      await this.dashboardVersionService.touchDashboard(userId, 'transaction.delete.fallback');
+
+      return {
+        message: 'Movimiento eliminado correctamente',
+        mode: 'fallback',
+        restored: {
+          cuentaId,
+          deltaCuenta,
+        },
+      };
+    }
+  }
+
   async listar(
     userId: string,
     input?:
