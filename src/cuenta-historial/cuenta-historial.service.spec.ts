@@ -67,7 +67,12 @@ describe('CuentaHistorialService', () => {
       skip: jest.fn().mockReturnThis(),
       limit: jest.fn().mockReturnThis(),
       lean: jest.fn().mockResolvedValue([
-        { ...mockDto, _id: '1', monto: 500 },
+        {
+          ...mockDto,
+          _id: '1',
+          monto: 500,
+          metadata: { audit: { transaccionId: 'TX123', status: 'active' } },
+        },
       ]),
     });
     historialModel.findByIdAndDelete = jest.fn().mockResolvedValue({ _id: 'testId' });
@@ -88,6 +93,7 @@ describe('CuentaHistorialService', () => {
     expect(result.page).toBe(1);
     expect(result.limit).toBe(10);
     expect(result.data[0].detalles).toBeDefined();
+    expect(result.data[0].transaccionId).toBe('TX123');
   });
 
   it('eliminar should delete a record by id', async () => {

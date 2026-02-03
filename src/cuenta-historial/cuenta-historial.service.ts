@@ -28,6 +28,10 @@ export class CuentaHistorialService {
     return await nuevo.save();
   }
 
+  async findMovimientoById(id: string, userId: string): Promise<any | null> {
+    return await this.historialModel.findOne({ id, userId }).lean();
+  }
+
   /**
    * Crea o actualiza (idempotente) un movimiento de historial asociado a una transacción.
    * Se usa para mantener un solo registro por transacción (evitar duplicados) y habilitar distintivos.
@@ -128,10 +132,17 @@ export class CuentaHistorialService {
       conceptos.forEach((c) => conceptosMap.set(c.id, c.nombre));
     }
 
-    const enriched = data.map((item) => ({
+    // Evitar duplicados: los recurrentes exitosos ya se agregan desde historialRecurrente
+    const enriched = data
+      .filter((item) => item.tipo !== 'recurrente')
+      .map((item) => {
+      const audit = (item as any)?.metadata?.audit;
+      const transaccionId = audit?.transaccionId ?? null;
+      return {
       ...(item as any),
       ...item,
       motivo: item.motivo ?? null,
+      transaccionId,
       detalles: {
         origen: item.subcuentaId ? 'Desde subcuenta' : 'Movimiento directo',
         etiqueta: item.tipo === 'ajuste_subcuenta' ? 'Ajuste' : 'Manual',
@@ -156,7 +167,8 @@ export class CuentaHistorialService {
           return null;
         })(),
       },
-    }));
+    };
+    });
 
     // Obtener todos los recurrentes exitosos para la misma cuenta
     const recurrentes = await this.historialRecurrenteModel
@@ -166,6 +178,7 @@ export class CuentaHistorialService {
     const recurrentesFormateados = recurrentes.map((r) => ({
       ...r,
       _id: r._id,
+      historialRecurrenteId: String(r._id),
       tipo: 'recurrente',
       descripcion: `Cargo recurrente: ${r.nombreRecurrente}`,
       monto: -(r.montoConvertido ?? r.monto),

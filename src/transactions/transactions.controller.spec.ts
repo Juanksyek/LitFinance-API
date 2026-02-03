@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TransactionsController } from './transactions.controller';
 import { TransactionsService } from './transactions.service';
+import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.service';
 
 describe('TransactionsController', () => {
   let controller: TransactionsController;
@@ -11,12 +12,19 @@ describe('TransactionsController', () => {
       eliminar: jest.fn(),
       listar: jest.fn(),
       obtenerHistorial: jest.fn(),
+      obtener: jest.fn(),
+      editar: jest.fn(),
+    };
+
+    const mockCuentaHistorialService = {
+      findMovimientoById: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [TransactionsController],
       providers: [
         { provide: TransactionsService, useValue: mockService },
+        { provide: CuentaHistorialService, useValue: mockCuentaHistorialService },
       ],
     }).compile();
 
