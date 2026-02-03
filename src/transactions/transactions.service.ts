@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, isValidObjectId } from 'mongoose';
 import { Transaction, TransactionDocument } from './schemas/transaction.schema/transaction.schema';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
@@ -152,7 +152,11 @@ export class TransactionsService {
   }
 
   async editar(id: string, dto: UpdateTransactionDto, userId: string) {
-    const actual = await this.transactionModel.findOne({ transaccionId: id, userId });
+    let actual = await this.transactionModel.findOne({ transaccionId: id, userId });
+    // Fallback: allow clients to send Mongo _id as well
+    if (!actual && isValidObjectId(id)) {
+      actual = await this.transactionModel.findOne({ _id: id, userId });
+    }
     if (!actual) throw new NotFoundException('Transacción no encontrada');
 
     const actualObj: any = actual.toObject();
@@ -190,11 +194,14 @@ export class TransactionsService {
     // limpiar undefined para no pisar campos
     Object.keys(updatePayload).forEach((k) => updatePayload[k] === undefined && delete updatePayload[k]);
 
-    const actualizada = await this.transactionModel.findOneAndUpdate(
-      { transaccionId: id, userId },
-      { $set: updatePayload },
-      { new: true },
-    );
+    const query: any = { userId };
+    if (isValidObjectId(id)) {
+      query.$or = [{ transaccionId: id }, { _id: id }];
+    } else {
+      query.transaccionId = id;
+    }
+
+    const actualizada = await this.transactionModel.findOneAndUpdate(query, { $set: updatePayload }, { new: true });
     if (!actualizada) throw new NotFoundException('No se pudo actualizar');
 
     const txObj = { ...actualizada.toObject(), concepto: actualizada.concepto, motivo: actualizada.motivo };
@@ -272,13 +279,22 @@ export class TransactionsService {
   }
 
   async eliminar(id: string, userId: string) {
-    const transaccion = await this.transactionModel.findOne({ transaccionId: id, userId });
+    let transaccion = await this.transactionModel.findOne({ transaccionId: id, userId });
+    if (!transaccion && isValidObjectId(id)) {
+      transaccion = await this.transactionModel.findOne({ _id: id, userId });
+    }
     if (!transaccion) throw new NotFoundException('Transacción no encontrada');
 
     const txObj: any = transaccion.toObject();
     const revertResult = await this.aplicarBalances(txObj, -1);
 
-    await this.transactionModel.deleteOne({ transaccionId: id, userId });
+    const delQuery: any = { userId };
+    if (isValidObjectId(id)) {
+      delQuery.$or = [{ transaccionId: id }, { _id: id }];
+    } else {
+      delQuery.transaccionId = id;
+    }
+    await this.transactionModel.deleteOne(delQuery);
 
     // Historial subcuenta (auditoría simple)
     await this.historialModel.create({
