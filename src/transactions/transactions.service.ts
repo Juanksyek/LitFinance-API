@@ -431,6 +431,26 @@ export class TransactionsService {
     return { data: normalized, totals };
   }
 
+  async obtener(id: string, userId: string) {
+    let tx = await this.transactionModel.findOne({ transaccionId: id, userId });
+    if (!tx && isValidObjectId(id)) {
+      tx = await this.transactionModel.findOne({ _id: id, userId });
+    }
+    if (!tx) throw new NotFoundException('Transacción no encontrada');
+
+    const t: any = tx.toObject?.() ?? tx;
+    const fechaEfectiva = t.fecha ? new Date(t.fecha) : new Date(t.createdAt || Date.now());
+    const registradoEn = t.registradoEn ? new Date(t.registradoEn) : new Date(t.createdAt || Date.now());
+    const isBackdated = !this.sameUtcYmd(fechaEfectiva, registradoEn);
+
+    return {
+      ...t,
+      fechaEfectiva: fechaEfectiva.toISOString(),
+      registradoEn: registradoEn.toISOString(),
+      isBackdated,
+    };
+  }
+
   private async aplicarBalances(t: any, direction: 1 | -1): Promise<any> {
     let subcuentaResult: { subCuentaId: string } | null = null;
     let historialResult: { cuentaId: string } | null = null;
