@@ -47,6 +47,8 @@ describe('TransactionsService', () => {
     registrarMovimiento: jest.fn(),
     upsertMovimientoTransaccion: jest.fn(),
     marcarTransaccionEliminada: jest.fn(),
+    findMovimientoById: jest.fn(),
+    marcarMovimientoEliminadoById: jest.fn(),
   };
 
   const mockConversionService = {
@@ -133,6 +135,44 @@ describe('TransactionsService', () => {
 
     expect(Array.isArray(result)).toBe(true);
     expect(mockTransactionModel.find).toHaveBeenCalled();
+  });
+
+  it('eliminarMovimiento debe restaurar balance en modo fallback si la transacción no existe', async () => {
+    const movimientoId = 'IiiC8y2';
+
+    // movimiento del historial asociado a una transacción inexistente
+    mockHistorialService.findMovimientoById = jest.fn().mockResolvedValue({
+      id: movimientoId,
+      userId: 'user1',
+      cuentaId: 'c1',
+      subcuentaId: undefined,
+      monto: -400,
+      metadata: {
+        audit: { transaccionId: 'u5sstYz' },
+      },
+    });
+    mockHistorialService.marcarMovimientoEliminadoById = jest.fn().mockResolvedValue({ id: movimientoId });
+
+    // eliminar() intenta buscar transacción y falla
+    mockTransactionModel.findOne.mockResolvedValueOnce(null);
+
+    // fallback: restaurar cuenta
+    mockCuentaModel.findOne.mockResolvedValueOnce({ id: 'c1', userId: 'user1', cantidad: 1000 });
+    mockCuentaModel.updateOne.mockResolvedValueOnce({ acknowledged: true });
+
+    const res = await service.eliminarMovimiento(movimientoId, 'user1');
+
+    expect(res).toEqual(
+      expect.objectContaining({
+        message: 'Movimiento eliminado correctamente',
+        mode: 'fallback',
+      }),
+    );
+    expect(mockCuentaModel.updateOne).toHaveBeenCalledWith(
+      { id: 'c1', userId: 'user1' },
+      { $inc: { cantidad: 400 } },
+    );
+    expect(mockHistorialService.marcarMovimientoEliminadoById).toHaveBeenCalled();
   });
 
   it('editar acepta `transaccionId` como identificador', async () => {
