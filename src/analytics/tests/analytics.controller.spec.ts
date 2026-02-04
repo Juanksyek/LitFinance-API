@@ -10,6 +10,7 @@ describe('AnalyticsController', () => {
 
   const mockAnalyticsService = {
     obtenerResumenFinanciero: jest.fn(),
+    obtenerResumenInteligente: jest.fn(),
     obtenerEstadisticasPorConcepto: jest.fn(),
     obtenerEstadisticasPorSubcuenta: jest.fn(),
     obtenerEstadisticasPorRecurrente: jest.fn(),
@@ -77,6 +78,33 @@ describe('AnalyticsController', () => {
 
       expect(result).toEqual(mockResponse);
       expect(mockAnalyticsService.obtenerResumenFinanciero).toHaveBeenCalledWith('user123', mockFiltros);
+    });
+  });
+
+  describe('obtenerResumenInteligente', () => {
+    it('should return smart summary', async () => {
+      const mockRequest = { user: { id: 'user123' } };
+      const mockFiltros = { rangoTiempo: '6meses' as const, topN: 5 };
+      const mockResponse = {
+        periodo: {
+          fechaInicio: new Date('2024-01-01'),
+          fechaFin: new Date('2024-06-30'),
+          descripcion: 'Últimos 6 meses',
+        },
+        moneda: 'USD',
+        totales: { ingresos: 1000, gastos: 800, balance: 200, movimientos: 10 },
+        serieMensual: [],
+        topConceptosGasto: [],
+        recurrentes: { totalEjecutado: 0, top: [] },
+        insights: [],
+      };
+
+      mockAnalyticsService.obtenerResumenInteligente.mockResolvedValue(mockResponse);
+
+      const result = await controller.obtenerResumenInteligente(mockRequest, mockFiltros as any);
+
+      expect(result).toEqual(mockResponse);
+      expect(mockAnalyticsService.obtenerResumenInteligente).toHaveBeenCalledWith('user123', mockFiltros);
     });
   });
 
