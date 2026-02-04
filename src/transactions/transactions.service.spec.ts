@@ -11,7 +11,7 @@ describe('TransactionsService', () => {
   let service: TransactionsService;
 
   const mockTransactionModel = {
-    findOne: jest.fn(),
+    findOne: jest.fn().mockResolvedValue(null),
     findOneAndUpdate: jest.fn(),
     deleteOne: jest.fn(),
     find: jest.fn(() => ({
@@ -23,6 +23,7 @@ describe('TransactionsService', () => {
 
   const mockHistorialModel = {
     create: jest.fn(),
+    findOne: jest.fn(),
     find: jest.fn(() => ({
       sort: jest.fn(() => ({
         skip: jest.fn(() => ({
