@@ -20,7 +20,12 @@ import {
   AnalisisTemporalData,
   MovimientosResponse,
   MovimientoDetallado,
-  ComparacionPeriodos
+  ComparacionPeriodos,
+  ResumenInteligente,
+  Insight,
+  SerieMensualItem,
+  TopConceptoGastoItem,
+  TopRecurrenteItem
 } from './interfaces/analytics.interfaces';
 
 @Injectable()
@@ -92,6 +97,41 @@ export class AnalyticsService {
         fechaFin,
         descripcion: this.obtenerDescripcionPeriodo(filtros)
       }
+    };
+  }
+
+  /**
+   * Resumen “premium”: serie mensual + top breakdowns + insights.
+   *
+   * Nota: Por defecto usa el mismo rango/filters de AnalyticsFiltersDto.
+   */
+  async obtenerResumenInteligente(userId: string, filtros: AnalyticsFiltersDto): Promise<ResumenInteligente> {
+    this.logger.log(`Generando resumen inteligente para usuario: ${userId}`);
+
+    const topN = filtros.topN ?? 8;
+
+    const resumen = await this.obtenerResumenFinanciero(userId, filtros);
+    const { fechaInicio, fechaFin } = resumen.periodo;
+    const moneda = resumen.totalIngresado.moneda;
+
+    const serieMensual = await this.obtenerSerieMensual(userId, filtros, fechaInicio, fechaFin);
+    const topConceptosGasto = await this.obtenerTopConceptosGasto(userId, filtros, fechaInicio, fechaFin, topN);
+    const recurrentes = await this.obtenerTopRecurrentes(userId, filtros, fechaInicio, fechaFin, topN);
+    const insights = this.generarInsights(resumen, serieMensual, topConceptosGasto, recurrentes);
+
+    return {
+      periodo: resumen.periodo,
+      moneda,
+      totales: {
+        ingresos: resumen.totalIngresado.monto,
+        gastos: resumen.totalGastado.monto,
+        balance: resumen.balance.monto,
+        movimientos: resumen.totalMovimientos,
+      },
+      serieMensual,
+      topConceptosGasto,
+      recurrentes,
+      insights,
     };
   }
 
@@ -168,6 +208,370 @@ export class AnalyticsService {
         participacionPorcentual: totalGeneral > 0 ? (montoTotal / totalGeneral) * 100 : 0
       };
     });
+  }
+
+  private async obtenerSerieMensual(
+    userId: string,
+    filtros: AnalyticsFiltersDto,
+    fechaInicio: Date,
+    fechaFin: Date,
+  ): Promise<SerieMensualItem[]> {
+    const formatoMes = '%Y-%m';
+    const match = this.construirQueryTransacciones(userId, filtros, fechaInicio, fechaFin);
+
+    const pipeline = [
+      { $match: match },
+      {
+        $project: {
+          tipo: 1,
+          amount: { $abs: { $ifNull: ['$montoConvertido', '$monto'] } },
+          bucket: {
+            $dateToString: {
+              format: formatoMes,
+              date: { $ifNull: ['$fecha', '$createdAt'] },
+            },
+          },
+        },
+      },
+      {
+        $group: {
+          _id: { mes: '$bucket', tipo: '$tipo' },
+          monto: { $sum: '$amount' },
+          cantidad: { $sum: 1 },
+        },
+      },
+      {
+        $group: {
+          _id: '$_id.mes',
+          ingresos: {
+            $sum: { $cond: [{ $eq: ['$_id.tipo', 'ingreso'] }, '$monto', 0] },
+          },
+          gastos: {
+            $sum: { $cond: [{ $eq: ['$_id.tipo', 'egreso'] }, '$monto', 0] },
+          },
+          movimientos: { $sum: '$cantidad' },
+        },
+      },
+      { $sort: { _id: 1 as const } },
+    ];
+
+    const txMensual = await this.transactionModel.aggregate(pipeline);
+
+    let recMensual: Array<{ _id: string; gastosRecurrentes: number; cantidad: number }> = [];
+    if (filtros.incluirRecurrentes && !filtros.soloTransaccionesManuales) {
+      try {
+        const HistorialRecurrenteModel = this.userModel.db.model('HistorialRecurrente');
+
+        const recMatch: any = {
+          userId,
+          estado: 'exitoso',
+          fecha: { $gte: fechaInicio, $lte: fechaFin },
+        };
+
+        if (filtros.monedas?.length) {
+          recMatch.$or = [
+            { moneda: { $in: filtros.monedas } },
+            { monedaConvertida: { $in: filtros.monedas } },
+          ];
+        }
+        if (filtros.cuentas?.length) {
+          recMatch.cuentaId = { $in: filtros.cuentas };
+        }
+        if (filtros.subcuentas?.length) {
+          recMatch.subcuentaId = { $in: filtros.subcuentas };
+        }
+
+        recMensual = await HistorialRecurrenteModel.aggregate([
+          { $match: recMatch },
+          {
+            $project: {
+              amount: { $abs: { $ifNull: ['$montoConvertido', '$monto'] } },
+              bucket: { $dateToString: { format: formatoMes, date: '$fecha' } },
+            },
+          },
+          {
+            $group: {
+              _id: '$bucket',
+              gastosRecurrentes: { $sum: '$amount' },
+              cantidad: { $sum: 1 },
+            },
+          },
+          { $sort: { _id: 1 as const } },
+        ]);
+      } catch (error) {
+        this.logger.warn('No se pudo agregar serie mensual de recurrentes', error);
+      }
+    }
+
+    const months = this.generarListaMeses(fechaInicio, fechaFin);
+    const txMap = new Map(txMensual.map((r: any) => [r._id, r]));
+    const recMap = new Map(recMensual.map((r: any) => [r._id, r]));
+
+    return months.map((mes) => {
+      const tx = txMap.get(mes);
+      const rec = recMap.get(mes);
+      const ingresos = this.moneyValidationService.sanitizeAmount(tx?.ingresos || 0);
+      const gastosTx = this.moneyValidationService.sanitizeAmount(tx?.gastos || 0);
+      const gastosRecurrentes = this.moneyValidationService.sanitizeAmount(rec?.gastosRecurrentes || 0);
+      const gastos = this.moneyValidationService.sanitizeAmount(gastosTx + gastosRecurrentes);
+      const movimientos = (tx?.movimientos || 0) + (rec?.cantidad || 0);
+
+      return {
+        mes,
+        ingresos,
+        gastos,
+        gastosRecurrentes,
+        balance: this.moneyValidationService.sanitizeAmount(ingresos - gastos),
+        movimientos,
+      };
+    });
+  }
+
+  private async obtenerTopConceptosGasto(
+    userId: string,
+    filtros: AnalyticsFiltersDto,
+    fechaInicio: Date,
+    fechaFin: Date,
+    topN: number,
+  ): Promise<TopConceptoGastoItem[]> {
+    if (filtros.tipoTransaccion === 'ingreso') {
+      return [];
+    }
+
+    const matchActual = {
+      ...this.construirQueryTransacciones(userId, { ...filtros, tipoTransaccion: 'egreso' }, fechaInicio, fechaFin),
+    };
+
+    const duracionMs = fechaFin.getTime() - fechaInicio.getTime();
+    const inicioAnterior = new Date(fechaInicio.getTime() - duracionMs);
+    const finAnterior = new Date(fechaInicio.getTime());
+    const matchAnterior = {
+      ...this.construirQueryTransacciones(userId, { ...filtros, tipoTransaccion: 'egreso' }, inicioAnterior, finAnterior),
+    };
+
+    const pipeline = (match: any) => [
+      { $match: match },
+      {
+        $project: {
+          concepto: { $ifNull: ['$concepto', 'sin_concepto'] },
+          amount: { $abs: { $ifNull: ['$montoConvertido', '$monto'] } },
+          effectiveDate: { $ifNull: ['$fecha', '$createdAt'] },
+        },
+      },
+      {
+        $group: {
+          _id: '$concepto',
+          total: { $sum: '$amount' },
+          cantidad: { $sum: 1 },
+          ultimoMovimiento: { $max: '$effectiveDate' },
+        },
+      },
+      { $sort: { total: -1 as const } },
+      { $limit: Math.max(topN, 15) },
+    ];
+
+    const [actual, anterior] = await Promise.all([
+      this.transactionModel.aggregate(pipeline(matchActual)),
+      this.transactionModel.aggregate(pipeline(matchAnterior)),
+    ]);
+
+    const anteriorMap = new Map(anterior.map((r: any) => [r._id, r.total]));
+    const totalGeneral = actual.reduce((sum: number, r: any) => sum + (r.total || 0), 0);
+
+    const conceptosIds = actual.map((r: any) => r._id).filter((id: any) => id && id !== 'sin_concepto');
+    const conceptos = await this.conceptoModel.find({ userId, conceptoId: { $in: conceptosIds } });
+    const conceptosMap = new Map(conceptos.map((c) => [c.conceptoId, c]));
+
+    return actual
+      .slice(0, topN)
+      .map((r: any) => {
+        const concepto = conceptosMap.get(r._id);
+        const nombre = r._id === 'sin_concepto' ? 'Sin concepto' : (concepto?.nombre || r._id);
+        const prev = anteriorMap.get(r._id) || 0;
+        const monto = this.moneyValidationService.sanitizeAmount(r.total || 0);
+
+        return {
+          conceptoId: r._id,
+          nombre,
+          monto,
+          cantidadMovimientos: r.cantidad || 0,
+          deltaVsPeriodoAnterior: this.moneyValidationService.sanitizeAmount(monto - prev),
+          participacionPorcentual: totalGeneral > 0 ? (monto / totalGeneral) * 100 : 0,
+          color: concepto?.color,
+          icono: concepto?.icono,
+        };
+      });
+  }
+
+  private async obtenerTopRecurrentes(
+    userId: string,
+    filtros: AnalyticsFiltersDto,
+    fechaInicio: Date,
+    fechaFin: Date,
+    topN: number,
+  ): Promise<{ totalEjecutado: number; top: TopRecurrenteItem[] }> {
+    if (!filtros.incluirRecurrentes || filtros.soloTransaccionesManuales) {
+      return { totalEjecutado: 0, top: [] };
+    }
+
+    try {
+      const HistorialRecurrenteModel = this.userModel.db.model('HistorialRecurrente');
+
+      const match: any = {
+        userId,
+        estado: 'exitoso',
+        fecha: { $gte: fechaInicio, $lte: fechaFin },
+      };
+      if (filtros.monedas?.length) {
+        match.$or = [
+          { moneda: { $in: filtros.monedas } },
+          { monedaConvertida: { $in: filtros.monedas } },
+        ];
+      }
+      if (filtros.cuentas?.length) {
+        match.cuentaId = { $in: filtros.cuentas };
+      }
+      if (filtros.subcuentas?.length) {
+        match.subcuentaId = { $in: filtros.subcuentas };
+      }
+
+      const agg = await HistorialRecurrenteModel.aggregate([
+        { $match: match },
+        {
+          $project: {
+            recurrenteId: 1,
+            nombre: '$nombreRecurrente',
+            plataforma: 1,
+            amount: { $abs: { $ifNull: ['$montoConvertido', '$monto'] } },
+          },
+        },
+        {
+          $group: {
+            _id: '$recurrenteId',
+            total: { $sum: '$amount' },
+            cantidad: { $sum: 1 },
+            nombre: { $last: '$nombre' },
+            plataforma: { $last: '$plataforma' },
+          },
+        },
+        { $sort: { total: -1 as const } },
+      ]);
+
+      const totalEjecutado = this.moneyValidationService.sanitizeAmount(
+        agg.reduce((sum: number, r: any) => sum + (r.total || 0), 0),
+      );
+
+      const top = agg.slice(0, topN).map((r: any) => ({
+        recurrenteId: r._id,
+        nombre: r.nombre,
+        plataforma: r.plataforma,
+        totalEjecutado: this.moneyValidationService.sanitizeAmount(r.total || 0),
+        cantidadEjecuciones: r.cantidad || 0,
+      }));
+
+      return { totalEjecutado, top };
+    } catch (error) {
+      this.logger.warn('No se pudieron obtener top recurrentes', error);
+      return { totalEjecutado: 0, top: [] };
+    }
+  }
+
+  private generarInsights(
+    resumen: ResumenFinanciero,
+    serieMensual: SerieMensualItem[],
+    topConceptos: TopConceptoGastoItem[],
+    recurrentes: { totalEjecutado: number; top: TopRecurrenteItem[] },
+  ): Insight[] {
+    const insights: Insight[] = [];
+
+    if (resumen.totalMovimientos === 0) {
+      insights.push({
+        codigo: 'sin_movimientos',
+        severidad: 'info',
+        titulo: 'Aún no hay movimientos en el período',
+        detalle: 'Agrega ingresos/gastos o sincroniza datos para ver insights y tendencias.',
+      });
+      return insights;
+    }
+
+    if (!resumen.balance.esPositivo) {
+      insights.push({
+        codigo: 'balance_negativo',
+        severidad: 'warning',
+        titulo: 'Balance negativo en el período',
+        detalle: `Tus gastos superan tus ingresos por ${Math.abs(resumen.balance.monto).toFixed(2)} ${resumen.balance.moneda}.`,
+        metadata: { balance: resumen.balance.monto },
+      });
+    }
+
+    const last = serieMensual[serieMensual.length - 1];
+    if (serieMensual.length >= 4 && last) {
+      const prev3 = serieMensual.slice(-4, -1);
+      const avgPrev = prev3.reduce((sum, m) => sum + m.gastos, 0) / prev3.length;
+      const delta = last.gastos - avgPrev;
+      const ratio = avgPrev > 0 ? delta / avgPrev : 0;
+
+      if (avgPrev > 0 && ratio >= 0.25 && delta >= 50) {
+        insights.push({
+          codigo: 'gasto_subio',
+          severidad: 'warning',
+          titulo: 'Tus gastos subieron vs. los meses previos',
+          detalle: `Último mes: ${last.gastos.toFixed(2)} vs promedio prev. 3 meses: ${avgPrev.toFixed(2)} (${(ratio * 100).toFixed(0)}%).`,
+          metadata: { ultimoMes: last, promedioPrevio: avgPrev },
+        });
+      }
+    }
+
+    const top1 = topConceptos[0];
+    if (top1 && top1.participacionPorcentual >= 50 && top1.monto >= 50) {
+      insights.push({
+        codigo: 'concentracion_gasto',
+        severidad: 'info',
+        titulo: 'Gasto concentrado en un concepto',
+        detalle: `${top1.nombre} representa ~${top1.participacionPorcentual.toFixed(0)}% de tus gastos del período.`,
+        metadata: { conceptoId: top1.conceptoId, participacion: top1.participacionPorcentual },
+      });
+    }
+
+    if (resumen.totalGastado.monto > 0 && recurrentes.totalEjecutado > 0) {
+      const share = recurrentes.totalEjecutado / resumen.totalGastado.monto;
+      if (share >= 0.3) {
+        insights.push({
+          codigo: 'recurrentes_pesan',
+          severidad: 'info',
+          titulo: 'Tus recurrentes pesan bastante en tus gastos',
+          detalle: `Los pagos recurrentes representan ~${(share * 100).toFixed(0)}% de tus gastos del período.`,
+          metadata: { share },
+        });
+      }
+    }
+
+    if (insights.length === 0) {
+      insights.push({
+        codigo: 'todo_estable',
+        severidad: 'success',
+        titulo: 'Todo se ve estable',
+        detalle: 'No se detectaron cambios grandes ni patrones de riesgo en este período.',
+      });
+    }
+
+    return insights;
+  }
+
+  private generarListaMeses(fechaInicio: Date, fechaFin: Date): string[] {
+    // Normalizar al primer día del mes en UTC
+    const start = new Date(Date.UTC(fechaInicio.getUTCFullYear(), fechaInicio.getUTCMonth(), 1));
+    const end = new Date(Date.UTC(fechaFin.getUTCFullYear(), fechaFin.getUTCMonth(), 1));
+
+    const months: string[] = [];
+    const cur = new Date(start);
+    while (cur.getTime() <= end.getTime()) {
+      const y = cur.getUTCFullYear();
+      const m = String(cur.getUTCMonth() + 1).padStart(2, '0');
+      months.push(`${y}-${m}`);
+      cur.setUTCMonth(cur.getUTCMonth() + 1);
+    }
+    return months;
   }
 
   /**
