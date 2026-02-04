@@ -537,14 +537,26 @@ export class StripeController {
       if (!updated) return;
 
       const isPremiumNow = (updated as any).isPremium ?? false;
-      if (wasPremium === isPremiumNow) return;
-
       const userId = (updated as any).id ?? String(updated._id);
-      this.logger.log(
-        `[planTransition] reason=${reason} userId=${userId} wasPremium=${wasPremium} isPremiumNow=${isPremiumNow}`,
-      );
 
-      await this.planAutoPauseService.handlePlanTransition(userId, wasPremium, isPremiumNow);
+      // Caso clave: si el usuario YA ES premium (aunque no haya transición),
+      // igual queremos reanudar lo pausado por plan de forma inmediata.
+      if (isPremiumNow) {
+        this.logger.log(
+          `[planEnforce] reason=${reason} userId=${userId} isPremiumNow=true (wasPremium=${wasPremium})`,
+        );
+        const result = await this.planAutoPauseService.enforcePlanLimits(userId, 'premium_plan', `stripe.${reason}`);
+        this.logger.log(
+          `[planEnforce] resumed subcuentas=${result.subcuentasReanudadas} recurrentes=${result.recurrentesReanudados}`,
+        );
+        return;
+      }
+
+      // Si perdió premium, sí necesitamos aplicar límites del free plan.
+      if (wasPremium && !isPremiumNow) {
+        this.logger.log(`[planEnforce] reason=${reason} userId=${userId} lostPremium=true`);
+        await this.planAutoPauseService.enforcePlanLimits(userId, 'free_plan', `stripe.${reason}`);
+      }
     } catch (err: any) {
       this.logger.warn(`[planTransition] Error: ${err?.message || err}`);
     }
@@ -797,6 +809,7 @@ export class StripeController {
               break;
             }
 
+            const wasPremium = user.isPremium ?? false;
             const now = new Date();
             const reconciled = applyJarCredit(user as any, msFromJarDays(days), now);
             await this.patchUser(user, {
@@ -804,6 +817,8 @@ export class StripeController {
               jarRemainingMs: reconciled.jarRemainingMs,
               premiumBonusDays: 0,
             });
+
+            await this.applyPlanTransitionAfterPatch(user, wasPremium, 'webhook.checkout.session.completed.tipjar');
           }
           break;
         }
@@ -848,6 +863,7 @@ export class StripeController {
           if (days > 0 && userMongoId) {
             const user = await this.userModel.findById(userMongoId);
             if (user) {
+              const wasPremium = user.isPremium ?? false;
               const now = new Date();
               const reconciled = applyJarCredit(user as any, msFromJarDays(days), now);
               await this.patchUser(user, {
@@ -855,6 +871,8 @@ export class StripeController {
                 jarRemainingMs: reconciled.jarRemainingMs,
                 premiumBonusDays: 0,
               });
+
+              await this.applyPlanTransitionAfterPatch(user, wasPremium, 'webhook.payment_intent.succeeded.tipjar_mobile');
             } else {
               this.logger.warn(`[payment_intent.succeeded] Usuario no encontrado: ${userMongoId}`);
             }

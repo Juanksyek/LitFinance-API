@@ -31,10 +31,14 @@ export class UserService {
 
       await this.userModel.updateOne({ id: userId }, { $set: set });
       
-      // Detectar transición de premium y pausar/reanudar recursos automáticamente
+      // Aplicar enforcement inmediato:
+      // - si es premium: reanudar lo pausado por plan (sin depender de transición)
+      // - si perdió premium: pausar según free plan
       const isPremiumNow = reconciled.isPremium;
-      if (wasPremium !== isPremiumNow) {
-        await this.planAutoPauseService.handlePlanTransition(userId, wasPremium, isPremiumNow);
+      if (isPremiumNow) {
+        await this.planAutoPauseService.enforcePlanLimits(userId, 'premium_plan', 'user.syncPremiumStatus');
+      } else if (wasPremium && !isPremiumNow) {
+        await this.planAutoPauseService.enforcePlanLimits(userId, 'free_plan', 'user.syncPremiumStatus');
       }
       
       return reconciled.isPremium;
