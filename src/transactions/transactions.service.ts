@@ -286,7 +286,20 @@ export class TransactionsService {
     if (!transaccion) throw new NotFoundException('Transacción no encontrada');
 
     const txObj: any = transaccion.toObject();
-    const revertResult = await this.aplicarBalances(txObj, -1);
+
+    // Protección: si ya existe un movimiento de historial marcado como 'deleted'
+    // para esta transacción, asumimos que los balances ya fueron revertidos
+    // anteriormente y evitamos aplicar el revert nuevamente.
+    const histAlreadyDeleted = await this.historialModel.findOne({
+      'metadata.audit.transaccionId': id,
+      userId,
+      'metadata.audit.status': 'deleted',
+    });
+
+    let revertResult: any = null;
+    if (!histAlreadyDeleted) {
+      revertResult = await this.aplicarBalances(txObj, -1);
+    }
 
     const delQuery: any = { userId };
     if (isValidObjectId(id)) {
