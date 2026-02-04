@@ -202,3 +202,68 @@ export interface ComparacionPeriodos {
     };
   };
 }
+
+export type InsightSeverity = 'info' | 'warning' | 'success';
+
+export interface Insight {
+  codigo: string;
+  severidad: InsightSeverity;
+  titulo: string;
+  detalle: string;
+  metadata?: any;
+}
+
+export interface SerieMensualItem {
+  mes: string; // YYYY-MM
+  ingresos: number;
+  gastos: number; // Incluye recurrentes si se solicitó
+  gastosRecurrentes: number;
+  balance: number;
+  movimientos: number;
+}
+
+export interface TopConceptoGastoItem {
+  conceptoId: string;
+  nombre: string;
+  monto: number;
+  cantidadMovimientos: number;
+  deltaVsPeriodoAnterior: number;
+  participacionPorcentual: number;
+  color?: string;
+  icono?: string;
+}
+
+export interface TopRecurrenteItem {
+  recurrenteId: string;
+  nombre: string;
+  plataforma?: {
+    plataformaId: string;
+    nombre: string;
+    color: string;
+    categoria: string;
+  };
+  totalEjecutado: number;
+  cantidadEjecuciones: number;
+}
+
+export interface ResumenInteligente {
+  periodo: {
+    fechaInicio: Date;
+    fechaFin: Date;
+    descripcion: string;
+  };
+  moneda: string;
+  totales: {
+    ingresos: number;
+    gastos: number;
+    balance: number;
+    movimientos: number;
+  };
+  serieMensual: SerieMensualItem[];
+  topConceptosGasto: TopConceptoGastoItem[];
+  recurrentes: {
+    totalEjecutado: number;
+    top: TopRecurrenteItem[];
+  };
+  insights: Insight[];
+}
