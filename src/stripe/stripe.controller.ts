@@ -462,6 +462,7 @@ export class StripeController {
       this.logger.log(`[mobilePaymentSheetSubscription] ✅ Client secret obtenido: ${paymentIntent.client_secret.substring(0, 20)}...`);
       
       // Guardar todos los campos relevantes de Stripe
+      const wasPremium = user.isPremium ?? false;
       await this.patchUser(user, {
         stripeCustomerId: customerId,
         premiumSubscriptionId: subscription.id,
@@ -470,6 +471,9 @@ export class StripeController {
           ? new Date((subscription as any).current_period_end * 1000)
           : (user as any).premiumSubscriptionUntil || null,
       });
+
+      // No esperar webhook/cron: si ganó premium, reanudar recursos ya.
+      await this.applyPlanTransitionAfterPatch(user, wasPremium, 'mobile/paymentsheet/subscription');
 
       return {
         customerId,
@@ -526,6 +530,26 @@ export class StripeController {
     }
   }
 
+  private async applyPlanTransitionAfterPatch(user: any, wasPremium: boolean, reason: string) {
+    try {
+      // patchUser ya recalculó isPremium en DB; aquí leemos el estado final.
+      const updated = await this.userModel.findById(user._id).select('id isPremium');
+      if (!updated) return;
+
+      const isPremiumNow = (updated as any).isPremium ?? false;
+      if (wasPremium === isPremiumNow) return;
+
+      const userId = (updated as any).id ?? String(updated._id);
+      this.logger.log(
+        `[planTransition] reason=${reason} userId=${userId} wasPremium=${wasPremium} isPremiumNow=${isPremiumNow}`,
+      );
+
+      await this.planAutoPauseService.handlePlanTransition(userId, wasPremium, isPremiumNow);
+    } catch (err: any) {
+      this.logger.warn(`[planTransition] Error: ${err?.message || err}`);
+    }
+  }
+
   private addDays(base: Date, days: number) {
     const next = new Date(base);
     next.setDate(next.getDate() + days);
@@ -569,6 +593,8 @@ export class StripeController {
     const authId = this.getAuthUserId(req);
     const user = await this.findUserByAuthId(authId);
 
+    const wasPremium = user.isPremium ?? false;
+
     const sub: any = await this.resolveCurrentSubscriptionForUser(user);
 
     if (!sub) {
@@ -584,6 +610,8 @@ export class StripeController {
         ...(reconciled.premiumSubscriptionStatus === null ? { premiumSubscriptionStatus: null } : {}),
         ...(reconciled.premiumSubscriptionUntil === null ? { premiumSubscriptionUntil: null } : {}),
       });
+
+      await this.applyPlanTransitionAfterPatch(user, wasPremium, 'subscription/sync.noSub');
       return {
         stripeCustomerId: user.stripeCustomerId || null,
         premiumSubscriptionId: user.premiumSubscriptionId || null,
@@ -598,6 +626,8 @@ export class StripeController {
       premiumSubscriptionStatus: sub.status,
       premiumSubscriptionUntil: sub.current_period_end ? new Date(sub.current_period_end * 1000) : null,
     });
+
+    await this.applyPlanTransitionAfterPatch(user, wasPremium, 'subscription/sync.withSub');
 
     return {
       stripeCustomerId: user.stripeCustomerId || null,
@@ -789,6 +819,8 @@ export class StripeController {
             break;
           }
 
+          const wasPremium = user.isPremium ?? false;
+
           const sub: any = await this.stripeSvc.stripe.subscriptions.retrieve(subscriptionId);
           const periodEnd =
             sub.current_period_end ? new Date(sub.current_period_end * 1000) : await this.stripeSvc.resolveSubscriptionPeriodEnd(sub);
@@ -797,6 +829,8 @@ export class StripeController {
             premiumSubscriptionStatus: sub.status,
             premiumSubscriptionUntil: periodEnd,
           });
+
+          await this.applyPlanTransitionAfterPatch(user, wasPremium, 'webhook.checkout.session.completed.subscription');
           break;
         }
         break;
@@ -849,12 +883,16 @@ export class StripeController {
           break;
         }
 
+        const wasPremium = user.isPremium ?? false;
+
         const periodEnd = subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : await this.stripeSvc.resolveSubscriptionPeriodEnd(subscription);
         await this.patchUser(user, {
           premiumSubscriptionId: subscriptionId,
           premiumSubscriptionStatus: subscription.status || 'active',
           premiumSubscriptionUntil: periodEnd,
         });
+
+        await this.applyPlanTransitionAfterPatch(user, wasPremium, 'webhook.invoice.payment_succeeded');
         break;
       }
 
@@ -889,17 +927,8 @@ export class StripeController {
               premiumSubscriptionStatus: subscription.status || 'active',
               premiumSubscriptionUntil: resolvedPeriodEnd ?? (user as any).premiumSubscriptionUntil ?? null,
             });
-            
-            // Reconciliar y detectar cambio premium
-            const reconciled = reconcileEntitlements(user as any, new Date());
-            const isPremiumNow = reconciled.isPremium;
-            
-            // Si recuperó premium, reanudar recursos
-            if (!wasPremium && isPremiumNow) {
-              this.logger.log(`[invoice.paid] Usuario recuperó premium, reanudando recursos...`);
-              const userId = (user as any).id ?? String(user._id);
-              await this.planAutoPauseService.resumeOnPremiumReactivation(userId);
-            }
+
+            await this.applyPlanTransitionAfterPatch(user, wasPremium, 'webhook.invoice.paid');
           } else {
             this.logger.warn(`[invoice.paid] Usuario no encontrado para customerId: ${customerId}`);
           }
@@ -925,17 +954,8 @@ export class StripeController {
             premiumSubscriptionStatus: sub.status,
             premiumSubscriptionUntil: currentPeriodEnd ?? (user as any).premiumSubscriptionUntil ?? null,
           });
-          
-          // Reconciliar y detectar cambio premium
-          const reconciled = reconcileEntitlements(user as any, new Date());
-          const isPremiumNow = reconciled.isPremium;
-          const userId = (user as any).id ?? String(user._id);
-          
-          // Detectar transición y pausar/reanudar automáticamente
-          if (wasPremium !== isPremiumNow) {
-            this.logger.log(`[customer.subscription.updated] Transición detectada: wasPremium=${wasPremium}, isPremiumNow=${isPremiumNow}`);
-            await this.planAutoPauseService.handlePlanTransition(userId, wasPremium, isPremiumNow);
-          }
+
+          await this.applyPlanTransitionAfterPatch(user, wasPremium, 'webhook.customer.subscription.updated');
         } else {
           this.logger.warn(`[customer.subscription.updated] Usuario no encontrado para customerId: ${customerId}`);
         }
@@ -956,16 +976,8 @@ export class StripeController {
             premiumSubscriptionStatus: sub.status || 'canceled',
             premiumSubscriptionUntil: periodEnd,
           });
-          
-          // Reconciliar y pausar recursos si perdió premium
-          const reconciled = reconcileEntitlements(user as any, new Date());
-          const isPremiumNow = reconciled.isPremium;
-          const userId = (user as any).id ?? String(user._id);
-          
-          if (wasPremium && !isPremiumNow) {
-            this.logger.log(`[customer.subscription.deleted] Usuario perdió premium, pausando recursos...`);
-            await this.planAutoPauseService.pauseOnPremiumExpiry(userId);
-          }
+
+          await this.applyPlanTransitionAfterPatch(user, wasPremium, 'webhook.customer.subscription.deleted');
         } else {
           this.logger.warn(`[customer.subscription.deleted] Usuario no encontrado para customerId: ${customerId}`);
         }

@@ -74,6 +74,24 @@ export class AnalyticsFiltersDto {
   @Min(0)
   @Max(999999999999)
   montoMaximo?: number;
+
+  // ==========================
+  // Opciones extra (Analytics “smart”)
+  // ==========================
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  @Min(1)
+  @Max(50)
+  topN?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  @Min(1)
+  @Max(36)
+  meses?: number;
 }
 
 export class MovimientosFiltersDto extends AnalyticsFiltersDto {

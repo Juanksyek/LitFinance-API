@@ -11,7 +11,8 @@ import {
   EstadisticasPorRecurrente,
   AnalisisTemporal,
   MovimientosResponse,
-  ComparacionPeriodos
+  ComparacionPeriodos,
+  ResumenInteligente
 } from './interfaces/analytics.interfaces';
 
 @UseGuards(JwtAuthGuard)
@@ -35,6 +36,24 @@ export class AnalyticsController {
     this.logger.log(`Obteniendo resumen financiero para usuario: ${userId}`);
     
     return this.analyticsService.obtenerResumenFinanciero(userId, filtros);
+  }
+
+  /**
+   * GET /analytics/resumen-inteligente
+   * Resumen “premium” con buckets mensuales + top breakdowns + insights.
+   */
+  @Get('resumen-inteligente')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @PlanAction('grafica')
+  @UseGuards(PlanActionGuard)
+  async obtenerResumenInteligente(
+    @Req() req: any,
+    @Query() filtros: AnalyticsFiltersDto,
+  ): Promise<ResumenInteligente> {
+    const userId = req.user.id;
+    this.logger.log(`Obteniendo resumen inteligente para usuario: ${userId}`);
+
+    return this.analyticsService.obtenerResumenInteligente(userId, filtros);
   }
 
   /**
