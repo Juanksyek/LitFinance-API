@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
 } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { PlanConfigService } from '../plan-config.service';
@@ -12,6 +13,7 @@ import { PremiumRequiredException } from '../exceptions/premium-required.excepti
 
 @Injectable()
 export class PlanActionGuard implements CanActivate {
+  private readonly logger = new Logger(PlanActionGuard.name);
   constructor(
     private readonly reflector: Reflector,
     private readonly planConfigService: PlanConfigService,
@@ -28,6 +30,19 @@ export class PlanActionGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<Request>();
     const user: any = (request as any)?.user;
+
+    // Debug logging useful in production to trace why a 403 PREMIUM_REQUIRED
+    // may be returned before other handlers log anything. Enable by setting
+    // environment variable DEBUG_PLAN_GUARD=1
+    if (process.env.DEBUG_PLAN_GUARD === '1') {
+      try {
+        const auth = request.headers?.authorization ?? null;
+        this.logger.log(`Request ${request.method} ${request.url} - auth:${auth ? 'present' : 'missing'}`);
+        this.logger.log(`ActionType=${String(actionType)}, userId=${user?.id ?? user?.sub ?? 'no-user'}, planType=${user?.planType ?? user?.isPremium}`);
+      } catch (e) {
+        this.logger.error('Error logging PlanActionGuard debug info', (e as any)?.stack ?? e);
+      }
+    }
 
     const userId = user?.id ?? user?.sub;
     if (!userId) {
