@@ -67,7 +67,7 @@ export class PlanConfigService {
       });
     } else {
       // Backfill campos nuevos en planes existentes
-      const needsBackfill = (freePlan as any).reportesExportables === undefined;
+      const needsBackfill = (freePlan as any).reportesExportables == null;
       if (needsBackfill) {
         await this.update('free_plan', { reportesExportables: false } as any);
       }
@@ -87,7 +87,7 @@ export class PlanConfigService {
         activo: true,
       });
     } else {
-      const needsBackfill = (premiumPlan as any).reportesExportables === undefined;
+      const needsBackfill = (premiumPlan as any).reportesExportables == null;
       if (needsBackfill) {
         await this.update('premium_plan', { reportesExportables: true } as any);
       }
@@ -152,7 +152,13 @@ export class PlanConfigService {
         return { allowed: true };
 
       case 'reporte':
-        if (!config.reportesExportables) {
+        // Backward-compat: si el campo aún no existe (null/undefined) en DB,
+        // asumimos true para premium_plan y false para otros planes.
+        const enabled =
+          config.reportesExportables === true ||
+          (config.reportesExportables == null && planType === 'premium_plan');
+
+        if (!enabled) {
           return {
             allowed: false,
             message: 'Los reportes exportables están disponibles solo para usuarios premium',
