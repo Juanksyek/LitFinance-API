@@ -23,6 +23,9 @@ export class PlanConfig {
   @Prop({ required: true, default: false })
   graficasAvanzadas: boolean;
 
+  @Prop({ required: true, default: false })
+  reportesExportables: boolean;
+
   @Prop({ default: true })
   activo: boolean;
 }
