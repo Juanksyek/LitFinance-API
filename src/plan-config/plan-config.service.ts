@@ -62,8 +62,15 @@ export class PlanConfigService {
         recurrentesPorUsuario: 3,
         subcuentasPorUsuario: 2,
         graficasAvanzadas: false,
+        reportesExportables: false,
         activo: true,
       });
+    } else {
+      // Backfill campos nuevos en planes existentes
+      const needsBackfill = (freePlan as any).reportesExportables === undefined;
+      if (needsBackfill) {
+        await this.update('free_plan', { reportesExportables: false } as any);
+      }
     }
 
     const premiumPlan = await this.findByPlanType('premium_plan');
@@ -76,15 +83,21 @@ export class PlanConfigService {
         recurrentesPorUsuario: -1, // -1 significa ilimitado
         subcuentasPorUsuario: -1, // -1 significa ilimitado
         graficasAvanzadas: true,
+        reportesExportables: true,
         activo: true,
       });
+    } else {
+      const needsBackfill = (premiumPlan as any).reportesExportables === undefined;
+      if (needsBackfill) {
+        await this.update('premium_plan', { reportesExportables: true } as any);
+      }
     }
   }
 
   async canPerformAction(
     userId: string,
     planType: string,
-    actionType: 'transaction' | 'recurrente' | 'subcuenta' | 'grafica',
+    actionType: 'transaction' | 'recurrente' | 'subcuenta' | 'grafica' | 'reporte',
     currentCount?: number,
   ): Promise<{ allowed: boolean; message?: string }> {
     const config = await this.findByPlanType(planType);
@@ -134,6 +147,15 @@ export class PlanConfigService {
           return { 
             allowed: false, 
             message: 'Las gráficas avanzadas están disponibles solo para usuarios premium' 
+          };
+        }
+        return { allowed: true };
+
+      case 'reporte':
+        if (!config.reportesExportables) {
+          return {
+            allowed: false,
+            message: 'Los reportes exportables están disponibles solo para usuarios premium',
           };
         }
         return { allowed: true };

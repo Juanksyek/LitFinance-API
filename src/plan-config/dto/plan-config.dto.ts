@@ -25,6 +25,10 @@ export class CreatePlanConfigDto {
 
   @IsBoolean()
   @IsOptional()
+  reportesExportables?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
   activo?: boolean;
 }
 
@@ -52,6 +56,10 @@ export class UpdatePlanConfigDto {
   @IsBoolean()
   @IsOptional()
   graficasAvanzadas?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  reportesExportables?: boolean;
 
   @IsBoolean()
   @IsOptional()
