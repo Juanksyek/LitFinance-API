@@ -191,39 +191,35 @@ export class ReportExportService {
   // PDF (Premium layout)
   // =========================
   private async generarPdf(model: any): Promise<Buffer> {
-    const M = this.THEME.pdf.margin;
-
+    // Reservamos espacio real para footer (bottom alto) y evitamos que el contenido choque.
     const doc = new PDFDocument({
       size: 'A4',
-      margin: M,
-      bufferPages: true, // <-- para agregar footers al final
+      margins: { top: 54, bottom: 58, left: 46, right: 46 },
+      bufferPages: true,
       info: {
-        Title: `${this.THEME.brand} | ${model.title}`,
-        Author: this.THEME.brand,
-        Subject: `Reporte ${model.title} (${toIsoDateOnly(new Date(model.periodo.fechaInicio))} - ${toIsoDateOnly(
-          new Date(model.periodo.fechaFin),
-        )})`,
-        Keywords: 'LitFinance, reporte, finanzas, movimientos, analytics',
+        Title: `LitFinance | ${model.title}`,
+        Author: 'LitFinance',
         CreationDate: model.generatedAt,
         ModDate: model.generatedAt,
       },
     });
-
+  
     const chunks: Buffer[] = [];
     doc.on('data', (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
-
+  
     const endPromise = new Promise<Buffer>((resolve, reject) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
     });
-
-    // --- Portada ---
-    this.pdfCover(doc, model);
-
-    // --- Página de contenido (sin numeración real para evitar fragilidad) ---
+  
+    // ===== Cover =====
+    this.pdfCover(doc, model); // (tu cover premium puede quedarse igual, pero asegúrate de NO generar nuevas páginas)
+  
+    // ===== Contenido (sin página vacía extra) =====
     doc.addPage();
     this.pdfHeader(doc, model, { compact: false });
-    this.sectionTitle(doc, 'Contenido', 'Secciones incluidas en este reporte');
+  
+    this.startSection(doc, model, 'Contenido', 'Secciones incluidas en este reporte', { minHeight: 120 });
     this.bullets(doc, [
       'Resumen ejecutivo',
       'Indicadores clave (KPIs)',
@@ -234,41 +230,32 @@ export class ReportExportService {
       model.movimientos?.length ? 'Movimientos (muestra / exportación)' : 'Movimientos (no incluidos)',
       'Notas y definiciones',
     ]);
-    doc.moveDown(0.6);
-
-    // --- Resumen ejecutivo ---
-    doc.addPage();
-    this.pdfHeader(doc, model, { compact: true });
-    this.sectionTitle(doc, 'Resumen ejecutivo', 'Panorama general del periodo seleccionado');
-
+  
+    // ===== Resumen Ejecutivo =====
+    this.startSection(doc, model, 'Resumen ejecutivo', 'Panorama general del periodo seleccionado', { minHeight: 210 });
+  
     const tot = model.resumen?.totales ?? {};
     const ingresosStr = this.fmtMoney(tot.ingresos, model.moneda);
     const gastosStr = this.fmtMoney(tot.gastos, model.moneda);
     const balanceStr = this.fmtMoney(tot.balance, model.moneda);
     const movsStr = this.fmtInt(tot.movimientos);
-
-    const highlight = [
-      { label: 'Ingresos', value: ingresosStr, tone: 'info' as const },
-      { label: 'Gastos', value: gastosStr, tone: 'warn' as const },
-      { label: 'Balance neto', value: balanceStr, tone: 'good' as const },
-      { label: 'Movimientos', value: movsStr, tone: 'neutral' as const },
-    ];
-
-    this.kpiCards(doc, highlight);
-
-    doc.moveDown(0.5);
+  
+    this.kpiCards(doc, [
+      { label: 'Ingresos', value: ingresosStr, tone: 'info' },
+      { label: 'Gastos', value: gastosStr, tone: 'warn' },
+      { label: 'Balance neto', value: balanceStr, tone: 'good' },
+      { label: 'Movimientos', value: movsStr, tone: 'neutral' },
+    ]);
+  
     const paragraph =
-      `Durante el periodo ${toIsoDateOnly(new Date(model.periodo.fechaInicio))} a ${toIsoDateOnly(
-        new Date(model.periodo.fechaFin),
-      )} (${model.periodo.descripcion}), ` +
-      `tu actividad financiera registró **${movsStr}** movimientos. ` +
-      `Los ingresos fueron **${ingresosStr}**, los gastos **${gastosStr}** y el balance neto **${balanceStr}**.`;
+      `Durante el periodo **${this.iso(model.periodo.fechaInicio)}** a **${this.iso(model.periodo.fechaFin)}** ` +
+      `(${model.periodo.descripcion}), tu actividad registró **${movsStr}** movimientos. ` +
+      `Ingresos **${ingresosStr}**, gastos **${gastosStr}** y balance neto **${balanceStr}**.`;
     this.richParagraph(doc, paragraph);
-
-    // --- Comparación ---
-    doc.moveDown(0.8);
-    this.sectionTitle(doc, 'Comparación vs. periodo anterior', 'Variaciones absolutas y porcentuales');
-
+  
+    // ===== Comparación (misma página si cabe) =====
+    this.startSection(doc, model, 'Comparación vs. periodo anterior', 'Variaciones absolutas y porcentuales', { minHeight: 140 });
+  
     const cambios = model.comparacion?.cambios ?? null;
     if (!cambios) {
       this.callout(doc, 'No disponible', 'No se pudo calcular la comparación del periodo anterior.', 'neutral');
@@ -281,59 +268,44 @@ export class ReportExportService {
       ];
       this.kvTable(doc, rows, { col1: 170, col2: 320 });
     }
-
-    // --- Insights ---
-    doc.addPage();
-    this.pdfHeader(doc, model, { compact: true });
-    this.sectionTitle(doc, 'Insights', 'Hallazgos y acciones sugeridas');
-
+  
+    // ===== Insights (no forzamos addPage; solo si hace falta espacio) =====
+    this.startSection(doc, model, 'Insights', 'Hallazgos y acciones sugeridas', { minHeight: 140 });
+  
     const insights = Array.isArray(model.resumen?.insights) ? model.resumen.insights : [];
     if (!insights.length) {
       this.callout(doc, 'Sin insights', 'No hay insights generados para este periodo.', 'neutral');
     } else {
       for (const ins of insights.slice(0, 14)) {
+        this.ensureSpace(doc, model, 105);
         this.insightCard(doc, ins);
-        if (doc.y > 720) doc.addPage(), this.pdfHeader(doc, model, { compact: true });
       }
     }
-
-    // --- Top conceptos ---
-    doc.addPage();
-    this.pdfHeader(doc, model, { compact: true });
-    this.sectionTitle(doc, 'Top conceptos de gasto', 'Dónde se concentró el gasto');
-
+  
+    // ===== Top conceptos + Serie mensual (fluido, sin páginas desperdiciadas) =====
+    this.startSection(doc, model, 'Top conceptos de gasto', 'Dónde se concentró el gasto', { minHeight: 160 });
     const top = Array.isArray(model.resumen?.topConceptosGasto) ? model.resumen.topConceptosGasto : [];
+  
     if (!top.length) {
       this.callout(doc, 'Sin datos', 'No hay conceptos de gasto para el periodo.', 'neutral');
     } else {
       const maxTotal = this.maxNumber(top.map((x: any) => x.total));
-      const cols: TableColumn<any>[] = [
-        { label: 'Concepto', width: 230, align: 'left', value: (r) => String(r.concepto ?? '') },
-        {
-          label: 'Total',
-          width: 120,
-          align: 'right',
-          value: (r) => this.fmtMoney(r.total, model.moneda),
-        },
-        {
-          label: '%',
-          width: 60,
-          align: 'right',
-          value: (r) => this.fmtPct(r.porcentaje),
-        },
+      const cols: Array<{ label: string; width: number; align?: 'left' | 'center' | 'right'; value: (r: any) => string }> = [
+        { label: 'Concepto', width: 260, align: 'left', value: (r: any) => String(r.concepto ?? '') },
+        { label: 'Total', width: 150, align: 'right', value: (r: any) => this.fmtMoney(r.total, model.moneda) },
+        { label: '%', width: 70, align: 'right', value: (r: any) => this.fmtPct(r.porcentaje) },
       ];
-
-      // tabla + barras de progreso visuales
-      this.table(doc, cols, top.slice(0, 14), {
+  
+      this.tableAuto(doc, cols, top.slice(0, 14), {
         zebra: true,
-        rowHeight: 20,
-        afterRow: (row, yTop, rowH, colX) => {
-          // mini bar (en la columna Total)
+        headerRepeat: true,
+        afterRow: (row: any, yTop: number, rowH: number, colX: number[]) => {
+          // mini bar en Total
           const total = this.asNumber(row.total) ?? 0;
           const pct = maxTotal > 0 ? total / maxTotal : 0;
-          const barW = 86;
-          const barX = colX[1] + 8; // dentro de "Total"
-          const barY = yTop + rowH - 7;
+          const barW = 92;
+          const barX = colX[1] + 10;
+          const barY = yTop + rowH - 8;
           doc.save();
           doc.lineWidth(1).strokeColor(this.THEME.palette.subtle);
           doc.rect(barX, barY, barW, 4).stroke();
@@ -343,104 +315,76 @@ export class ReportExportService {
         },
       });
     }
-
-    // --- Serie mensual ---
-    doc.moveDown(0.9);
-    this.sectionTitle(doc, 'Serie mensual', 'Tendencia por mes (ingresos, gastos, balance)');
-
+  
+    this.startSection(doc, model, 'Serie mensual', 'Tendencia por mes (ingresos, gastos, balance)', { minHeight: 160 });
     const serie = Array.isArray(model.resumen?.serieMensual) ? model.resumen.serieMensual : [];
+  
     if (!serie.length) {
       this.callout(doc, 'Sin datos', 'No hay serie mensual disponible para el periodo.', 'neutral');
     } else {
-      const cols: TableColumn<any>[] = [
-        { label: 'Mes', width: 80, align: 'left', value: (r) => String(r.mes ?? '') },
-        { label: 'Ingresos', width: 120, align: 'right', value: (r) => this.fmtMoney(r.ingresos, model.moneda) },
-        { label: 'Gastos', width: 120, align: 'right', value: (r) => this.fmtMoney(r.gastos, model.moneda) },
-        { label: 'Balance', width: 120, align: 'right', value: (r) => this.fmtMoney(r.balance, model.moneda) },
+      const cols: Array<{ label: string; width: number; align?: 'left' | 'center' | 'right'; value: (r: any) => string }> = [
+        { label: 'Mes', width: 90, align: 'left', value: (r: any) => String(r.mes ?? '') },
+        { label: 'Ingresos', width: 140, align: 'right', value: (r: any) => this.fmtMoney(r.ingresos, model.moneda) },
+        { label: 'Gastos', width: 140, align: 'right', value: (r: any) => this.fmtMoney(r.gastos, model.moneda) },
+        { label: 'Balance', width: 140, align: 'right', value: (r: any) => this.fmtMoney(r.balance, model.moneda) },
       ];
-
-      // tabla
-      this.table(doc, cols, serie.slice(0, 18), { zebra: true, rowHeight: 20 });
-
-      // mini sparkline (balance)
-      doc.moveDown(0.5);
-      const balances = serie.slice(0, 24).map((s: any) => this.asNumber(s.balance) ?? 0);
-      this.sparkline(doc, balances, { height: 56, label: 'Balance (tendencia)', color: this.THEME.palette.blue });
+      this.tableAuto(doc, cols, serie.slice(0, 18), { zebra: true, headerRepeat: true });
     }
-
-    // --- Recurrentes (si existen) ---
-    const rec = Array.isArray(model.resumen?.recurrentes) ? model.resumen.recurrentes : [];
-    if (rec.length) {
-      doc.addPage();
-      this.pdfHeader(doc, model, { compact: true });
-      this.sectionTitle(doc, 'Recurrentes', 'Cargos repetitivos detectados en el periodo');
-
-      const cols: TableColumn<any>[] = [
-        { label: 'Recurrente', width: 250, align: 'left', value: (r) => String(r.nombre ?? '') },
-        { label: 'Total', width: 120, align: 'right', value: (r) => this.fmtMoney(r.total, model.moneda) },
-        { label: '%', width: 60, align: 'right', value: (r) => this.fmtPct(r.porcentaje) },
-        { label: 'Cargos', width: 60, align: 'right', value: (r) => this.fmtInt(r.cargos) },
-      ];
-      this.table(doc, cols, rec.slice(0, 18), { zebra: true, rowHeight: 20 });
-    }
-
-    // --- Movimientos (tabla premium) ---
+  
+    // ===== Movimientos (tabla sin solapes + row height auto) =====
     if (model.movimientos?.length) {
-      doc.addPage();
-      this.pdfHeader(doc, model, { compact: true });
-      this.sectionTitle(doc, 'Movimientos', 'Detalle (muestra) de movimientos más recientes');
-
-      const rows = model.movimientos.slice(0, 800);
-
-      const cols: TableColumn<any>[] = [
-        {
-          label: 'Fecha',
-          width: 72,
-          align: 'left',
-          value: (m) => (m.fecha ? toIsoDateOnly(new Date(m.fecha)) : ''),
-        },
-        {
-          label: 'Tipo',
-          width: 54,
-          align: 'center',
-          value: (m) => String(m.tipo ?? ''),
-        },
-        {
-          label: 'Concepto',
-          width: 130,
-          align: 'left',
-          value: (m) => String(m.concepto?.nombre ?? ''),
-        },
+      this.startSection(doc, model, 'Movimientos', 'Detalle (muestra) de movimientos más recientes', { minHeight: 200 });
+  
+      const rows = (model.movimientos ?? [])
+        .slice(0, 800)
+        // opcional: filtra movimientos “basura” (monto 0 por eventos internos)
+        .filter((m: any) => !(this.asNumber(m.monto) === 0 && String(m.descripcion ?? '').toLowerCase().includes('subcuenta creada')));
+  
+      const cols: Array<{ label: string; width: number; align?: 'left' | 'center' | 'right'; value: (row: any) => string }> = [
+        { label: 'Fecha', width: 78, align: 'left', value: (m: any) => (m.fecha ? this.iso(m.fecha) : '') },
+        { label: 'Tipo', width: 60, align: 'center', value: (m: any) => String(m.tipo ?? '') },
+        { label: 'Concepto', width: 140, align: 'left', value: (m: any) => String(m.concepto?.nombre ?? '') },
         {
           label: 'Descripción',
-          width: 182,
+          width: 190,
           align: 'left',
-          value: (m) => this.trunc(String(m.descripcion ?? ''), 70),
+          value: (m: any) => String(m.descripcion ?? ''),
         },
         {
           label: 'Monto',
           width: 88,
           align: 'right',
-          value: (m) => `${this.fmtMoney(m.monto, m.moneda ?? model.moneda)}`,
+          value: (m: any) => {
+            const currency = m.moneda ?? model.moneda;
+            const n = this.asNumber(m.monto);
+            if (n === null) return String(m.monto ?? '');
+            const tipo = String(m.tipo ?? '').toLowerCase();
+            const signed = (tipo.includes('egre') || tipo.includes('gasto')) ? -Math.abs(n) : Math.abs(n);
+            return this.fmtMoney(signed, currency);
+          },
         },
       ];
-
-      this.table(doc, cols, rows, {
+  
+      this.tableAuto(doc, cols, rows, {
         zebra: true,
-        rowHeight: 18,
         headerRepeat: true,
-        rowStyle: (m) => {
-          // color por tipo
+        rowStyle: (m: any) => {
           const tipo = String(m.tipo ?? '').toLowerCase();
           if (tipo.includes('ing')) return { text: this.THEME.palette.green };
           if (tipo.includes('gas') || tipo.includes('egr')) return { text: this.THEME.palette.red };
           return { text: this.THEME.palette.ink };
         },
+        // clamp para que no se “coma” la página si una descripción es enorme
+        maxRowHeight: 44,
+        // truncado suave (2 líneas aprox) para mantener look premium
+        preprocessCellText: (colLabel: string, txt: string) => {
+          if (colLabel === 'Descripción') return this.trunc(txt, 120);
+          return txt;
+        },
       });
-
+  
       const totalElementos = model.movimientosMeta?.totalElementos ?? rows.length;
       if (totalElementos > rows.length) {
-        doc.moveDown(0.6);
         this.callout(
           doc,
           'Nota',
@@ -450,24 +394,211 @@ export class ReportExportService {
         );
       }
     }
-
-    // --- Notas y definiciones ---
-    doc.addPage();
-    this.pdfHeader(doc, model, { compact: true });
-    this.sectionTitle(doc, 'Notas y definiciones', 'Consideraciones para interpretar este reporte');
-
+  
+    // ===== Notas =====
+    this.startSection(doc, model, 'Notas y definiciones', 'Consideraciones para interpretar este reporte', { minHeight: 140 });
     this.bullets(doc, [
       'Los montos se presentan en moneda base o en la moneda de cada movimiento, según corresponda.',
       'La comparación de periodos depende de la disponibilidad del periodo anterior equivalente.',
       'Los insights se generan a partir de patrones detectados en tu actividad y pueden variar según tus datos.',
       'Si exportas a Excel, encontrarás mayor detalle, filtros y hojas auxiliares para análisis.',
     ]);
-
-    // --- Footer con numeración (y marca premium) ---
-    this.addPdfFooters(doc, model);
-
+  
+    // ===== Footer seguro (SIN crear páginas nuevas) =====
+    this.addPdfFootersSafe(doc, model);
+  
     doc.end();
     return endPromise;
+  }
+  
+  /** ========= Helpers nuevos / mejorados ========= */
+  
+  private pageBottom(doc: PDFKit.PDFDocument) {
+    return doc.page.height - (doc.page.margins?.bottom ?? 58);
+  }
+  
+  private ensureSpace(doc: PDFKit.PDFDocument, model: any, needed: number) {
+    if (doc.y + needed > this.pageBottom(doc)) {
+      doc.addPage();
+      this.pdfHeader(doc, model, { compact: true });
+    }
+  }
+  
+  private startSection(
+    doc: PDFKit.PDFDocument,
+    model: any,
+    title: string,
+    subtitle?: string,
+    opts?: { minHeight?: number },
+  ) {
+    this.ensureSpace(doc, model, opts?.minHeight ?? 120);
+    this.sectionTitle(doc, title, subtitle);
+  }
+  
+  /**
+   * Footer seguro: no debe paginar ni modificar el flow.
+   * Importante: usar x,y SIEMPRE y lineBreak:false para que no empuje a nueva página.
+   */
+  private addPdfFootersSafe(doc: PDFKit.PDFDocument, model: any) {
+    const range = doc.bufferedPageRange();
+    const M = doc.page.margins?.left ?? 46;
+  
+    for (let i = range.start; i < range.start + range.count; i++) {
+      doc.switchToPage(i);
+  
+      const y = doc.page.height - (doc.page.margins?.bottom ?? 58) + 20; // dentro del margen inferior
+      const w = doc.page.width - M * 2;
+  
+      doc.save();
+  
+      // Línea superior del footer
+      doc.strokeColor(this.THEME.palette.subtle).lineWidth(1);
+      doc.moveTo(M, y - 10).lineTo(doc.page.width - M, y - 10).stroke();
+  
+      // Texto footer
+      doc.fillColor(this.THEME.palette.muted).font(this.THEME.pdf.font.regular).fontSize(9);
+  
+      const left = `${this.THEME.brand} • ${this.iso(model.periodo.fechaInicio)} → ${this.iso(model.periodo.fechaFin)}`;
+      const right = `Página ${i - range.start + 1} de ${range.count}`;
+  
+      doc.text(left, M, y, { width: w, align: 'left', lineBreak: false });
+      doc.text(right, M, y, { width: w, align: 'right', lineBreak: false });
+  
+      doc.restore();
+    }
+  }
+  
+  /**
+   * Tabla sin solapes: rowHeight dinámico con heightOfString.
+   * - maxRowHeight: evita filas gigantes por textos enormes
+   * - preprocessCellText: truncado por columna (opcional)
+   */
+  private tableAuto<T>(
+    doc: PDFKit.PDFDocument,
+    cols: Array<{ label: string; width: number; align?: 'left' | 'center' | 'right'; value: (row: T) => string }>,
+    rows: T[],
+    opts?: {
+      zebra?: boolean;
+      headerRepeat?: boolean;
+      afterRow?: (row: T, yTop: number, rowH: number, colX: number[]) => void;
+      rowStyle?: (row: T) => { text?: string };
+      maxRowHeight?: number;
+      preprocessCellText?: (colLabel: string, txt: string) => string;
+      model?: any;
+    },
+  ) {
+    const left = doc.page.margins?.left ?? 46;
+    const usableW = doc.page.width - left - (doc.page.margins?.right ?? 46);
+  
+    // Ajuste proporcional si no encaja
+    const sumW = cols.reduce((a, c) => a + c.width, 0);
+    if (Math.abs(sumW - usableW) > 2) {
+      const scale = usableW / sumW;
+      cols = cols.map((c) => ({ ...c, width: Math.max(46, Math.floor(c.width * scale)) }));
+    }
+  
+    const x0 = left;
+    const colX: number[] = [];
+    let acc = x0;
+    for (const c of cols) {
+      colX.push(acc);
+      acc += c.width;
+    }
+  
+    const drawHeader = () => {
+      const headerModel = (opts as any)?.model ?? { periodo: undefined };
+      this.ensureSpace(doc, headerModel, 44); // safe
+      const y = doc.y;
+      const h = 22;
+  
+      doc.save();
+      doc.fillColor(this.THEME.palette.navy).roundedRect(x0, y, usableW, h, 10).fill();
+      doc.fillColor('#FFFFFF').font(this.THEME.pdf.font.bold).fontSize(10);
+  
+      for (let i = 0; i < cols.length; i++) {
+        doc.text(cols[i].label, colX[i] + 8, y + 6, {
+          width: cols[i].width - 16,
+          align: cols[i].align ?? 'left',
+          lineBreak: false,
+        });
+      }
+      doc.restore();
+      doc.y = y + h + 8;
+    };
+  
+    drawHeader();
+  
+    const baseFontSize = 9.5;
+    const padY = 6;
+  
+    let idx = 0;
+    for (const r of rows) {
+      // Row style
+      const style = opts?.rowStyle?.(r) ?? {};
+      doc.font(this.THEME.pdf.font.regular).fontSize(baseFontSize);
+  
+      // Calcular altura real de la fila
+      let rowH = 18;
+      const texts: string[] = [];
+  
+      for (let i = 0; i < cols.length; i++) {
+        const raw = String(cols[i].value(r) ?? '');
+        const txt = opts?.preprocessCellText ? opts.preprocessCellText(cols[i].label, raw) : raw;
+        texts.push(txt);
+  
+        const h = doc.heightOfString(txt, {
+          width: cols[i].width - 16,
+          align: cols[i].align ?? 'left',
+        });
+        rowH = Math.max(rowH, h + padY);
+      }
+  
+      if (opts?.maxRowHeight) rowH = Math.min(rowH, opts.maxRowHeight);
+  
+      // Page break
+      if (doc.y + rowH + 24 > this.pageBottom(doc)) {
+        doc.addPage();
+        const headerModel = (opts as any)?.model ?? { title: 'Reporte' };
+        this.pdfHeader(doc, { ...headerModel, title: headerModel?.title ?? 'Reporte' } as any, { compact: true });
+        if (opts?.headerRepeat !== false) drawHeader();
+      }
+  
+      const yTop = doc.y;
+  
+      // zebra
+      if (opts?.zebra && idx % 2 === 1) {
+        doc.save();
+        doc.fillColor(this.THEME.palette.rowAlt);
+        doc.rect(x0, yTop - 2, usableW, rowH + 4).fill();
+        doc.restore();
+      }
+  
+      // bottom border
+      doc.save();
+      doc.strokeColor(this.THEME.palette.subtle).lineWidth(0.6);
+      doc.moveTo(x0, yTop + rowH + 2).lineTo(x0 + usableW, yTop + rowH + 2).stroke();
+      doc.restore();
+  
+      doc.fillColor(style.text ?? this.THEME.palette.ink);
+  
+      for (let i = 0; i < cols.length; i++) {
+        doc.text(texts[i], colX[i] + 8, yTop + 4, {
+          width: cols[i].width - 16,
+          align: cols[i].align ?? 'left',
+        });
+      }
+  
+      opts?.afterRow?.(r, yTop, rowH, colX);
+      doc.y = yTop + rowH + 6;
+      idx++;
+    }
+  
+    doc.moveDown(0.4);
+  }
+  
+  private iso(d: any) {
+    const dt = new Date(d);
+    return toIsoDateOnly(dt);
   }
 
   // ===== PDF helpers (premium) =====
@@ -1123,7 +1254,8 @@ export class ReportExportService {
     this.excelHeaderRow(wsInsights.getRow(1));
     wsInsights.autoFilter = { from: 'A1', to: 'D1' };
 
-    for (const ins of model.resumen?.insights ?? []) {
+    const insightsArr = Array.isArray(model.resumen?.insights) ? model.resumen.insights : [];
+    for (const ins of insightsArr) {
       const row = wsInsights.addRow({
         prioridad: ins.prioridad ?? '',
         titulo: ins.titulo ?? '',
@@ -1154,7 +1286,7 @@ export class ReportExportService {
     // --- Serie mensual (con tabla estilo) ---
     const wsSerie = wb.addWorksheet('SerieMensual', { views: [{ state: 'frozen', ySplit: 1 }] });
     wsSerie.properties.tabColor = { argb: '0D9488' };
-    const serie = model.resumen?.serieMensual ?? [];
+    const serie = Array.isArray(model.resumen?.serieMensual) ? model.resumen.serieMensual : [];
 
     wsSerie.columns = [
       { header: 'Mes', key: 'mes', width: 14 },
@@ -1194,7 +1326,8 @@ export class ReportExportService {
     this.excelHeaderRow(wsTop.getRow(1));
     wsTop.autoFilter = { from: 'A1', to: 'D1' };
 
-    for (const t of model.resumen?.topConceptosGasto ?? []) {
+    const topConceptos = Array.isArray(model.resumen?.topConceptosGasto) ? model.resumen.topConceptosGasto : [];
+    for (const t of topConceptos) {
       const row = wsTop.addRow({
         concepto: t.concepto ?? '',
         total: this.asNumber(t.total) ?? t.total ?? 0,
@@ -1219,7 +1352,8 @@ export class ReportExportService {
     this.excelHeaderRow(wsRec.getRow(1));
     wsRec.autoFilter = { from: 'A1', to: 'D1' };
 
-    for (const rrr of model.resumen?.recurrentes ?? []) {
+    const recurrentesArr = Array.isArray(model.resumen?.recurrentes) ? model.resumen.recurrentes : [];
+    for (const rrr of recurrentesArr) {
       const row = wsRec.addRow({
         nombre: rrr.nombre ?? '',
         total: this.asNumber(rrr.total) ?? rrr.total ?? 0,
@@ -1233,7 +1367,8 @@ export class ReportExportService {
     }
 
     // --- Movimientos (premium table, zebra, filtros, numFmt) ---
-    if (model.movimientos?.length) {
+    const movimientosArr = Array.isArray(model.movimientos) ? model.movimientos : [];
+    if (movimientosArr.length) {
       const wsMov = wb.addWorksheet('Movimientos', { views: [{ state: 'frozen', ySplit: 1 }] });
       wsMov.properties.tabColor = { argb: '2563EB' };
 
@@ -1250,7 +1385,7 @@ export class ReportExportService {
       this.excelHeaderRow(wsMov.getRow(1));
       wsMov.autoFilter = { from: 'A1', to: 'G1' };
 
-      for (const m of model.movimientos) {
+      for (const m of movimientosArr) {
         const row = wsMov.addRow({
           fecha: m.fecha ? toIsoDateOnly(new Date(m.fecha)) : '',
           tipo: m.tipo ?? '',
