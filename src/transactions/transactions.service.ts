@@ -290,8 +290,14 @@ export class TransactionsService {
     // Protección: si ya existe un movimiento de historial marcado como 'deleted'
     // para esta transacción, asumimos que los balances ya fueron revertidos
     // anteriormente y evitamos aplicar el revert nuevamente.
+    // Nota: el `id` pasado al método puede ser el `transaccionId` o el Mongo `_id`.
+    // Usamos el `transaccionId` del documento (si existe) para buscar la marca
+    // en el historial y así evitar reversiones dobles cuando el cliente envía
+    // el _id en lugar del transaccionId.
+    const txIdToCheck = String(txObj.transaccionId ?? txObj._id ?? id);
+
     const histAlreadyDeleted = await this.historialModel.findOne({
-      'metadata.audit.transaccionId': id,
+      'metadata.audit.transaccionId': txIdToCheck,
       userId,
       'metadata.audit.status': 'deleted',
     });
@@ -322,7 +328,7 @@ export class TransactionsService {
       await this.historialService.marcarTransaccionEliminada({
         cuentaId: revertResult.cuentaId,
         userId,
-        transaccionId: id,
+        transaccionId: txObj.transaccionId ?? id,
         deletedAt: new Date(),
         descripcion: 'Transacción eliminada',
         extra: {
