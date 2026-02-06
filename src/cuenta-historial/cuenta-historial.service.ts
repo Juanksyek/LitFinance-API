@@ -102,19 +102,21 @@ export class CuentaHistorialService {
     const { cuentaId, userId, transaccionId, deletedAt, extra, descripcion } = params;
     const id = await generateUniqueId(this.historialModel);
 
+    const nowIso = (deletedAt ?? new Date()).toISOString();
+
+    // Importante:
+    // - No sobrescribir `metadata` completo (podría contener conversiones, etc.).
+    // - Evitar conflicto Mongo: no setear `descripcion` en $set y $setOnInsert a la vez.
+    // - Mantener esta operación idempotente.
     return await this.historialModel.findOneAndUpdate(
       { cuentaId, userId, 'metadata.audit.transaccionId': transaccionId },
       {
         $set: {
           ...(descripcion ? { descripcion } : {}),
-          metadata: {
-            audit: {
-              transaccionId,
-              status: 'deleted',
-              deletedAt: (deletedAt ?? new Date()).toISOString(),
-              ...(extra ?? {}),
-            },
-          },
+          'metadata.audit.transaccionId': transaccionId,
+          'metadata.audit.status': 'deleted',
+          'metadata.audit.deletedAt': nowIso,
+          ...(extra ? { 'metadata.audit.extra': extra } : {}),
         },
         $setOnInsert: {
           id,
@@ -122,12 +124,27 @@ export class CuentaHistorialService {
           userId,
           monto: 0,
           tipo: 'ajuste_subcuenta',
-          descripcion: descripcion ?? 'Transacción eliminada',
-          fecha: (deletedAt ?? new Date()).toISOString(),
+          ...(descripcion ? {} : { descripcion: 'Transacción eliminada' }),
+          fecha: nowIso,
         },
       },
       { new: true, upsert: true },
     );
+  }
+
+  async findDeletedMovimientoByTransaccionId(params: {
+    cuentaId?: string;
+    userId: string;
+    transaccionId: string;
+  }): Promise<any | null> {
+    const { cuentaId, userId, transaccionId } = params;
+    const query: any = {
+      userId,
+      'metadata.audit.transaccionId': transaccionId,
+      'metadata.audit.status': 'deleted',
+    };
+    if (cuentaId) query.cuentaId = cuentaId;
+    return await this.historialModel.findOne(query).lean();
   }
 
   async buscarHistorial(cuentaId: string, page = 1, limit = 10, search?: string) {
