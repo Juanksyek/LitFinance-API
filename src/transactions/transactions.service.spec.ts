@@ -48,6 +48,7 @@ describe('TransactionsService', () => {
     registrarMovimiento: jest.fn(),
     upsertMovimientoTransaccion: jest.fn(),
     marcarTransaccionEliminada: jest.fn(),
+    findDeletedMovimientoByTransaccionId: jest.fn(),
     findMovimientoById: jest.fn(),
     marcarMovimientoEliminadoById: jest.fn(),
   };
@@ -98,12 +99,39 @@ describe('TransactionsService', () => {
       afectaCuenta: false,
       toObject: function () { return this; },
     });
+    mockHistorialService.findDeletedMovimientoByTransaccionId.mockResolvedValueOnce(null);
     mockTransactionModel.deleteOne.mockResolvedValueOnce({ deletedCount: 1 });
 
     const result = await service.eliminar('ABC123', 'user1');
 
     expect(result).toEqual({ message: 'Transacción eliminada correctamente' });
     expect(mockHistorialModel.create).toHaveBeenCalled();
+  });
+
+  it('eliminar no debe revertir balances si ya está marcada como deleted en cuenta-historial', async () => {
+    const txDoc = {
+      transaccionId: 'T1',
+      userId: 'user1',
+      monto: 100,
+      tipo: 'ingreso',
+      afectaCuenta: true,
+      cuentaId: 'c1',
+      toObject() { return this; },
+    } as any;
+
+    mockTransactionModel.findOne.mockResolvedValueOnce(txDoc);
+    mockHistorialService.findDeletedMovimientoByTransaccionId.mockResolvedValueOnce({
+      userId: 'user1',
+      cuentaId: 'c1',
+      metadata: { audit: { transaccionId: 'T1', status: 'deleted' } },
+    });
+    mockTransactionModel.deleteOne.mockResolvedValueOnce({ deletedCount: 1 });
+
+    (service as any).aplicarBalances = jest.fn();
+
+    await service.eliminar('T1', 'user1');
+
+    expect((service as any).aplicarBalances).not.toHaveBeenCalled();
   });
 
   it('debe lanzar error si no encuentra transacción al eliminar', async () => {
