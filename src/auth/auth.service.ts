@@ -216,12 +216,20 @@ export class AuthService {
 
         const user = await this.userModel.findOne({ email });
         if (!user) {
-            throw new UnauthorizedException('Credenciales inválidas');
+            // Usuario no registrado
+            throw new UnauthorizedException({
+                code: 'ACCOUNT_NOT_FOUND',
+                message: 'No existe una cuenta registrada con este correo.'
+            });
         }
 
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
-            throw new UnauthorizedException('Credenciales inválidas');
+            // Credenciales inválidas (contraseña incorrecta)
+            throw new UnauthorizedException({
+                code: 'INVALID_CREDENTIALS',
+                message: 'Correo o contraseña incorrectos.'
+            });
         }
 
         // Bloquear acceso si el usuario no confirmó su correo
