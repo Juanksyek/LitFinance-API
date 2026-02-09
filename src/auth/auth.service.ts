@@ -320,19 +320,22 @@ export class AuthService {
     }
 
     async confirmAccount(token: string) {
-        const user = await this.userModel.findOne({ activationToken: token });
+        // Intentar update atómico: buscar por token válido y fecha de expiración
+        const now = new Date();
+        const updatedUser = await this.userModel.findOneAndUpdate(
+            { activationToken: token, tokenExpires: { $gt: now } },
+            {
+                $set: { isActive: true },
+                $unset: { activationToken: '', tokenExpires: '' },
+            },
+            { new: true },
+        );
 
-        if (!user || !user.tokenExpires || user.tokenExpires < new Date()) {
+        if (!updatedUser) {
             throw new BadRequestException('Token inválido o expirado');
         }
 
-        user.isActive = true;
-        user.activationToken = undefined;
-        user.tokenExpires = undefined;
-        await user.save();
-
-        const updatedUser = await this.userModel.findOne({ id: user.id });
-        if (!updatedUser?.isActive) {
+        if (!updatedUser.isActive) {
             throw new BadRequestException('No se pudo activar la cuenta. Contacta soporte.');
         }
 
