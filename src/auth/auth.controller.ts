@@ -35,7 +35,7 @@ export class AuthController {
 
   // Compatibilidad con enlaces que apuntan directamente a /activate/:token
   @Get('activate/:token')
-  async activateDirect(@Req() req, @Query() query, @Body() body, @Req() _req2, @Param('token') token: string) {
+  async activateDirect(@Param('token') token: string) {
     if (!token) throw new BadRequestException('Token no proporcionado');
     return await this.authService.confirmAccount(token);
   }
