@@ -11,6 +11,8 @@ describe('Activation endpoint (e2e-lite)', () => {
   };
 
   beforeAll(async () => {
+    process.env.FRONTEND_URL = 'https://thelitfinance.com';
+
     const moduleRef = await Test.createTestingModule({
       controllers: [ActivationController],
       providers: [{ provide: AuthService, useValue: authService }],
@@ -24,11 +26,11 @@ describe('Activation endpoint (e2e-lite)', () => {
     await app.close();
   });
 
-  it('GET /activate/:token returns success and calls confirmAccount', async () => {
+  it('GET /activate/:token redirects to frontend and calls confirmAccount', async () => {
     await request(app.getHttpServer())
       .get('/activate/abc123')
-      .expect(200)
-      .expect({ success: true, message: 'Cuenta activada correctamente' });
+      .expect(302)
+      .expect('Location', 'https://thelitfinance.com/activate/abc123');
 
     expect(authService.confirmAccount).toHaveBeenCalledWith('abc123');
   });
