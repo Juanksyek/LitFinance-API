@@ -386,6 +386,31 @@ export class AuthService {
         return { success: true, message: 'Cuenta activada correctamente' };
     }
 
+    async resendActivation(email: string) {
+        if (!email) throw new BadRequestException('Email no proporcionado');
+
+        const user = await this.userModel.findOne({ email });
+        if (!user) {
+            // No revelar si existe o no por seguridad
+            return { success: true, message: 'Si el correo existe, enviaremos un enlace de activación.' };
+        }
+
+        if (user.isActive) {
+            return { success: true, message: 'La cuenta ya está activada. Inicia sesión.' };
+        }
+
+        const activationToken = randomBytes(32).toString('hex');
+        const tokenExpires = new Date(Date.now() + 30 * 60 * 1000);
+
+        user.activationToken = activationToken;
+        user.tokenExpires = tokenExpires;
+        await user.save();
+
+        await this.emailService.sendConfirmationEmail(user.email, activationToken, user.nombreCompleto);
+
+        return { success: true, message: 'Enlace de activación reenviado. Revisa tu correo.' };
+    }
+
         // ------------------------------
         // REFRESH: sesión extendida (sliding)
         // ------------------------------

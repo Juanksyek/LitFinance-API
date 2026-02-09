@@ -27,6 +27,11 @@ export class AuthController {
     return this.authService.refreshTokens(dto);
   }
 
+  @Post('resend-activation')
+  async resendActivation(@Body() body: { email: string }) {
+    return this.authService.resendActivation(body?.email);
+  }
+
   @Get('confirmar')
   async confirmar(@Query('token') token: string): Promise<any> {
     if (!token) throw new BadRequestException('Token no proporcionado');
