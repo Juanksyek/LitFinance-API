@@ -322,7 +322,7 @@ export class AuthService {
     async confirmAccount(token: string) {
         // Intentar update atómico: buscar por token válido y fecha de expiración
         const now = new Date();
-        const updatedUser = await this.userModel.findOneAndUpdate(
+        let updatedUser = await this.userModel.findOneAndUpdate(
             { activationToken: token, tokenExpires: { $gt: now } },
             {
                 $set: { isActive: true },
@@ -331,7 +331,51 @@ export class AuthService {
             { new: true },
         );
 
+        // Si no se actualizó, intentar variantes para depuración y recuperación automática
         if (!updatedUser) {
+            // 1) Probar token URL-decodeado por si el cliente envió una versión codificada
+            try {
+                const decoded = decodeURIComponent(token);
+                if (decoded && decoded !== token) {
+                    updatedUser = await this.userModel.findOneAndUpdate(
+                        { activationToken: decoded, tokenExpires: { $gt: now } },
+                        {
+                            $set: { isActive: true },
+                            $unset: { activationToken: '', tokenExpires: '' },
+                        },
+                        { new: true },
+                    );
+                }
+            } catch (e) {
+                // ignore decode errors
+            }
+        }
+
+        // 2) Si aún no hay resultado, verificar si existe un usuario con ese token (posible expirado)
+        if (!updatedUser) {
+            const found = (await this.userModel.findOne({ activationToken: token })) ||
+                (await (async () => {
+                    try { const d = decodeURIComponent(token); return d === token ? null : await this.userModel.findOne({ activationToken: d }); } catch { return null; }
+                })());
+
+            if (found) {
+                if (!found.tokenExpires || found.tokenExpires < now) {
+                    throw new BadRequestException('Token inválido o expirado');
+                }
+
+                // Si por alguna razón la actualización atómica falló pero el token es válido,
+                // forzamos la activación para evitar dejar cuentas inaccesibles.
+                const forced = await this.userModel.findOneAndUpdate(
+                    { id: found.id },
+                    { $set: { isActive: true }, $unset: { activationToken: '', tokenExpires: '' } },
+                    { new: true },
+                );
+
+                if (forced && forced.isActive) {
+                    return { success: true, message: 'Cuenta activada correctamente' };
+                }
+            }
+
             throw new BadRequestException('Token inválido o expirado');
         }
 
