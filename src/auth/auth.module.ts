@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthController } from './auth.controller';
+import { ActivationController } from './activation.controller';
 import { AuthService } from './auth.service';
 import { UserModule } from '../user/user.module';
 import { EmailModule } from '../email/email.module';
@@ -32,7 +33,7 @@ import { PasswordResetController } from './password-reset.controller';
       }),
     }),
   ],
-  controllers: [AuthController, PasswordResetController],
+  controllers: [AuthController, ActivationController, PasswordResetController],
   providers: [AuthService, JwtStrategy, PasswordResetService],
   exports: [AuthService],
 })
