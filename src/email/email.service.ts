@@ -6,8 +6,14 @@ export class EmailService {
   private resend = new Resend(process.env.RESEND_API_KEY);
 
   async sendConfirmationEmail(to: string, token: string, nombre: string) {
-    const baseUrl = process.env.APP_URL || process.env.FRONTEND_URL;
-    const confirmUrl = `${baseUrl}/activate/${token}`;
+    // APP_URL/FRONTEND_URL suelen ser el frontend (para assets como el logo)
+    const publicBaseUrl = process.env.APP_URL || process.env.FRONTEND_URL;
+
+    // BACKEND_URL debe apuntar al API (ej: https://api.tudominio.com)
+    // Si no existe, caemos a publicBaseUrl por compatibilidad.
+    const backendBaseUrl = process.env.BACKEND_URL || process.env.API_URL || publicBaseUrl;
+
+    const confirmUrl = `${backendBaseUrl}/activate/${encodeURIComponent(token)}`;
     await this.resend.emails.send({
       from: 'LitFinance <no-reply@thelitfinance.com>',
       to,
@@ -43,7 +49,7 @@ export class EmailService {
             <div class="card">
               <div class="header">
                 <div class="logo">
-                  <img src="${baseUrl}/public/images/LitFinance.png" alt="LitFinance" style="height:36px; display:block;" />
+                  <img src="${publicBaseUrl}/public/images/LitFinance.png" alt="LitFinance" style="height:36px; display:block;" />
                 </div>
               </div>
               <div class="content">
