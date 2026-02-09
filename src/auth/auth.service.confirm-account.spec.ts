@@ -46,4 +46,30 @@ describe('AuthService.confirmAccount', () => {
 
     await expect(service.confirmAccount('t-exp')).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  it('resends activation link for inactive user', async () => {
+    const userDoc: any = {
+      id: 'u1',
+      email: 'a@b.com',
+      nombreCompleto: 'User',
+      isActive: false,
+      save: jest.fn().mockResolvedValue(true),
+    };
+
+    const { service, userModel } = makeService({
+      findOne: jest.fn().mockResolvedValue(userDoc),
+    });
+
+    // monkey-patch email service used internally
+    (service as any).emailService = {
+      sendConfirmationEmail: jest.fn().mockResolvedValue(true),
+    };
+
+    const res = await service.resendActivation('a@b.com');
+    expect(res.success).toBe(true);
+    expect((service as any).emailService.sendConfirmationEmail).toHaveBeenCalled();
+    expect(userDoc.save).toHaveBeenCalled();
+    expect(userDoc.activationToken).toBeTruthy();
+    expect(userDoc.tokenExpires).toBeInstanceOf(Date);
+  });
 });
