@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Req, Query, BadRequestException, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, Get, Req, Query, BadRequestException, UseGuards, Param } from '@nestjs/common';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AuthService } from './auth.service';
 import { RegisterAuthDto } from './dto/register-auth.dto';
@@ -29,6 +29,13 @@ export class AuthController {
 
   @Get('confirmar')
   async confirmar(@Query('token') token: string): Promise<any> {
+    if (!token) throw new BadRequestException('Token no proporcionado');
+    return await this.authService.confirmAccount(token);
+  }
+
+  // Compatibilidad con enlaces que apuntan directamente a /activate/:token
+  @Get('activate/:token')
+  async activateDirect(@Req() req, @Query() query, @Body() body, @Req() _req2, @Param('token') token: string) {
     if (!token) throw new BadRequestException('Token no proporcionado');
     return await this.authService.confirmAccount(token);
   }
