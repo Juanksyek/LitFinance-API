@@ -35,6 +35,8 @@ import { PlanActionGuard } from '../plan-config/guards/plan-action.guard';
     // Dependencias para exportar reportes (analytics + premium guard)
     AnalyticsModule,
     UserModule,
+    // Notificaciones: required to send push notifications on tickets
+    NotificacionesModule,
     PlanConfigModule,
   ],
   controllers: [
