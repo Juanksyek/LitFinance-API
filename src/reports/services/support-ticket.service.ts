@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { NotificacionesService } from '../../notificaciones/notificaciones.service';
+import { User, UserDocument } from '../../user/schemas/user.schema/user.schema';
 import { 
   SupportTicket, 
   SupportTicketDocument, 
@@ -26,6 +28,9 @@ export class SupportTicketService {
   constructor(
     @InjectModel(SupportTicket.name)
     private supportTicketModel: Model<SupportTicketDocument>,
+    private readonly notificacionesService: NotificacionesService,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
   ) {}
 
   /**
@@ -62,7 +67,38 @@ export class SupportTicketService {
       mensajes: [],
     });
 
-    return await newTicket.save();
+    const saved = await newTicket.save();
+
+    // Notificar al usuario (confirmación)
+    try {
+      await this.notificacionesService.enviarNotificacionPush(
+        String(userId),
+        'Ticket creado',
+        `Tu ticket ${saved.ticketId} fue creado correctamente.`,
+        { ticketId: saved.ticketId, tipo: 'ticket_creado' },
+      );
+    } catch (e) {
+      // no bloquear por fallos de notificación
+    }
+
+    // Notificar al staff (nuevo ticket)
+    try {
+      const staffUsers = await this.userModel.find({ rol: { $in: ['admin', 'staff'] } });
+      await Promise.all(
+        staffUsers.map((u) =>
+          this.notificacionesService.enviarNotificacionPush(
+            String(u.id),
+            'Nuevo ticket de soporte',
+            `Nuevo ticket ${saved.ticketId}: ${saved.titulo}`,
+            { ticketId: saved.ticketId, tipo: 'ticket_nuevo' },
+          ),
+        ),
+      );
+    } catch (e) {
+      // ignore
+    }
+
+    return saved;
   }
 
   /**
@@ -166,7 +202,37 @@ export class SupportTicketService {
     }
 
     ticket.updatedAt = new Date();
-    return await ticket.save();
+    const saved = await ticket.save();
+
+    // Notificar al otro participante
+    try {
+      if (isStaff) {
+        // staff escribió -> notificar al usuario propietario
+        await this.notificacionesService.enviarNotificacionPush(
+          String(ticket.userId),
+          `Respuesta en ${ticket.ticketId}`,
+          `Soporte ha respondido: ${addMessageDto.mensaje.substring(0, 140)}`,
+          { ticketId: ticket.ticketId, tipo: 'mensaje_soporte' },
+        );
+      } else {
+        // usuario escribió -> notificar al staff
+        const staffUsers = await this.userModel.find({ rol: { $in: ['admin', 'staff'] } });
+        await Promise.all(
+          staffUsers.map((u) =>
+            this.notificacionesService.enviarNotificacionPush(
+              String(u.id),
+              `Nuevo mensaje en ${ticket.ticketId}`,
+              `${addMessageDto.mensaje.substring(0, 140)}`,
+              { ticketId: ticket.ticketId, tipo: 'mensaje_usuario' },
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      // ignore notification errors
+    }
+
+    return saved;
   }
 
   /**
@@ -194,7 +260,21 @@ export class SupportTicketService {
       ticket.cerradoEn = new Date();
     }
 
-    return await ticket.save();
+    const saved = await ticket.save();
+
+    // Notificar al usuario propietario que su ticket cambió de estado
+    try {
+      await this.notificacionesService.enviarNotificacionPush(
+        String(ticket.userId),
+        `Estado del ticket ${ticket.ticketId}`,
+        `El estado de tu ticket ${ticket.ticketId} cambió a ${ticket.estado}`,
+        { ticketId: ticket.ticketId, tipo: 'estado_ticket', estado: ticket.estado },
+      );
+    } catch (e) {
+      // ignore
+    }
+
+    return saved;
   }
 
   /**
