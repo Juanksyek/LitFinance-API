@@ -10,6 +10,7 @@ import { AnalyticsModule } from '../analytics/analytics.module';
 import { UserModule } from '../user/user.module';
 import { PlanConfigModule } from '../plan-config/plan-config.module';
 import { PlanActionGuard } from '../plan-config/guards/plan-action.guard';
+import { NotificacionesModule } from '../notificaciones/notificaciones.module';
 
 @Module({
   imports: [
