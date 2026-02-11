@@ -859,8 +859,13 @@ export class ReportExportService {
 
     const largeArc = endAngle - startAngle > Math.PI ? 1 : 0;
 
-    doc.moveTo(startX, startY);
-    (doc as any).arcTo(endX, endY, r);
+    // Use PDFKit's arc method (angles in degrees) instead of non-existent arcTo
+    // Convert radians to degrees for PDFKit
+    const toDeg = (rad: number) => (rad * 180) / Math.PI;
+    // Begin a new path and draw the arc around center (cx, cy)
+    // PDFKit expects: arc(x, y, r, startAngleInDegrees, endAngleInDegrees)
+    (doc as any).path();
+    (doc as any).arc(cx, cy, r, toDeg(startAngle), toDeg(endAngle));
     doc.stroke();
   }
 
