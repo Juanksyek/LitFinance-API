@@ -27,35 +27,35 @@ export class MetaEvento {
   moneda: string;
 
   // Si hubo conversión a la subcuenta meta, guardamos el monto destino
-  @Prop({ default: null })
+  @Prop({ type: Number, default: null })
   montoDestino?: number | null;
 
-  @Prop({ default: null })
+  @Prop({ type: String, default: null })
   monedaDestino?: string | null;
 
-  @Prop({ default: null })
+  @Prop({ type: Number, default: null })
   tasaConversion?: number | null;
 
-  @Prop({ default: null })
+  @Prop({ type: Date, default: null })
   fechaConversion?: Date | null;
 
   @Prop({ default: null })
   origenTipo?: 'cuenta' | 'subcuenta' | null;
 
-  @Prop({ default: null })
+  @Prop({ type: String, default: null })
   origenId?: string | null;
 
   @Prop({ default: null })
   destinoTipo?: 'cuenta' | 'subcuenta' | null;
 
-  @Prop({ default: null })
+  @Prop({ type: String, default: null })
   destinoId?: string | null;
 
-  @Prop({ default: null })
+  @Prop({ type: String, default: null })
   nota?: string | null;
 
   // Idempotencia por operación de dinero (append-only)
-  @Prop({ default: null })
+  @Prop({ type: String, default: null })
   idempotencyKey?: string | null;
 }
 
