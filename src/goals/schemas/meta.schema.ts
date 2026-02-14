@@ -26,7 +26,7 @@ export class Meta {
   @Prop({ required: true })
   moneda: string;
 
-  @Prop({ default: null })
+  @Prop({ type: Date, default: null })
   fechaObjetivo?: Date | null;
 
   @Prop({ default: 0 })
