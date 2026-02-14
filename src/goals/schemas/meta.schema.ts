@@ -35,10 +35,10 @@ export class Meta {
   @Prop({ required: true, default: 'activa', index: true })
   estado: MetaEstado;
 
-  @Prop({ default: null })
+  @Prop({ type: String, default: null })
   color?: string | null;
 
-  @Prop({ default: null })
+  @Prop({ type: String, default: null })
   icono?: string | null;
 }
 
