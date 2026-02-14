@@ -39,13 +39,13 @@ export class MetaEvento {
   @Prop({ type: Date, default: null })
   fechaConversion?: Date | null;
 
-  @Prop({ default: null })
+  @Prop({ type: String, enum: ['cuenta', 'subcuenta'], default: null })
   origenTipo?: 'cuenta' | 'subcuenta' | null;
 
   @Prop({ type: String, default: null })
   origenId?: string | null;
 
-  @Prop({ default: null })
+  @Prop({ type: String, enum: ['cuenta', 'subcuenta'], default: null })
   destinoTipo?: 'cuenta' | 'subcuenta' | null;
 
   @Prop({ type: String, default: null })
