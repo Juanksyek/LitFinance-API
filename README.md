@@ -25,10 +25,6 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
-## Frontend integration
-
-- Dashboard snapshot + ETag/304 + rate-limit handling: [docs/FRONTEND_APP_README.md](docs/FRONTEND_APP_README.md)
-
 ## Project setup
 
 ```bash

@@ -38,6 +38,9 @@ export class CuentaHistorial {
   @Prop()
   conceptoId?: string;
 
+  @Prop()
+  concepto?: string;
+
   @Prop({ type: Object, default: null })
   metadata?: Record<string, any>;
 }

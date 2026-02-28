@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { Subcuenta, SubcuentaDocument } from './schemas/subcuenta.schema/subcuenta.schema';
 import { CreateSubcuentaDto } from './dto/create-subcuenta.dto/create-subcuenta.dto';
 import { UpdateSubcuentaDto } from './dto/update-subcuenta.dto/update-subcuenta.dto';
+import { DeleteSubcuentaDto } from './dto/delete-subcuenta.dto/delete-subcuenta.dto';
 import { Cuenta } from '../cuenta/schemas/cuenta.schema/cuenta.schema';
 import { InjectModel as InjectCuentaModel } from '@nestjs/mongoose';
 import { MonedaService } from '../moneda/moneda.service';
@@ -14,6 +15,7 @@ import { ConversionService } from '../utils/services/conversion.service';
 import { UserService } from '../user/user.service';
 import { Transaction, TransactionDocument } from '../transactions/schemas/transaction.schema/transaction.schema';
 import { HistorialRecurrente, HistorialRecurrenteDocument } from '../recurrentes/schemas/historial-recurrente.schema';
+import { Recurrente, RecurrenteDocument } from '../recurrentes/schemas/recurrente.schema';
 import { PlanConfigService } from '../plan-config/plan-config.service';
 import { DashboardVersionService } from '../user/services/dashboard-version.service';
 
@@ -26,12 +28,27 @@ export class SubcuentaService {
     @InjectModel(SubcuentaHistorial.name) private historialModel: Model<SubcuentaHistorialDocument>,
     @InjectModel(Transaction.name) private readonly transactionModel: Model<TransactionDocument>,
     @InjectModel(HistorialRecurrente.name) private readonly historialRecurrenteModel: Model<HistorialRecurrenteDocument>,
+    @InjectModel(Recurrente.name) private readonly recurrenteModel: Model<RecurrenteDocument>,
     private readonly cuentaHistorialService: CuentaHistorialService,
     private readonly conversionService: ConversionService,
     private readonly userService: UserService,
     private readonly planConfigService: PlanConfigService,
     private readonly dashboardVersionService: DashboardVersionService,
   ) {}
+
+  private async convertirSiNecesario(params: {
+    monto: number;
+    monedaOrigen?: string;
+    monedaDestino?: string;
+  }): Promise<{ montoConvertido: number; tasaConversion?: number } > {
+    const { monto, monedaOrigen, monedaDestino } = params;
+    if (!monedaOrigen || !monedaDestino || monedaOrigen === monedaDestino) {
+      return { montoConvertido: monto };
+    }
+
+    const conversion = await this.conversionService.convertir(monto, monedaOrigen, monedaDestino);
+    return { montoConvertido: conversion.montoConvertido, tasaConversion: conversion.tasaConversion };
+  }
 
   async obtenerMovimientosFinancieros(
     subCuentaId: string,
@@ -257,11 +274,17 @@ export class SubcuentaService {
     };
   }
 
-  async listar( userId: string, subCuentaId?: string, search = '', page = 1, limit = 10, incluirInactivas = true ) {
+  async listar( userId: string, subCuentaId?: string, search = '', page = 1, limit = 10, incluirInactivas = true, excluirMeta = true ) {
     const query: any = { userId };
   
     if (!incluirInactivas) {
       query.activa = true;
+    }
+
+    // Por defecto ocultamos las subcuentas marcadas como `isMeta` para no confundir
+    // la vista de subcuentas del usuario con subcuentas internas usadas por metas.
+    if (excluirMeta) {
+      query.isMeta = { $ne: true };
     }
   
     if (subCuentaId) query.subCuentaId = subCuentaId;
@@ -467,6 +490,175 @@ export class SubcuentaService {
     }
   }
 
+  /**
+   * Elimina una subcuenta con una decisión explícita sobre el saldo restante:
+   * - transfer_to_principal: reubicar saldo hacia la cuenta principal
+   * - discard: descartar saldo (ajuste negativo en cuenta principal si la subcuenta afecta la cuenta)
+   *
+   * Además, limpia historial de movimientos financieros (transacciones + recurrentes ejecutados)
+   * y definiciones de recurrentes asociadas a la subcuenta.
+   */
+  async eliminarConDecision(id: string, userId: string, dto: DeleteSubcuentaDto) {
+    const sub = await this.subcuentaModel.findOne({ subCuentaId: id, userId });
+    if (!sub) {
+      throw new NotFoundException('Subcuenta no encontrada o no pertenece al usuario');
+    }
+
+    if (sub.isMeta) {
+      throw new BadRequestException('No se puede eliminar una subcuenta interna de Meta');
+    }
+
+    const action = dto.action;
+
+    const cuentaId = sub.cuentaId ?? null;
+    let cuenta: any = null;
+    if (cuentaId) {
+      cuenta = await this.cuentaModel.findOne({ id: cuentaId, userId });
+    }
+
+    const nowIso = new Date().toISOString();
+
+    // Determinar ajuste sobre cuenta principal (si aplica)
+    let principalDelta = 0;
+    let tasaConversionUsada: number | null = null;
+
+    const requiereCuentaPrincipal =
+      action === 'transfer_to_principal' || (action === 'discard' && sub.afectaCuenta);
+
+    if (requiereCuentaPrincipal) {
+      if (!cuentaId) {
+        throw new BadRequestException('La subcuenta no tiene cuenta principal asociada');
+      }
+      if (!cuenta) {
+        throw new NotFoundException('Cuenta principal no encontrada');
+      }
+    }
+
+    if (cuenta) {
+      const { montoConvertido, tasaConversion } = await this.convertirSiNecesario({
+        monto: sub.cantidad,
+        monedaOrigen: sub.moneda,
+        monedaDestino: cuenta.moneda,
+      });
+      tasaConversionUsada = tasaConversion ?? null;
+
+      if (action === 'transfer_to_principal') {
+        // Si NO afecta la cuenta, el saldo está fuera del agregado: hay que sumarlo.
+        // Si afecta la cuenta, es una reasignación (sin cambio de saldo agregado).
+        principalDelta = sub.afectaCuenta ? 0 : montoConvertido;
+      } else if (action === 'discard') {
+        // Si afecta la cuenta, descartar implica quitarlo del agregado.
+        // Si NO afecta la cuenta, descartar no impacta la cuenta principal.
+        principalDelta = sub.afectaCuenta ? -montoConvertido : 0;
+
+        if (principalDelta < 0) {
+          const nuevoSaldo = Number((cuenta.cantidad ?? 0) + principalDelta);
+          if (nuevoSaldo < 0) {
+            throw new BadRequestException(
+              `Saldo insuficiente en la cuenta principal para descartar ${Math.abs(principalDelta)}. Disponible: ${cuenta.cantidad}`,
+            );
+          }
+        }
+      }
+    }
+
+    if (cuenta && principalDelta !== 0) {
+      await this.cuentaModel.findOneAndUpdate(
+        { id: cuentaId, userId },
+        { $inc: { cantidad: principalDelta } },
+      );
+    }
+
+    // Auditoría que sobrevive a la eliminación y limpieza
+    if (cuentaId) {
+      const descripcion =
+        action === 'transfer_to_principal'
+          ? `Eliminación de subcuenta (transferido a principal): ${sub.nombre}`
+          : `Eliminación de subcuenta (descartado): ${sub.nombre}`;
+
+      await this.cuentaHistorialService.registrarMovimiento({
+        userId,
+        cuentaId,
+        monto: principalDelta,
+        tipo: 'ajuste_subcuenta',
+        descripcion,
+        fecha: nowIso,
+        subcuentaId: sub.subCuentaId,
+        metadata: {
+          action,
+          note: dto.note ?? null,
+          subcuenta: {
+            subCuentaId: sub.subCuentaId,
+            nombre: sub.nombre,
+            moneda: sub.moneda,
+            cantidad: sub.cantidad,
+            afectaCuenta: !!sub.afectaCuenta,
+            origenSaldo: sub.origenSaldo ?? null,
+          },
+          conversion: {
+            tasaConversion: tasaConversionUsada,
+          },
+        },
+      } as any);
+    }
+
+    const descripcionSub =
+      action === 'transfer_to_principal'
+        ? 'Subcuenta eliminada (saldo transferido a principal)'
+        : 'Subcuenta eliminada (saldo descartado)';
+
+    const historialSubcuentaIds = [sub.subCuentaId, String((sub as any)._id)].filter(Boolean);
+
+    await this.historialModel.create({
+      subcuentaId: sub.subCuentaId,
+      userId,
+      tipo: 'eliminacion',
+      descripcion: descripcionSub,
+      datos: {
+        id,
+        action,
+        note: dto.note ?? null,
+        snapshot: {
+          subCuentaId: sub.subCuentaId,
+          nombre: sub.nombre,
+          moneda: sub.moneda,
+          cantidad: sub.cantidad,
+          afectaCuenta: !!sub.afectaCuenta,
+          origenSaldo: sub.origenSaldo ?? null,
+          cuentaId: sub.cuentaId ?? null,
+        },
+      },
+    });
+
+    // Limpiar historial de movimientos (financieros) y recurrentes asociados
+    const [txDel, histRecDel, recDefDel] = await Promise.all([
+      this.transactionModel.deleteMany({ userId, subCuentaId: sub.subCuentaId }),
+      this.historialRecurrenteModel.deleteMany({ userId, subcuentaId: sub.subCuentaId }),
+      this.recurrenteModel.deleteMany({ userId, subcuentaId: sub.subCuentaId }),
+    ]);
+
+    // Eliminar historial de cambios de la subcuenta (mantener la entrada de eliminación)
+    await this.historialModel.deleteMany({
+      userId,
+      subcuentaId: { $in: historialSubcuentaIds },
+      tipo: { $ne: 'eliminacion' },
+    });
+
+    await sub.deleteOne();
+    await this.dashboardVersionService.touchDashboard(userId, 'subcuenta.delete');
+
+    return {
+      message: 'Subcuenta eliminada',
+      action,
+      principalDelta,
+      deleted: {
+        transactions: (txDel as any)?.deletedCount ?? 0,
+        historialRecurrente: (histRecDel as any)?.deletedCount ?? 0,
+        recurrentes: (recDefDel as any)?.deletedCount ?? 0,
+      },
+    };
+  }
+
   async obtenerHistorial(
     subcuentaId: string | null,
     userId: string,
@@ -549,6 +741,7 @@ export class SubcuentaService {
   }
 
   async contarSubcuentas(userId: string): Promise<number> {
-    return this.subcuentaModel.countDocuments({ userId, activa: true });
+    // Contar solo subcuentas reales (excluir contenedores de Meta)
+    return this.subcuentaModel.countDocuments({ userId, activa: true, isMeta: { $ne: true } });
   }
 }

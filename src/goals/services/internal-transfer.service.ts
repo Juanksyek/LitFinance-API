@@ -23,6 +23,8 @@ export type InternalTransferInput = {
   destino: TransferEndpoint;
   motivo?: string;
   idempotencyKey?: string;
+  conceptoId?: string | null;
+  concepto?: string | null;
 };
 
 export type InternalTransferResult = {
@@ -212,6 +214,8 @@ export class InternalTransferService {
                 descripcion: desc,
                 fecha: now,
                 subcuentaId: input.origen.type === 'subcuenta' ? input.origen.id : undefined,
+                conceptoId: input.conceptoId ?? undefined,
+                concepto: input.concepto ?? undefined,
                 metadata: { txId, kind: 'transfer', side: 'origen', moneda: monedaOrigen },
               },
             ],
@@ -230,6 +234,8 @@ export class InternalTransferService {
                 descripcion: desc,
                 fecha: now,
                 subcuentaId: input.destino.type === 'subcuenta' ? input.destino.id : undefined,
+                conceptoId: input.conceptoId ?? undefined,
+                concepto: input.concepto ?? undefined,
                 metadata: {
                   txId,
                   kind: 'transfer',
@@ -253,6 +259,8 @@ export class InternalTransferService {
                 tipo: 'transferencia',
                 descripcion: desc,
                 subcuentaId: (origenSub as any)._id,
+                conceptoId: input.conceptoId ?? undefined,
+                concepto: input.concepto ?? undefined,
                 datos: {
                   txId,
                   side: 'origen',
@@ -273,6 +281,8 @@ export class InternalTransferService {
                 tipo: 'transferencia',
                 descripcion: desc,
                 subcuentaId: (destinoSub as any)._id,
+                conceptoId: input.conceptoId ?? undefined,
+                concepto: input.concepto ?? undefined,
                 datos: {
                   txId,
                   side: 'destino',
@@ -306,6 +316,8 @@ export class InternalTransferService {
               destinoTipo: input.destino.type,
               destinoId: input.destino.type === 'cuenta' ? (input.destino.id || 'principal') : input.destino.id,
               motivo: input.motivo ?? null,
+              conceptoId: input.conceptoId ?? null,
+              concepto: input.concepto ?? null,
               saldoOrigenDespues,
               saldoDestinoDespues,
             },

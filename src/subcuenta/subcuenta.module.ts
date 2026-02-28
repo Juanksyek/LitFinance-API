@@ -12,6 +12,7 @@ import { UtilsModule } from '../utils/utils.module';
 import { UserModule } from '../user/user.module';
 import { Transaction, TransactionSchema } from '../transactions/schemas/transaction.schema/transaction.schema';
 import { HistorialRecurrente, HistorialRecurrenteSchema } from '../recurrentes/schemas/historial-recurrente.schema';
+import { Recurrente, RecurrenteSchema } from '../recurrentes/schemas/recurrente.schema';
 import { PlanConfigModule } from '../plan-config/plan-config.module';
 
 @Module({
@@ -22,6 +23,7 @@ import { PlanConfigModule } from '../plan-config/plan-config.module';
       { name: Cuenta.name, schema: CuentaSchema },
       { name: Transaction.name, schema: TransactionSchema },
       { name: HistorialRecurrente.name, schema: HistorialRecurrenteSchema },
+      { name: Recurrente.name, schema: RecurrenteSchema },
     ]),
     forwardRef(() => CuentaModule),
     MonedaModule,

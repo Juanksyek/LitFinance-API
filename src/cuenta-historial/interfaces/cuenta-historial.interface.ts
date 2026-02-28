@@ -8,5 +8,6 @@ export interface CuentaHistorial {
   fecha: Date;
   subcuentaId?: string;
   conceptoId?: string;
+  concepto?: string;
   motivo?: string;
 }

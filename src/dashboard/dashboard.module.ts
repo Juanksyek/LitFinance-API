@@ -8,6 +8,7 @@ import { Cuenta, CuentaSchema } from '../cuenta/schemas/cuenta.schema/cuenta.sch
 import { Subcuenta, SubcuentaSchema } from '../subcuenta/schemas/subcuenta.schema/subcuenta.schema';
 import { Recurrente, RecurrenteSchema } from '../recurrentes/schemas/recurrente.schema';
 import { Transaction, TransactionSchema } from '../transactions/schemas/transaction.schema/transaction.schema';
+import { Meta, MetaSchema } from '../goals/schemas/meta.schema';
 import { PlanConfigModule } from '../plan-config/plan-config.module';
 import { CuentaHistorialModule } from '../cuenta-historial/cuenta-historial.module';
 import { AuthModule } from '../auth/auth.module';
@@ -18,6 +19,7 @@ import { AuthModule } from '../auth/auth.module';
       { name: User.name, schema: UserSchema },
       { name: Cuenta.name, schema: CuentaSchema },
       { name: Subcuenta.name, schema: SubcuentaSchema },
+      { name: Meta.name, schema: MetaSchema },
       { name: Recurrente.name, schema: RecurrenteSchema },
       { name: Transaction.name, schema: TransactionSchema },
     ]),

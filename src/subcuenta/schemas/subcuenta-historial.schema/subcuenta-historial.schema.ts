@@ -24,6 +24,12 @@ export class SubcuentaHistorial {
   @Prop({ required: false })
   subcuentaId: string;
 
+  @Prop()
+  conceptoId?: string;
+
+  @Prop()
+  concepto?: string;
+
   @Prop({ type: Object })
   datos: any;
 }

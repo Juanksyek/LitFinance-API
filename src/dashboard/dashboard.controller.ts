@@ -233,6 +233,8 @@ export class DashboardController {
     @Query('recentPage') recentPage?: string,
     @Query('subaccountsLimit') subaccountsLimit?: string,
     @Query('subaccountsPage') subaccountsPage?: string,
+    @Query('metasLimit') metasLimit?: string,
+    @Query('metasPage') metasPage?: string,
     @Query('recurrentesLimit') recurrentesLimit?: string,
     @Query('recurrentesPage') recurrentesPage?: string,
   ) {
@@ -309,6 +311,8 @@ export class DashboardController {
       recentPage: safeRecentPage,
       subaccountsLimit: safeSubaccountsLimit,
       subaccountsPage: safeSubaccountsPage,
+      metasLimit: metasLimit ? Number(metasLimit) : undefined,
+      metasPage: metasPage ? Number(metasPage) : undefined,
       recurrentesLimit: safeRecurrentesLimit,
       recurrentesPage: safeRecurrentesPage,
     });

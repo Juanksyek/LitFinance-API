@@ -33,5 +33,9 @@ export class CreateCuentaHistorialDto {
   conceptoId?: string;
 
   @IsOptional()
+  @IsString()
+  concepto?: string;
+
+  @IsOptional()
   metadata?: any;
 }

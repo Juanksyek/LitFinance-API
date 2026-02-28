@@ -43,6 +43,11 @@ export class Subcuenta {
   @Prop({ default: true })
   activa: boolean;
 
+  // Marca que la subcuenta es un contenedor interno para una Meta y no debe mostrarse
+  // en el listado principal de subcuentas del usuario.
+  @Prop({ default: false })
+  isMeta?: boolean;
+
   // Indica si fue pausada automáticamente por expiración de premium
   @Prop({ default: false })
   pausadaPorPlan?: boolean;
