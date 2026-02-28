@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    command: npm run start:dev
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=development
+      # Uncomment to enable server-side auth diagnostics added earlier
+      # - DEBUG_AUTH=1
+    volumes:
+      - ./:/usr/src/app:cached
+      - /usr/src/app/node_modules
+    depends_on:
+      - mongo
+    tty: true
+
+  mongo:
+    image: mongo:6.0
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+
+volumes:
+  mongo_data:
