@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { User, UserDocument } from '../user/schemas/user.schema/user.schema';
 import { Cuenta, CuentaDocument } from '../cuenta/schemas/cuenta.schema/cuenta.schema';
 import { Subcuenta, SubcuentaDocument } from '../subcuenta/schemas/subcuenta.schema/subcuenta.schema';
+import { Meta, MetaDocument } from '../goals/schemas/meta.schema';
 import { Recurrente, RecurrenteDocument } from '../recurrentes/schemas/recurrente.schema';
 import { Transaction, TransactionDocument } from '../transactions/schemas/transaction.schema/transaction.schema';
 import { PlanConfigService } from '../plan-config/plan-config.service';
@@ -28,6 +29,8 @@ type SnapshotOptions = {
   recentPage?: number;
   subaccountsLimit?: number;
   subaccountsPage?: number;
+  metasLimit?: number;
+  metasPage?: number;
   recurrentesLimit?: number;
   recurrentesPage?: number;
 };
@@ -46,6 +49,7 @@ export class DashboardService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(Cuenta.name) private readonly cuentaModel: Model<CuentaDocument>,
     @InjectModel(Subcuenta.name) private readonly subcuentaModel: Model<SubcuentaDocument>,
+    @InjectModel(Meta.name) private readonly metaModel: Model<MetaDocument>,
     @InjectModel(Recurrente.name) private readonly recurrenteModel: Model<RecurrenteDocument>,
     @InjectModel(Transaction.name) private readonly transactionModel: Model<TransactionDocument>,
     private readonly planConfigService: PlanConfigService,
@@ -224,6 +228,11 @@ export class DashboardService {
     const subaccountsPage = clampInt(opts?.subaccountsPage, 1, 1, 10_000);
     const subaccountsSkip = (subaccountsPage - 1) * subaccountsLimit;
 
+    // Metas
+    const metasLimit = clampInt(opts?.metasLimit, 20, 1, 200);
+    const metasPage = clampInt(opts?.metasPage, 1, 1, 10_000);
+    const metasSkip = (metasPage - 1) * metasLimit;
+
     // Recurrentes
     const recurrentesLimit = clampInt(opts?.recurrentesLimit, 50, 10, 50);
     const recurrentesPage = clampInt(opts?.recurrentesPage, 1, 1, 10_000);
@@ -278,6 +287,8 @@ export class DashboardService {
     const [
       cuenta,
       subcuentas,
+      metas,
+      metasTotalCount,
       subcuentasTotalCount,
       recurrentes,
       recurrentesTotalCount,
@@ -299,6 +310,16 @@ export class DashboardService {
         .skip(subaccountsSkip)
         .limit(subaccountsLimit)
         .lean(),
+
+      this.metaModel
+        .find({ userId })
+        .select('metaId nombre objetivo moneda estado saldo subcuentaId prioridad updatedAt')
+        .sort({ updatedAt: -1 })
+        .skip(metasSkip)
+        .limit(metasLimit)
+        .lean(),
+
+      this.metaModel.countDocuments({ userId }),
 
       this.subcuentaModel.countDocuments({ userId }),
 
@@ -518,6 +539,27 @@ export class DashboardService {
     const subaccountsTotals = buildTotals(subcuentasTotalsAgg as any);
     const recurrentesTotals = buildTotals(recurrentesTotalsAgg as any);
 
+    // Map metas: compute progreso y saldoActual (legacy metas resolve via subcuenta)
+    const metasWithInfo = (metas ?? []).map((m: any) => {
+      const objetivo = Number(m.objetivo ?? 0);
+      const saldo = Number(m.saldo ?? 0);
+      const isLegacy = !!m.subcuentaId;
+      const progreso = objetivo > 0 ? Math.min(1, saldo / objetivo) : 0;
+      return {
+        id: m.metaId,
+        nombre: m.nombre,
+        moneda: m.moneda,
+        estado: m.estado,
+        saldo: m.saldo ?? 0,
+        objetivo,
+        progreso,
+        legacySubcuentaId: m.subcuentaId ?? null,
+        prioridad: m.prioridad ?? 0,
+        updatedAt: m.updatedAt,
+        mode: isLegacy ? 'legacy' : 'independent',
+      };
+    });
+
     const recentHistory = cuenta?.id
       ? await this.cuentaHistorialService.buscarHistorial(String(cuenta.id), recentPage, recentLimit)
       : { total: 0, page: recentPage, limit: recentLimit, data: [] };
@@ -650,6 +692,12 @@ export class DashboardService {
           detalles: h.detalles ?? null,
           metadata: h.metadata ?? null,
         })),
+      },
+      metasSummary: {
+        total: Number(metasTotalCount ?? 0),
+        page: metasPage,
+        limit: metasLimit,
+        data: metasWithInfo,
       },
       chartAggregates: {
         range,
