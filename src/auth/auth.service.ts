@@ -32,6 +32,18 @@ export class AuthService {
                 private readonly planAutoPauseService: PlanAutoPauseService,
     ) { }
 
+    // Diagnostic toggle (enable in env for temporary debugging)
+    private readonly DIAG = process.env.DEBUG_AUTH === '1';
+
+    private maskToken(s?: string | null) {
+        if (!s) return '<null>';
+        try {
+            return `***${String(s).slice(-8)}`;
+        } catch {
+            return '<masked>';
+        }
+    }
+
     // Token settings (env overrides recommended)
     private readonly ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || 'access_secret';
     private readonly REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'refresh_secret';
@@ -417,12 +429,14 @@ export class AuthService {
         async refreshTokens(dto: RefreshAuthDto) {
             const { refreshToken, deviceId } = dto as any;
 
-            let decoded: any;
-            try {
-                decoded = await this.jwtService.verifyAsync(refreshToken, { secret: this.REFRESH_SECRET });
-            } catch {
-                throw new UnauthorizedException('Refresh token inválido o expirado');
-            }
+                let decoded: any;
+                try {
+                    if (this.DIAG) console.log('[AUTH][REFRESH] attempt', { refresh: this.maskToken(refreshToken), deviceId });
+                    decoded = await this.jwtService.verifyAsync(refreshToken, { secret: this.REFRESH_SECRET });
+                } catch (err) {
+                    if (this.DIAG) console.log('[AUTH][REFRESH] verify failed', { err: err?.message || err?.toString?.() });
+                    throw new UnauthorizedException('Refresh token inválido o expirado');
+                }
 
             if (decoded?.typ !== 'refresh') {
                 throw new UnauthorizedException('Token inválido');
@@ -432,15 +446,18 @@ export class AuthService {
 
             const session = await this.sessionModel.findOne({ userId, deviceId });
             if (!session || session.revoked) {
+                if (this.DIAG) console.log('[AUTH][REFRESH] session not found or revoked', { userId, deviceId });
                 throw new UnauthorizedException('Sesión no válida');
             }
 
             if (session.expiresAt < new Date()) {
+                if (this.DIAG) console.log('[AUTH][REFRESH] session expired', { userId, deviceId, expiresAt: session.expiresAt });
                 throw new UnauthorizedException('Sesión expirada');
             }
 
             const ok = await this.compareRefresh(refreshToken, session.refreshHash);
             if (!ok) {
+                if (this.DIAG) console.log('[AUTH][REFRESH] refresh compare failed', { userId, deviceId });
                 session.revoked = true;
                 await session.save();
                 throw new UnauthorizedException('Sesión comprometida. Inicia sesión de nuevo.');
@@ -466,6 +483,8 @@ export class AuthService {
             session.lastUsedAt = new Date();
             session.revoked = false;
             await session.save();
+
+            if (this.DIAG) console.log('[AUTH][REFRESH] success', { userId, deviceId, newRefresh: this.maskToken(newRefresh), access: this.maskToken(accessToken), expiresAt: session.expiresAt });
 
             return {
                 accessToken,
