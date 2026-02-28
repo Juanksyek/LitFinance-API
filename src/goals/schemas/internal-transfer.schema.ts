@@ -51,6 +51,12 @@ export class InternalTransfer {
   @Prop({ type: String, default: undefined })
   motivo?: string;
 
+  @Prop({ type: String, default: undefined })
+  conceptoId?: string;
+
+  @Prop({ type: String, default: undefined })
+  concepto?: string;
+
   // Guardamos saldos resultantes para respuesta idempotente
   @Prop({ type: Number, required: true })
   saldoOrigenDespues: number;
