@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { SubcuentaService } from './subcuenta.service';
 import { CreateSubcuentaDto } from './dto/create-subcuenta.dto/create-subcuenta.dto';
 import { UpdateSubcuentaDto } from './dto/update-subcuenta.dto/update-subcuenta.dto';
+import { DeleteSubcuentaDto } from './dto/delete-subcuenta.dto/delete-subcuenta.dto';
 import { PlanConfigService } from '../plan-config/plan-config.service';
 
 @UseGuards(JwtAuthGuard)
@@ -74,6 +75,11 @@ export class SubcuentaController {
   @Delete(':id')
   async eliminar(@Req() req, @Param('id') id: string) {
     return this.subcuentaService.eliminar(id, req.user.id);
+  }
+
+  @Post(':id/eliminar')
+  async eliminarConDecision(@Req() req, @Param('id') id: string, @Body() dto: DeleteSubcuentaDto) {
+    return this.subcuentaService.eliminarConDecision(id, req.user.id, dto);
   }
 
   @UseGuards(JwtAuthGuard)
