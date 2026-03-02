@@ -25,6 +25,8 @@ import { ReportsModule } from './reports/reports.module';
 import { StripeModule } from './stripe/stripe.module';
 import { PlanConfigModule } from './plan-config/plan-config.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+//import { VersionModule } from './version/version.module';
+import { BlocsModule } from './blocs/blocs.module';
 
 @Module({
   imports: [
@@ -56,6 +58,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
     StripeModule,
     PlanConfigModule,
     DashboardModule,
+    // VersionModule,
+    BlocsModule,
   ],
   controllers: [AppController],
   providers: [
