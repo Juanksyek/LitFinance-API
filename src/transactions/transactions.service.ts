@@ -27,9 +27,21 @@ export class TransactionsService {
   ) {}
 
   private parseDateInput(value: string, isEnd: boolean): Date {
+    // If the client passes a plain date string YYYY-MM-DD we treat it as a
+    // date-only value. Creating a UTC-midnight (`...T00:00:00.000Z`) produced
+    // an observable shift for users in negative timezones (the ISO string
+    // converted to the previous day on the client). To preserve the user's
+    // selected calendar day across timezones we use a midday UTC for start
+    // dates and keep end dates at end-of-day UTC.
     if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      return new Date(isEnd ? `${value}T23:59:59.999Z` : `${value}T00:00:00.000Z`);
+      if (isEnd) {
+        return new Date(`${value}T23:59:59.999Z`);
+      }
+      // Use midday UTC to avoid timezone-caused previous-day rendering
+      // on clients in negative offsets.
+      return new Date(`${value}T12:00:00.000Z`);
     }
+
     return new Date(value);
   }
 
