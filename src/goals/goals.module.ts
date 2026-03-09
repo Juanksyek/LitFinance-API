@@ -39,5 +39,6 @@ import { SubcuentaHistorial, SubcuentaHistorialSchema } from '../subcuenta/schem
   ],
   controllers: [GoalsController],
   providers: [GoalsService, InternalTransferService],
+  exports: [InternalTransferService],
 })
 export class GoalsModule {}
