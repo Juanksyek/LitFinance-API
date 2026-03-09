@@ -667,7 +667,11 @@ export class SubcuentaService {
     hasta?: string,
   ) {
     const query: any = { userId };
-    if (subcuentaId) query.subcuentaId = subcuentaId;
+    if (subcuentaId) {
+      const sub = await this.subcuentaModel.findOne({ subCuentaId: subcuentaId, userId }).lean();
+      const historialIds = [subcuentaId, sub ? String((sub as any)._id) : null].filter(Boolean);
+      query.subcuentaId = { $in: historialIds };
+    }
   
     if (tipo) query.tipo = tipo;
   
