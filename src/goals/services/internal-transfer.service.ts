@@ -38,6 +38,22 @@ export type InternalTransferResult = {
   saldoOrigenDespues: number;
   saldoDestinoDespues: number;
   idempotent: boolean;
+  origen: {
+    type: 'cuenta' | 'subcuenta';
+    id: string;
+    nombre: string;
+    moneda: string;
+    principal?: boolean;
+    cuentaId?: string | null;
+  };
+  destino: {
+    type: 'cuenta' | 'subcuenta';
+    id: string;
+    nombre: string;
+    moneda: string;
+    principal?: boolean;
+    cuentaId?: string | null;
+  };
 };
 
 @Injectable()
@@ -51,6 +67,67 @@ export class InternalTransferService {
     @InjectModel(InternalTransfer.name) private readonly transferModel: Model<InternalTransferDocument>,
     private readonly conversionService: ConversionService,
   ) {}
+
+  private buildCuentaDetail(cuenta: CuentaDocument) {
+    return {
+      type: 'cuenta' as const,
+      id: String((cuenta as any).id),
+      nombre: String((cuenta as any).nombre ?? 'Cuenta'),
+      moneda: String((cuenta as any).moneda),
+      principal: !!(cuenta as any).isPrincipal,
+      cuentaId: String((cuenta as any).id),
+    };
+  }
+
+  private buildSubcuentaDetail(sub: SubcuentaDocument) {
+    return {
+      type: 'subcuenta' as const,
+      id: String((sub as any).subCuentaId),
+      nombre: String((sub as any).nombre ?? 'Subcuenta'),
+      moneda: String((sub as any).moneda),
+      cuentaId: (sub as any).cuentaId ? String((sub as any).cuentaId) : null,
+    };
+  }
+
+  private buildEndpointLabel(detail: {
+    type: 'cuenta' | 'subcuenta';
+    nombre: string;
+    principal?: boolean;
+  }) {
+    if (detail.type === 'cuenta') {
+      return detail.principal ? `cuenta principal (${detail.nombre})` : `cuenta ${detail.nombre}`;
+    }
+
+    return `subcuenta ${detail.nombre}`;
+  }
+
+  private async resolveTransferEndpointsFromStored(existing: any, userId: string) {
+    const origen = existing.origenTipo === 'cuenta'
+      ? this.buildCuentaDetail(
+          await this.resolveCuenta(userId, {
+            type: 'cuenta',
+            id: existing.origenId === 'principal' ? undefined : existing.origenId,
+            principal: existing.origenId === 'principal',
+          }),
+        )
+      : this.buildSubcuentaDetail(
+          await this.resolveSubcuenta(userId, { type: 'subcuenta', id: existing.origenId }),
+        );
+
+    const destino = existing.destinoTipo === 'cuenta'
+      ? this.buildCuentaDetail(
+          await this.resolveCuenta(userId, {
+            type: 'cuenta',
+            id: existing.destinoId === 'principal' ? undefined : existing.destinoId,
+            principal: existing.destinoId === 'principal',
+          }),
+        )
+      : this.buildSubcuentaDetail(
+          await this.resolveSubcuenta(userId, { type: 'subcuenta', id: existing.destinoId }),
+        );
+
+    return { origen, destino };
+  }
 
   private async resolveCuenta(userId: string, endpoint: TransferEndpoint): Promise<CuentaDocument> {
     if (endpoint.type !== 'cuenta') {
@@ -90,6 +167,7 @@ export class InternalTransferService {
         .findOne({ userId: input.userId, idempotencyKey })
         .lean();
       if (existing) {
+        const endpoints = await this.resolveTransferEndpointsFromStored(existing, input.userId);
         return {
           txId: existing.txId,
           montoOrigen: existing.montoOrigen,
@@ -101,6 +179,8 @@ export class InternalTransferService {
           saldoOrigenDespues: existing.saldoOrigenDespues,
           saldoDestinoDespues: existing.saldoDestinoDespues,
           idempotent: true,
+          origen: endpoints.origen,
+          destino: endpoints.destino,
         };
       }
     }
@@ -118,6 +198,13 @@ export class InternalTransferService {
 
         const destinoCuenta = destinoIsCuenta ? await this.resolveCuenta(input.userId, input.destino) : null;
         const destinoSub = !destinoIsCuenta ? await this.resolveSubcuenta(input.userId, input.destino) : null;
+
+        const origenDetalle = origenCuenta ? this.buildCuentaDetail(origenCuenta) : this.buildSubcuentaDetail(origenSub as any);
+        const destinoDetalle = destinoCuenta ? this.buildCuentaDetail(destinoCuenta) : this.buildSubcuentaDetail(destinoSub as any);
+
+        if (origenDetalle.type === destinoDetalle.type && origenDetalle.id === destinoDetalle.id) {
+          throw new BadRequestException('El origen y el destino no pueden ser el mismo');
+        }
 
         const monedaOrigen = origenCuenta?.moneda ?? origenSub?.moneda;
         const monedaDestino = destinoCuenta?.moneda ?? destinoSub?.moneda;
@@ -199,7 +286,9 @@ export class InternalTransferService {
 
         // Historiales (best-effort dentro de la misma transaction)
         const now = new Date();
-        const desc = (input.motivo || 'Transferencia interna').slice(0, 180);
+        const descBase = (input.motivo || 'Transferencia interna').slice(0, 120);
+        const origenDesc = `${descBase} → ${this.buildEndpointLabel(destinoDetalle)}`.slice(0, 180);
+        const destinoDesc = `${descBase} ← ${this.buildEndpointLabel(origenDetalle)}`.slice(0, 180);
 
         // CuentaHistorial: usamos tipo ajuste_subcuenta (compat)
         if (origenCuenta) {
@@ -211,12 +300,21 @@ export class InternalTransferService {
                 userId: input.userId,
                 monto: -montoOrigen,
                 tipo: 'ajuste_subcuenta',
-                descripcion: desc,
+                descripcion: origenDesc,
                 fecha: now,
                 subcuentaId: input.origen.type === 'subcuenta' ? input.origen.id : undefined,
                 conceptoId: input.conceptoId ?? undefined,
                 concepto: input.concepto ?? undefined,
-                metadata: { txId, kind: 'transfer', side: 'origen', moneda: monedaOrigen },
+                metadata: {
+                  txId,
+                  kind: 'transfer',
+                  side: 'origen',
+                  moneda: monedaOrigen,
+                  origen: origenDetalle,
+                  destino: destinoDetalle,
+                  montoOrigen,
+                  montoDestino,
+                },
               },
             ],
             { session },
@@ -231,7 +329,7 @@ export class InternalTransferService {
                 userId: input.userId,
                 monto: +montoDestino,
                 tipo: 'ajuste_subcuenta',
-                descripcion: desc,
+                descripcion: destinoDesc,
                 fecha: now,
                 subcuentaId: input.destino.type === 'subcuenta' ? input.destino.id : undefined,
                 conceptoId: input.conceptoId ?? undefined,
@@ -241,6 +339,10 @@ export class InternalTransferService {
                   kind: 'transfer',
                   side: 'destino',
                   moneda: monedaDestino,
+                  origen: origenDetalle,
+                  destino: destinoDetalle,
+                  montoOrigen,
+                  montoDestino,
                   tasaConversion,
                   fechaConversion,
                 },
@@ -257,8 +359,8 @@ export class InternalTransferService {
               {
                 userId: input.userId,
                 tipo: 'transferencia',
-                descripcion: desc,
-                subcuentaId: (origenSub as any)._id,
+                descripcion: origenDesc,
+                subcuentaId: (origenSub as any).subCuentaId,
                 conceptoId: input.conceptoId ?? undefined,
                 concepto: input.concepto ?? undefined,
                 datos: {
@@ -267,6 +369,13 @@ export class InternalTransferService {
                   subCuentaId: (origenSub as any).subCuentaId,
                   monto: -montoOrigen,
                   moneda: monedaOrigen,
+                  origen: origenDetalle,
+                  destino: destinoDetalle,
+                  montoOrigen,
+                  monedaOrigen,
+                  montoDestino,
+                  monedaDestino,
+                  motivo: input.motivo ?? null,
                 },
               },
             ],
@@ -279,8 +388,8 @@ export class InternalTransferService {
               {
                 userId: input.userId,
                 tipo: 'transferencia',
-                descripcion: desc,
-                subcuentaId: (destinoSub as any)._id,
+                descripcion: destinoDesc,
+                subcuentaId: (destinoSub as any).subCuentaId,
                 conceptoId: input.conceptoId ?? undefined,
                 concepto: input.concepto ?? undefined,
                 datos: {
@@ -289,6 +398,13 @@ export class InternalTransferService {
                   subCuentaId: (destinoSub as any).subCuentaId,
                   monto: +montoDestino,
                   moneda: monedaDestino,
+                  origen: origenDetalle,
+                  destino: destinoDetalle,
+                  montoOrigen,
+                  monedaOrigen,
+                  montoDestino,
+                  monedaDestino,
+                  motivo: input.motivo ?? null,
                   tasaConversion,
                   fechaConversion,
                 },
@@ -336,6 +452,8 @@ export class InternalTransferService {
           saldoOrigenDespues,
           saldoDestinoDespues,
           idempotent: false,
+          origen: origenDetalle,
+          destino: destinoDetalle,
         };
       });
 
@@ -347,6 +465,7 @@ export class InternalTransferService {
           .findOne({ userId: input.userId, idempotencyKey })
           .lean();
         if (existing) {
+          const endpoints = await this.resolveTransferEndpointsFromStored(existing, input.userId);
           return {
             txId: existing.txId,
             montoOrigen: existing.montoOrigen,
@@ -358,6 +477,8 @@ export class InternalTransferService {
             saldoOrigenDespues: existing.saldoOrigenDespues,
             saldoDestinoDespues: existing.saldoDestinoDespues,
             idempotent: true,
+            origen: endpoints.origen,
+            destino: endpoints.destino,
           };
         }
       }

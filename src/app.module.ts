@@ -27,6 +27,7 @@ import { PlanConfigModule } from './plan-config/plan-config.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 //import { VersionModule } from './version/version.module';
 import { BlocsModule } from './blocs/blocs.module';
+import { TransferenciasModule } from './transferencias/transferencias.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { BlocsModule } from './blocs/blocs.module';
     DashboardModule,
     // VersionModule,
     BlocsModule,
+    TransferenciasModule,
   ],
   controllers: [AppController],
   providers: [
