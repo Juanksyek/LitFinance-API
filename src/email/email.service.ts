@@ -5,6 +5,95 @@ import { Resend } from 'resend';
 export class EmailService {
   private resend = new Resend(process.env.RESEND_API_KEY);
 
+  // ─── Invitación a Espacio Compartido ─────────────────────────
+
+  async sendSpaceInvitationEmail(
+    to: string,
+    data: {
+      inviterName: string;
+      spaceName: string;
+      shareUrl: string;
+      deepLink: string;
+      message?: string;
+      expiresAt: Date;
+    },
+  ) {
+    const publicBaseUrl = process.env.APP_URL || process.env.FRONTEND_URL;
+    const expiresLabel = new Intl.DateTimeFormat('es-MX', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(data.expiresAt));
+
+    const personalMessage = data.message
+      ? `<p style="background:#fff3e0;border-left:4px solid #ef7725;padding:12px 16px;border-radius:0 8px 8px 0;margin:16px 0;color:#333;font-style:italic;">"${data.message}"</p>`
+      : '';
+
+    await this.resend.emails.send({
+      from: 'LitFinance <no-reply@thelitfinance.com>',
+      to,
+      subject: `${data.inviterName} te invitó a "${data.spaceName}" en LitFinance`,
+      html: `
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>Invitación a espacio compartido</title>
+          <style>
+            :root { --brand: #ef7725; --bg: #ffffff; --muted: #6b6b6b; --card: #f7f7f7; }
+            body { margin:0; padding:0; background:var(--bg); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; color:#111; }
+            .container { max-width:680px; margin:24px auto; padding:24px; }
+            .card { background:var(--card); border-radius:12px; overflow:hidden; box-shadow:0 6px 18px rgba(14,14,14,0.06); }
+            .header { background: linear-gradient(90deg, var(--brand) 0%, #ff9b5a 100%); padding:28px; color:#fff; }
+            .logo { font-weight:700; font-size:20px; letter-spacing:0.3px; }
+            .content { padding:28px; }
+            h1 { margin:0 0 8px; font-size:20px; }
+            p { margin:0 0 14px; color:var(--muted); line-height:1.5; }
+            .button { display:inline-block; background:var(--brand); color:#fff; text-decoration:none; padding:14px 28px; border-radius:8px; font-weight:600; font-size:16px; }
+            .small { font-size:13px; color:#8a8a8a; }
+            .space-badge { display:inline-block; background:#fff; border:1px solid #e0e0e0; border-radius:8px; padding:10px 16px; margin:8px 0 16px; }
+            .space-name { font-weight:700; font-size:16px; color:#111; }
+            .footer { padding:16px 28px; font-size:13px; color:#9a9a9a; }
+            @media (max-width:520px) {
+              .container { padding:12px; }
+              .content { padding:18px; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="card">
+              <div class="header">
+                <div class="logo">
+                  <img src="${publicBaseUrl}/public/images/LitFinance.png" alt="LitFinance" style="height:36px; display:block;" />
+                </div>
+              </div>
+              <div class="content">
+                <h1>¡Te han invitado!</h1>
+                <p><strong>${data.inviterName}</strong> te invitó a un espacio compartido en LitFinance:</p>
+                <div class="space-badge">
+                  <span class="space-name">📂 ${data.spaceName}</span>
+                </div>
+                ${personalMessage}
+                <p>Al unirte podrán dividir gastos, registrar movimientos compartidos y ver analíticas en tiempo real.</p>
+                <p style="text-align:center; margin:24px 0;">
+                  <a href="${data.shareUrl}" class="button">Unirme al espacio</a>
+                </p>
+                <p class="small">Esta invitación expira el <strong>${expiresLabel}</strong>.</p>
+                <p class="small">Si tienes la app instalada, también puedes abrir directamente: <a href="${data.deepLink}" style="color:#ef7725;">Abrir en la app</a></p>
+                <p class="small" style="word-break:break-all; margin-top:12px;">O copia este enlace: ${data.shareUrl}</p>
+              </div>
+              <div class="footer">¿No esperabas esta invitación? Puedes ignorar este correo de forma segura.</div>
+            </div>
+          </div>
+        </body>
+      </html>
+      `,
+    });
+  }
+
+  // ─── Confirmación de Cuenta ──────────────────────────────────
+
   async sendConfirmationEmail(to: string, token: string, nombre: string) {
     // APP_URL/FRONTEND_URL suelen ser el frontend (para assets como el logo)
     const publicBaseUrl = process.env.APP_URL || process.env.FRONTEND_URL;
