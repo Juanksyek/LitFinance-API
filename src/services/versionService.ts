@@ -41,6 +41,7 @@ export class VersionService {
       // Buscar la configuración de versión más reciente
       const latestConfig = await AppVersion.findOne({
         platform: { $in: [platform, 'both'] },
+        isActive: true,
       }).sort({ releaseDate: -1 });
 
       if (!latestConfig) {
@@ -65,10 +66,12 @@ export class VersionService {
         latestConfig.version
       ) < 0;
 
+      const forceUpdate = !!latestConfig.forceUpdate || !isValid;
+
       let message = '';
       let storeUrl = '';
 
-      if (!isValid || latestConfig.forceUpdate) {
+      if (forceUpdate) {
         message = latestConfig.forceUpdate
           ? '¡Actualización obligatoria! Por favor actualiza la app para continuar.'
           : 'Tu versión de la app no es compatible. Por favor actualiza a la última versión.';
@@ -87,7 +90,7 @@ export class VersionService {
         isValid,
         isActive: latestConfig.isActive,
         needsUpdate,
-        forceUpdate: latestConfig.forceUpdate && !isValid,
+        forceUpdate,
         message: message || undefined,
         storeUrl: storeUrl || undefined,
         latestVersion: latestConfig.version,
@@ -110,8 +113,8 @@ export class VersionService {
    */
   async getLatestVersion(platform?: 'android' | 'ios') {
     const query = platform 
-      ? { platform: { $in: [platform, 'both'] } }
-      : {};
+      ? { platform: { $in: [platform, 'both'] }, isActive: true }
+      : { isActive: true };
 
     return await AppVersion.findOne(query).sort({ releaseDate: -1 });
   }

@@ -9,6 +9,11 @@ import { Recurrente, RecurrenteDocument } from '../recurrentes/schemas/recurrent
 import { Transaction, TransactionDocument } from '../transactions/schemas/transaction.schema/transaction.schema';
 import { PlanConfigService } from '../plan-config/plan-config.service';
 import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.service';
+import { SharedSpaceMember, SharedSpaceMemberDocument } from '../shared/schemas/shared-space-member.schema';
+import { SharedSpace, SharedSpaceDocument } from '../shared/schemas/shared-space.schema';
+import { SharedInvitation, SharedInvitationDocument } from '../shared/schemas/shared-invitation.schema';
+import { SharedNotification, SharedNotificationDocument } from '../shared/schemas/shared-notification.schema';
+import { SharedMovement, SharedMovementDocument } from '../shared/schemas/shared-movement.schema';
 
 type SnapshotRange = 'day' | 'week' | 'month' | '3months' | '6months' | 'year' | 'all';
 
@@ -33,6 +38,8 @@ type SnapshotOptions = {
   metasPage?: number;
   recurrentesLimit?: number;
   recurrentesPage?: number;
+  /** Número de movimientos recientes por espacio en el mini-feed (default 3, máx 10) */
+  sharedMovementsLimit?: number;
 };
 
 type Cached = {
@@ -54,6 +61,11 @@ export class DashboardService {
     @InjectModel(Transaction.name) private readonly transactionModel: Model<TransactionDocument>,
     private readonly planConfigService: PlanConfigService,
     private readonly cuentaHistorialService: CuentaHistorialService,
+    @InjectModel(SharedSpaceMember.name) private readonly sharedMemberModel: Model<SharedSpaceMemberDocument>,
+    @InjectModel(SharedSpace.name) private readonly sharedSpaceModel: Model<SharedSpaceDocument>,
+    @InjectModel(SharedInvitation.name) private readonly sharedInvitationModel: Model<SharedInvitationDocument>,
+    @InjectModel(SharedNotification.name) private readonly sharedNotificationModel: Model<SharedNotificationDocument>,
+    @InjectModel(SharedMovement.name) private readonly sharedMovementModel: Model<SharedMovementDocument>,
   ) {}
 
   async getDashboardVersion(userId: string): Promise<string> {
@@ -297,6 +309,8 @@ export class DashboardService {
       chartPoints,
       subcuentasTotalsAgg,
       recurrentesTotalsAgg,
+      sharedData,
+      conceptoBreakdownAgg,
     ] = await Promise.all([
       this.cuentaModel
         .findOne({ userId, isPrincipal: true })
@@ -463,6 +477,29 @@ export class DashboardService {
             },
           },
           { $sort: { '_id.bucket': 1, '_id.moneda': 1 } },
+        ])
+        .exec(),
+
+      this.getSharedSpacesSummary(userId, start, end, Math.min(opts?.sharedMovementsLimit ?? 3, 10)),
+
+      // Breakdown de gastos e ingresos por concepto en el rango seleccionado
+      this.transactionModel
+        .aggregate([
+          {
+            $match: {
+              userId,
+              ...andMatch,
+            },
+          },
+          {
+            $group: {
+              _id: { concepto: '$concepto', tipo: '$tipo' },
+              total: { $sum: { $abs: { $ifNull: ['$montoConvertido', '$monto'] } } },
+              maxPrecio: { $max: { $abs: { $ifNull: ['$montoConvertido', '$monto'] } } },
+              count: { $sum: 1 },
+            },
+          },
+          { $sort: { total: -1 } },
         ])
         .exec(),
     ]);
@@ -650,6 +687,7 @@ export class DashboardService {
         id: r.recurrenteId,
         nombre: r.nombre,
         color: r?.plataforma?.color ?? null,
+        categoria: r?.plataforma?.categoria ?? null,
         monto: r.monto,
         moneda: r.moneda,
         frecuenciaTipo: r.frecuenciaTipo ?? null,
@@ -710,10 +748,274 @@ export class DashboardService {
           out: -Math.abs(p.egreso),
         })),
       },
+      sharedSpacesSummary: sharedData,
+      conceptoBreakdown: (() => {
+        // Build two maps: egresos and ingresos, keyed by concepto
+        const egresoMap: Record<string, { total: number; maxPrecio: number; count: number }> = {};
+        const ingresoMap: Record<string, { total: number; maxPrecio: number; count: number }> = {};
+        for (const row of (conceptoBreakdownAgg as any[]) ?? []) {
+          const concepto = String(row?._id?.concepto ?? 'Sin concepto').trim() || 'Sin concepto';
+          const tipo = String(row?._id?.tipo ?? '');
+          const entry = { total: Number(row?.total ?? 0), maxPrecio: Number(row?.maxPrecio ?? 0), count: Number(row?.count ?? 0) };
+          if (tipo === 'egreso') egresoMap[concepto] = entry;
+          else if (tipo === 'ingreso') ingresoMap[concepto] = entry;
+        }
+        const toSortedArray = (map: Record<string, { total: number; maxPrecio: number; count: number }>) =>
+          Object.entries(map)
+            .map(([concepto, v]) => ({ concepto, ...v }))
+            .sort((a, b) => b.total - a.total);
+        const egresos = toSortedArray(egresoMap);
+        const ingresos = toSortedArray(ingresoMap);
+        return {
+          egresos,
+          ingresos,
+          totalEgresos: egresos.reduce((s, e) => s + e.total, 0),
+          totalIngresos: ingresos.reduce((s, e) => s + e.total, 0),
+        };
+      })(),
     };
 
     this.microCache.set(cacheKey, { expiresAt: nowMs + this.microCacheTtlMs, data: snapshot });
     return snapshot;
+  }
+
+  private async getSharedSpacesSummary(userId: string, start: Date, end: Date, movementsLimit = 3) {
+    const empty = {
+      activeSpacesCount: 0,
+      pendingInvitationsCount: 0,
+      unreadNotificationsCount: 0,
+      spaces: [],
+    };
+
+    // 1. Membresías activas del usuario (incluye su rol en cada espacio)
+    const memberDocs = await this.sharedMemberModel
+      .find({ userId, estado: 'active' })
+      .select('spaceId rol')
+      .lean();
+
+    const spaceIds = memberDocs.map((m: any) => String(m.spaceId));
+    const myRolMap = new Map((memberDocs as any[]).map((m) => [String(m.spaceId), String(m.rol)]));
+
+    if (spaceIds.length === 0) {
+      const [pendingInvitationsCount, unreadNotificationsCount] = await Promise.all([
+        this.sharedInvitationModel.countDocuments({ invitedUserId: userId, estado: 'pending' }),
+        this.sharedNotificationModel.countDocuments({ userId, read: false }),
+      ]);
+      return { ...empty, pendingInvitationsCount, unreadNotificationsCount };
+    }
+
+    // 2. Todas las consultas en paralelo — un único round-trip a MongoDB
+    const [
+      spaces,
+      memberCounts,
+      movementTypedStats,
+      recentMovementsAgg,
+      notifPerSpaceAgg,
+      activeLinkInvitations,
+      outgoingPendingAgg,
+      pendingInvitationsCount,
+      unreadNotificationsCount,
+    ] = await Promise.all([
+      // Espacio completo: nombre, tipo, moneda, descripción, owner, configuración
+      this.sharedSpaceModel
+        .find({ spaceId: { $in: spaceIds }, estado: 'activo' })
+        .select('spaceId nombre tipo monedaBase descripcion ownerUserId configuracion')
+        .lean(),
+
+      // Conteo de miembros activos por espacio
+      this.sharedMemberModel
+        .aggregate([
+          { $match: { spaceId: { $in: spaceIds }, estado: 'active' } },
+          { $group: { _id: '$spaceId', memberCount: { $sum: 1 } } },
+        ])
+        .exec(),
+
+      // Totales del período agrupados por espacio+tipo (income/expense)
+      this.sharedMovementModel
+        .aggregate([
+          {
+            $match: {
+              spaceId: { $in: spaceIds },
+              estado: 'published',
+              fechaMovimiento: { $gte: start, $lte: end },
+            },
+          },
+          {
+            $group: {
+              _id: { spaceId: '$spaceId', tipo: '$tipo' },
+              total: { $sum: '$montoTotal' },
+              count: { $sum: 1 },
+              lastAt: { $max: '$fechaMovimiento' },
+            },
+          },
+        ])
+        .exec(),
+
+      // Mini-feed: últimos N movimientos por espacio (sin filtro de período)
+      this.sharedMovementModel
+        .aggregate([
+          { $match: { spaceId: { $in: spaceIds }, estado: 'published' } },
+          { $sort: { fechaMovimiento: -1 } },
+          {
+            $group: {
+              _id: '$spaceId',
+              movements: {
+                $push: {
+                  movementId: '$movementId',
+                  titulo: '$titulo',
+                  montoTotal: '$montoTotal',
+                  moneda: '$moneda',
+                  tipo: '$tipo',
+                  fechaMovimiento: '$fechaMovimiento',
+                  createdByUserId: '$createdByUserId',
+                },
+              },
+            },
+          },
+          { $project: { movements: { $slice: ['$movements', movementsLimit] } } },
+        ])
+        .exec(),
+
+      // Notificaciones no leídas por espacio (para badge por espacio)
+      this.sharedNotificationModel
+        .aggregate([
+          { $match: { userId, read: false } },
+          { $group: { _id: '$spaceId', count: { $sum: 1 } } },
+        ])
+        .exec(),
+
+      // Invitación link activa más reciente por espacio (para compartir QR en 1 tap)
+      this.sharedInvitationModel
+        .find({
+          spaceId: { $in: spaceIds },
+          invitationType: 'link',
+          estado: 'pending',
+          expiresAt: { $gt: new Date() },
+        })
+        .select('spaceId shareUrl expiresAt multiUse maxUses acceptedCount')
+        .sort({ createdAt: -1 })
+        .lean(),
+
+      // Invitaciones salientes pendientes por espacio (útil para admins/owners)
+      this.sharedInvitationModel
+        .aggregate([
+          { $match: { spaceId: { $in: spaceIds }, estado: 'pending' } },
+          { $group: { _id: '$spaceId', count: { $sum: 1 } } },
+        ])
+        .exec(),
+
+      // Invitaciones pendientes recibidas por el usuario actual (badge global)
+      this.sharedInvitationModel.countDocuments({ invitedUserId: userId, estado: 'pending' }),
+
+      // Notificaciones no leídas totales del usuario (badge global)
+      this.sharedNotificationModel.countDocuments({ userId, read: false }),
+    ]);
+
+    // 3. Construir mapas para lookup O(1)
+    const memberCountMap = new Map(
+      (memberCounts as any[]).map((r) => [String(r._id), Number(r.memberCount)]),
+    );
+
+    // movementTypedStats: agrupar por spaceId, separar income vs expense
+    type SpacePeriodStats = {
+      ingresosPeriodo: number;
+      egresosPeriodo: number;
+      totalMovimientosPeriodo: number;
+      lastMovementAt: Date | null;
+    };
+    const movementStatsMap = new Map<string, SpacePeriodStats>();
+    for (const r of movementTypedStats as any[]) {
+      const spId = String(r._id.spaceId);
+      const tipo = String(r._id.tipo);
+      const entry: SpacePeriodStats = movementStatsMap.get(spId) ?? {
+        ingresosPeriodo: 0,
+        egresosPeriodo: 0,
+        totalMovimientosPeriodo: 0,
+        lastMovementAt: null,
+      };
+      const total = Number(r.total ?? 0);
+      const count = Number(r.count ?? 0);
+      if (tipo === 'income') entry.ingresosPeriodo += total;
+      if (tipo === 'expense') entry.egresosPeriodo += total;
+      entry.totalMovimientosPeriodo += count;
+      const candidateDate = r.lastAt ? new Date(r.lastAt) : null;
+      if (candidateDate && (!entry.lastMovementAt || candidateDate > entry.lastMovementAt)) {
+        entry.lastMovementAt = candidateDate;
+      }
+      movementStatsMap.set(spId, entry);
+    }
+
+    const recentMvmMap = new Map(
+      (recentMovementsAgg as any[]).map((r) => [String(r._id), r.movements ?? []]),
+    );
+    const notifMap = new Map(
+      (notifPerSpaceAgg as any[]).map((r) => [String(r._id), Number(r.count)]),
+    );
+    const outgoingMap = new Map(
+      (outgoingPendingAgg as any[]).map((r) => [String(r._id), Number(r.count)]),
+    );
+
+    // Primera invitación link activa por espacio (ya viene ordenada por createdAt desc)
+    const activeLinkMap = new Map<string, any>();
+    for (const inv of activeLinkInvitations as any[]) {
+      const sid = String(inv.spaceId);
+      if (!activeLinkMap.has(sid)) activeLinkMap.set(sid, inv);
+    }
+
+    // 4. Construir resultado final por espacio
+    const spacesResult = (spaces as any[]).map((s) => {
+      const id = String(s.spaceId);
+      const stats = movementStatsMap.get(id);
+      const linkInv = activeLinkMap.get(id);
+      return {
+        spaceId: id,
+        nombre: s.nombre,
+        tipo: s.tipo,
+        monedaBase: s.monedaBase ?? 'MXN',
+        descripcion: s.descripcion || null,
+        ownerUserId: s.ownerUserId,
+        myRol: myRolMap.get(id) ?? 'member',
+        memberCount: memberCountMap.get(id) ?? 0,
+        maxMembers: s.configuracion?.maxMembers ?? 20,
+        configuracion: s.configuracion ?? null,
+        // Totales financieros del período seleccionado
+        ingresosPeriodo: stats?.ingresosPeriodo ?? 0,
+        egresosPeriodo: stats?.egresosPeriodo ?? 0,
+        totalMovimientosPeriodo: stats?.totalMovimientosPeriodo ?? 0,
+        lastMovementAt: stats?.lastMovementAt ?? null,
+        // Notificaciones no leídas de este espacio
+        unreadNotificationsCount: notifMap.get(id) ?? 0,
+        // Invitaciones salientes pendientes (para badge en panel de admin)
+        pendingOutgoingInvitationsCount: outgoingMap.get(id) ?? 0,
+        // Mini-feed: últimos N movimientos
+        recentMovements: (recentMvmMap.get(id) ?? []).map((m: any) => ({
+          movementId: m.movementId,
+          titulo: m.titulo,
+          montoTotal: m.montoTotal,
+          moneda: m.moneda,
+          tipo: m.tipo,
+          fechaMovimiento: m.fechaMovimiento,
+          createdByUserId: m.createdByUserId,
+        })),
+        // Invitación link activa más reciente (para compartir QR sin llamada extra)
+        activeLinkInvitation: linkInv
+          ? {
+              shareUrl: linkInv.shareUrl,
+              expiresAt: linkInv.expiresAt,
+              multiUse: linkInv.multiUse,
+              maxUses: (linkInv.maxUses ?? 0) > 0 ? linkInv.maxUses : null,
+              acceptedCount: linkInv.acceptedCount ?? 0,
+            }
+          : null,
+      };
+    });
+
+    return {
+      activeSpacesCount: spacesResult.length,
+      pendingInvitationsCount,
+      unreadNotificationsCount,
+      spaces: spacesResult,
+    };
   }
 
   async getBalanceCard(userId: string, opts?: BalanceCardOptions) {

@@ -44,6 +44,7 @@
     "decimal.js": "^10.6.0",
     "exceljs": "^4.4.0",
     "expo-server-sdk": "^4.0.0",
+    "form-data": "^4.0.5",
     "mongoose": "^8.13.2",
     "mongoose-sequence": "^6.0.1",
     "passport": "^0.7.0",
