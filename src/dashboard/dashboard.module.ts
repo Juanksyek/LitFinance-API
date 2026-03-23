@@ -12,6 +12,11 @@ import { Meta, MetaSchema } from '../goals/schemas/meta.schema';
 import { PlanConfigModule } from '../plan-config/plan-config.module';
 import { CuentaHistorialModule } from '../cuenta-historial/cuenta-historial.module';
 import { AuthModule } from '../auth/auth.module';
+import { SharedSpaceMember, SharedSpaceMemberSchema } from '../shared/schemas/shared-space-member.schema';
+import { SharedSpace, SharedSpaceSchema } from '../shared/schemas/shared-space.schema';
+import { SharedInvitation, SharedInvitationSchema } from '../shared/schemas/shared-invitation.schema';
+import { SharedNotification, SharedNotificationSchema } from '../shared/schemas/shared-notification.schema';
+import { SharedMovement, SharedMovementSchema } from '../shared/schemas/shared-movement.schema';
 
 @Module({
   imports: [
@@ -22,6 +27,11 @@ import { AuthModule } from '../auth/auth.module';
       { name: Meta.name, schema: MetaSchema },
       { name: Recurrente.name, schema: RecurrenteSchema },
       { name: Transaction.name, schema: TransactionSchema },
+      { name: SharedSpaceMember.name, schema: SharedSpaceMemberSchema },
+      { name: SharedSpace.name, schema: SharedSpaceSchema },
+      { name: SharedInvitation.name, schema: SharedInvitationSchema },
+      { name: SharedNotification.name, schema: SharedNotificationSchema },
+      { name: SharedMovement.name, schema: SharedMovementSchema },
     ]),
     PlanConfigModule,
     CuentaHistorialModule,
