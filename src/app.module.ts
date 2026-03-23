@@ -28,6 +28,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
 //import { VersionModule } from './version/version.module';
 import { BlocsModule } from './blocs/blocs.module';
 import { TransferenciasModule } from './transferencias/transferencias.module';
+import { SharedModule } from './shared/shared.module';
+import { TicketScanModule } from './ticket-scan/ticket-scan.module';
 
 @Module({
   imports: [
@@ -62,6 +64,8 @@ import { TransferenciasModule } from './transferencias/transferencias.module';
     // VersionModule,
     BlocsModule,
     TransferenciasModule,
+    SharedModule,
+    TicketScanModule,
   ],
   controllers: [AppController],
   providers: [
