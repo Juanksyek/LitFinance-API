@@ -36,4 +36,11 @@ export class CreateInvitationDto {
   @IsBoolean()
   @IsOptional()
   multiUse?: boolean;
+
+  /**
+   * Límite de aceptaciones para links multiUse (0 = sin límite, default).
+   * Máximo recomendado: igual a maxMembers del espacio.
+   */
+  @IsOptional()
+  maxUses?: number;
 }
