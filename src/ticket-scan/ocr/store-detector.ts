@@ -1,0 +1,85 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { KNOWN_STORES } from './ocr.constants';
+import { DetectedStore } from './ocr.types';
+
+@Injectable()
+export class StoreDetector {
+  private readonly logger = new Logger(StoreDetector.name);
+
+  /**
+   * Busca el nombre de tienda en las primeras 12 líneas (header) y últimas 15 (footer).
+   * Si no coincide con KNOWN_STORES, intenta extraer el nombre de la primera línea legible.
+   */
+  detect(lines: string[]): {
+    store: DetectedStore | null;
+    tienda: string;
+    direccionTienda: string;
+  } {
+    let store: DetectedStore | null = null;
+
+    // 1. Buscar en header (primeras 12 líneas)
+    const headerBlock = lines.slice(0, Math.min(12, lines.length)).join(' ');
+    for (const entry of KNOWN_STORES) {
+      if (entry.patterns.some((p) => p.test(headerBlock))) {
+        store = { name: entry.name, defaultCategory: entry.defaultCategory };
+        break;
+      }
+    }
+
+    // 2. Buscar en footer (últimas 15 líneas)
+    if (!store) {
+      const footerBlock = lines.slice(Math.max(0, lines.length - 15)).join(' ');
+      for (const entry of KNOWN_STORES) {
+        if (entry.patterns.some((p) => p.test(footerBlock))) {
+          store = { name: entry.name, defaultCategory: entry.defaultCategory };
+          break;
+        }
+      }
+    }
+
+    // 3. Nombre de tienda
+    let tienda = store?.name ?? 'Tienda desconocida';
+    if (!store) {
+      tienda = this.extractFallbackName(lines);
+    }
+
+    // 4. Dirección
+    const direccionTienda = this.extractAddress(lines);
+
+    this.logger.log(
+      `[STORE] Detectada="${tienda}" KnownStore=${store?.name ?? '—'} Dir="${direccionTienda}"`,
+    );
+
+    return { store, tienda, direccionTienda };
+  }
+
+  /** Extrae nombre de la primera línea que parezca un nombre de tienda */
+  private extractFallbackName(lines: string[]): string {
+    for (let idx = 0; idx < Math.min(8, lines.length); idx++) {
+      const l = lines[idx];
+      if (l.length < 3) continue;
+      if (/^\d/.test(l)) continue;
+      if (/^[-=*\.★─]{3,}/.test(l)) continue;
+      if (/r\.?f\.?c\.?\b/i.test(l)) continue;
+      if (/^s\.?\s*a\.?\s*de\s*c\.?\s*v/i.test(l)) continue;
+      if (/^s\s+de\s+r\.?\s*l/i.test(l)) continue;
+      if (/^(av|calle|blvd|col|c\.p)\./i.test(l)) continue;
+      if (/^store|^sucursal|^tienda\s*#/i.test(l)) continue;
+      if (/^local\s+/i.test(l)) continue;
+      if (l.includes(':') && !/^[A-Z]{3,}/i.test(l)) continue;
+      return l.replace(/[*★]+/g, '').trim().substring(0, 120);
+    }
+    return 'Tienda desconocida';
+  }
+
+  /** Busca una dirección en las primeras 10 líneas */
+  private extractAddress(lines: string[]): string {
+    for (let idx = 0; idx < Math.min(10, lines.length); idx++) {
+      const l = lines[idx];
+      if (/^(av\.?|calle|blvd\.?|carr\.?|prol\.?)\s/i.test(l)) {
+        return l.substring(0, 200);
+      }
+    }
+    return '';
+  }
+}
