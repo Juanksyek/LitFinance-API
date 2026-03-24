@@ -3,8 +3,6 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import axios from 'axios';
-import * as FormData from 'form-data';
 import { TicketScan, TicketScanDocument, TicketItem } from './schemas/ticket-scan.schema';
 import {
   CreateTicketFromOcrDto,
@@ -16,151 +14,8 @@ import { TransactionsService } from '../transactions/transactions.service';
 import { UserService } from '../user/user.service';
 import { generateUniqueId } from '../utils/generate-id';
 import { DashboardVersionService } from '../user/services/dashboard-version.service';
-
-// ─── Categorización inteligente de artículos ───────────────────
-
-const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  alimentos: [
-    'leche', 'pan', 'huevo', 'queso', 'pollo', 'carne', 'res', 'cerdo', 'pescado',
-    'arroz', 'frijol', 'tortilla', 'fruta', 'verdura', 'manzana', 'plátano', 'banana',
-    'tomate', 'jitomate', 'cebolla', 'papa', 'papa frita', 'cereal', 'yogur', 'yogurt',
-    'atún', 'tuna', 'jamón', 'salchicha', 'aceite', 'azúcar', 'sal', 'harina',
-    'galleta', 'chocolate', 'café', 'refresco', 'soda', 'coca', 'pepsi', 'agua',
-    'jugo', 'cerveza', 'vino', 'snack', 'botana', 'chip', 'doritos', 'sabritas',
-    'helado', 'mantequilla', 'crema', 'mayonesa', 'salsa', 'pasta', 'spaghetti',
-    'sopa', 'maruchan', 'noodle', 'avena', 'granola', 'lechuga', 'zanahoria',
-    'limón', 'naranja', 'sandwich', 'hamburguesa', 'pizza', 'taco', 'burrito',
-    'comida', 'alimento', 'grocery', 'food', 'meal', 'drink', 'bebida',
-  ],
-  farmacia: [
-    'medicina', 'medicamento', 'pastilla', 'tableta', 'jarabe', 'aspirina',
-    'paracetamol', 'ibuprofeno', 'vitamina', 'suplemento', 'curita', 'vendaje',
-    'alcohol', 'gel antibacterial', 'farmacia', 'receta', 'antibiótico',
-    'analgésico', 'antigripal', 'pharmacy', 'medicine', 'drug',
-  ],
-  higiene: [
-    'jabón', 'shampoo', 'champú', 'acondicionador', 'pasta dental', 'cepillo',
-    'desodorante', 'papel higiénico', 'toalla', 'servilleta', 'pañuelo', 'tissue',
-    'rastrillo', 'rasuradora', 'crema', 'loción', 'protector solar', 'bloqueador',
-    'pañal', 'toalla sanitaria', 'tampón',
-  ],
-  hogar: [
-    'detergente', 'cloro', 'limpiador', 'escoba', 'trapeador', 'balde',
-    'foco', 'bombilla', 'pila', 'batería', 'extensión', 'cable', 'enchufe',
-    'bolsa basura', 'plato', 'vaso', 'cuchara', 'tenedor', 'olla', 'sartén',
-    'toalla', 'cortina', 'almohada', 'sábana', 'colchón', 'mueble',
-    'herramienta', 'martillo', 'clavo', 'tornillo', 'pintura',
-  ],
-  transporte: [
-    'gasolina', 'gas', 'diesel', 'uber', 'didi', 'taxi', 'metro', 'autobús',
-    'bus', 'camión', 'estacionamiento', 'parking', 'peaje', 'caseta', 'aceite motor',
-    'llanta', 'neumático', 'refacción', 'autopart', 'lavado auto',
-    'fuel', 'gasoline', 'transport', 'ride',
-  ],
-  entretenimiento: [
-    'cine', 'película', 'netflix', 'spotify', 'disney', 'suscripción',
-    'juego', 'videojuego', 'game', 'boleto', 'ticket', 'entrada', 'concierto',
-    'teatro', 'parque', 'museo', 'libro', 'revista', 'periódico',
-    'streaming', 'entretenimiento', 'diversión', 'hobby',
-  ],
-  ropa: [
-    'camisa', 'playera', 'camiseta', 'pantalón', 'jean', 'short', 'falda',
-    'vestido', 'zapato', 'tenis', 'bota', 'sandalia', 'calcetín', 'media',
-    'ropa interior', 'boxer', 'brasier', 'chamarra', 'chaqueta', 'suéter',
-    'abrigo', 'gorra', 'sombrero', 'cinturón', 'bolsa', 'mochila',
-    'clothing', 'shirt', 'pants', 'shoes', 'dress',
-  ],
-  educacion: [
-    'cuaderno', 'libreta', 'lápiz', 'pluma', 'bolígrafo', 'borrador',
-    'regla', 'calculadora', 'mochila', 'uniforme', 'colegiatura', 'matrícula',
-    'curso', 'clase', 'taller', 'libro', 'textbook', 'school', 'education',
-    'papelería', 'impresión', 'copia', 'folder', 'carpeta',
-  ],
-  servicios: [
-    'luz', 'electricidad', 'agua', 'gas natural', 'internet', 'teléfono',
-    'celular', 'cable', 'renta', 'alquiler', 'seguro', 'póliza',
-    'mantenimiento', 'reparación', 'servicio', 'suscripción', 'membresía',
-    'gym', 'gimnasio', 'lavandería', 'tintorería', 'peluquería', 'barbería',
-    'utility', 'service', 'bill', 'rent', 'insurance',
-  ],
-  restaurante: [
-    'propina', 'mesero', 'servicio mesa', 'comensales', 'buffet',
-    'restaurante', 'restaurant', 'café', 'cafetería', 'bar', 'cantina',
-    'fondita', 'taquería', 'pizzería', 'sushi', 'mariscos',
-  ],
-  mascotas: [
-    'croqueta', 'alimento mascota', 'pet food', 'veterinario', 'vacuna mascota',
-    'collar', 'correa', 'arena gato', 'pecera', 'juguete mascota',
-    'perro', 'gato', 'mascota', 'pet',
-  ],
-  tecnologia: [
-    'celular', 'teléfono', 'smartphone', 'tablet', 'laptop', 'computadora',
-    'monitor', 'teclado', 'mouse', 'audífono', 'auricular', 'bocina',
-    'usb', 'cargador', 'funda', 'protector pantalla', 'impresora', 'tinta',
-    'tech', 'electronic', 'gadget',
-  ],
-};
-
-// Tiendas conocidas → categoría predominante (mapeo genérico)
-const STORE_CATEGORY_HINTS: Record<string, string> = {
-  'walmart': 'alimentos',
-  'soriana': 'alimentos',
-  'chedraui': 'alimentos',
-  'bodega aurrera': 'alimentos',
-  'heb': 'alimentos',
-  'costco': 'alimentos',
-  'sam\'s': 'alimentos',
-  'sams club': 'alimentos',
-  'oxxo': 'alimentos',
-  '7-eleven': 'alimentos',
-  'seven eleven': 'alimentos',
-  'circle k': 'alimentos',
-  'la comer': 'alimentos',
-  'comercial mexicana': 'alimentos',
-  'superama': 'alimentos',
-  'alsuper': 'alimentos',
-  'ley': 'alimentos',
-  'smart': 'alimentos',
-  'farmacias guadalajara': 'farmacia',
-  'farmacia benavides': 'farmacia',
-  'farmacias similares': 'farmacia',
-  'farmacia san pablo': 'farmacia',
-  'farmacia del ahorro': 'farmacia',
-  'liverpool': 'ropa',
-  'palacio de hierro': 'ropa',
-  'zara': 'ropa',
-  'h&m': 'ropa',
-  'c&a': 'ropa',
-  'shein': 'ropa',
-  'home depot': 'hogar',
-  'lowes': 'hogar',
-  'sodimac': 'hogar',
-  'cinépolis': 'entretenimiento',
-  'cinemex': 'entretenimiento',
-  'starbucks': 'restaurante',
-  'mcdonalds': 'restaurante',
-  'burger king': 'restaurante',
-  'subway': 'restaurante',
-  'dominos': 'restaurante',
-  'pizza hut': 'restaurante',
-  'kfc': 'restaurante',
-  'pemex': 'transporte',
-  'shell': 'transporte',
-  'bp': 'transporte',
-  'office depot': 'educacion',
-  'office max': 'educacion',
-  'papelería': 'educacion',
-  'petco': 'mascotas',
-  'best buy': 'tecnologia',
-  'radioshack': 'tecnologia',
-  'telmex': 'servicios',
-  'telcel': 'servicios',
-  'at&t': 'servicios',
-  'izzi': 'servicios',
-  'totalplay': 'servicios',
-  'amazon': 'tecnologia',
-  'mercado libre': 'tecnologia',
-};
+import { OcrPipeline } from './ocr';
+import { CATEGORY_KEYWORDS, STORE_CATEGORY_HINTS } from './ocr/ocr.constants';
 
 @Injectable()
 export class TicketScanService {
@@ -171,6 +26,7 @@ export class TicketScanService {
     private readonly transactionsService: TransactionsService,
     private readonly userService: UserService,
     private readonly dashboardVersionService: DashboardVersionService,
+    private readonly ocrPipeline: OcrPipeline,
   ) {}
 
   // ─── Categorización inteligente ──────────────────────────────
@@ -224,6 +80,7 @@ export class TicketScanService {
         subtotal: item.subtotal,
         categoria,
         confianza,
+        detalles: item.detalles ?? [],
       };
     });
   }
@@ -237,410 +94,42 @@ export class TicketScanService {
     return summary;
   }
 
-  // ─── Procesamiento OCR (parsing del texto extraído) ──────────
-  // El frontend envía la imagen en base64 y opcionalmente utiliza
-  // un servicio de OCR en el dispositivo (Google ML Kit / Apple Vision).
-  // El backend recibe el texto crudo o, en su defecto, solo la imagen
-  // para almacenarla y un payload manual.
-
-  parseOcrText(raw: string): {
-    tienda: string;
-    direccionTienda: string;
-    fechaCompra: string;
-    items: TicketItemDto[];
-    subtotal: number;
-    impuestos: number;
-    descuentos: number;
-    propina: number;
-    total: number;
-    metodoPago: string;
-  } {
-    const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
-    const fullText = lines.join('\n');
-
-    // ─── Patrones de líneas a EXCLUIR (sección de pago, referencias, etc.) ──────
-    // Estas líneas nunca son artículos: son datos de pago, autorización, dirección.
-    const EXCLUDE_LINE: RegExp[] = [
-      /afiliaci[oó]n\s*:/i,
-      /autorizaci[oó]n\s*:/i,
-      /^aid\s*:/i,
-      /^arqc\s*:/i,
-      /^tda\s*#/i,
-      /^te\s*#/i,
-      /^tr\s*#/i,
-      /^tc\s*#/i,
-      /^ts\s*#/i,
-      /^op\s*#/i,
-      /^cuenta\s*[*:]/i,
-      /importe\s*:/i,
-      /art[ií]culos?\s+comprados/i,
-      /precios?\s+bajos/i,
-      /marca\s+al\s+\d/i,            // "MARCA AL 800 925 6278..."
-      /^www\./i,
-      /^https?:\/\//i,
-      /r\.?f\.?c\.?\s/i,
-      /\brfc\b/i,
-      /r[eé]gimen\s+fiscal/i,
-      /personas?\s+morales?/i,
-      /personas?\s+f[ií]sicas?/i,
-      /gracias\s+por/i,
-      /aviso\s+de\s+privacidad/i,
-      /venta\s+en\s+l[ií]nea/i,
-      /activa\s+tus/i,
-      /beneficios/i,
-      /^¿?(c[oó]mo\s+te\s+atendimos?|necesitas?\s+ayuda)/i,
-      /pesos?\s+\d+\/100/i,           // "TRESCIENTOS OCHENTA Y DOS PESOS 00/100"
-      /^m\.?\s*n\.?\s*$/i,            // "M.N."
-      /^unidad\s+/i,
-      /^av\.\s/i,                     // Av. (dirección)
-      /^col\.\s/i,                    // Col. (colonia)
-      /^c\.p\.\s/i,
-      /nueva\s+wal\s*mart/i,
-      /^s\s+de\s+r\.?\s*l/i,
-      /^articulo\s+cant/i,            // Encabezado de columnas "ARTICULO  CANT.  TOTAL"
-      /^cant\.?\s+total/i,
-      /tarjeta\s*:/i,
-      /^visa\s+(deb|cred)/i,
-      /^mastercard/i,
-      /^american\s+express/i,
-      /consulta\s+(nuestro|tu|nues)/i,
-      /^\*{2,}/,                      // "** 73 I" (número de cuenta enmascarado)
-      /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i,  // emails
-      /precios?\s+sujetos?/i,
-      /^nextengo|acayucan|azcapotzalco/i,
-      /^azcap/i,
-      /debit[oa]/i,
-      /^debi[td]/i,
-    ];
-
-    // ─── Líneas de total/impuesto: actualizar variables, no crear items ────────
-    const TOTAL_LINE: RegExp[] = [
-      /^sub\s*total\b/i,
-      /^total\b/i,
-      /^iva\b/i,
-      /^i\.?\s*v\.?\s*a\.?\b/i,
-      /^ieps\b/i,
-      /^impuesto/i,
-      /^cambio\b/i,
-      /^efectivo\b/i,
-      /^pago\b/i,
-      /^saldo\b/i,
-      /^descuento\b/i,
-    ];
-
-    // ─── Encabezados de sección con pista de categoría ─────────────────────────
-    const SECTIONS: Array<{ pattern: RegExp; categoria: string }> = [
-      { pattern: /abarrotes?\s*(procesados?)?/i, categoria: 'alimentos' },
-      { pattern: /carnes?/i, categoria: 'alimentos' },
-      { pattern: /l[aá]cteos?/i, categoria: 'alimentos' },
-      { pattern: /bebidas?/i, categoria: 'alimentos' },
-      { pattern: /frutas?\s*y\s*verduras?/i, categoria: 'alimentos' },
-      { pattern: /panaderia/i, categoria: 'alimentos' },
-      { pattern: /jardineria/i, categoria: 'hogar' },
-      { pattern: /ferreteria/i, categoria: 'hogar' },
-      { pattern: /papeles?\s+dom[eé]sticos?/i, categoria: 'higiene' },
-      { pattern: /limpieza/i, categoria: 'higiene' },
-      { pattern: /cosm[eé]ticos?|belleza/i, categoria: 'higiene' },
-      { pattern: /farmacia/i, categoria: 'farmacia' },
-      { pattern: /ropa\s*[-–]*/i, categoria: 'ropa' },
-      { pattern: /electr[oó]n/i, categoria: 'tecnologia' },
-      { pattern: /mascotas?/i, categoria: 'mascotas' },
-    ];
-
-    // ─── Nombre de tienda ────────────────────────────────────────────────────────
-    let tienda = 'Tienda desconocida';
-    let direccionTienda = '';
-    for (let idx = 0; idx < Math.min(6, lines.length); idx++) {
-      const l = lines[idx];
-      if (l.length >= 3 && !/^\d/.test(l) && !l.includes(':') && !/^[A-Z]{1,3}$/.test(l)) {
-        tienda = l.substring(0, 120);
-        break;
-      }
-    }
-
-    // ─── Fecha ───────────────────────────────────────────────────────────────────
-    let fechaCompra = new Date().toISOString();
-    const dateRegex = /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/;
-    for (const line of lines) {
-      const m = line.match(dateRegex);
-      if (m) {
-        try {
-          const d = this.parseTicketDate(m[1]);
-          if (d) { fechaCompra = d.toISOString(); break; }
-        } catch { /* ignore */ }
-      }
-    }
-
-    // ─── Extracción de artículos ─────────────────────────────────────────────────
-    const items: TicketItemDto[] = [];
-    let currentCategory: string | undefined;
-
-    // Prefijo de código de barras: 10-13 dígitos al inicio
-    const barcodeRe = /^\d{10,13}\s+/;
-
-    // Formato Walmart: "NOMBRE  PRECIO_UNIT x CANT  TOTAL[T/C/A/M]"
-    // T=gravado, C=cero, A=exento, M=medicamento exento
-    const itemWithQtyRe = /^(.+?)\s{2,}(\d+\.?\d*)\s+[xX×]\s+(\d+)\s+(\d+\.?\d*)[TCAM]?\s*$/;
-
-    // Formato simple: "NOMBRE  TOTAL[T/C/A/M]"  (2+ espacios antes del precio)
-    const itemSimpleRe = /^(.+?)\s{2,}(\d+\.?\d*)[TCAM]?\s*$/;
-
-    // Línea de continuación con qty: "PRECIO_UNIT x CANT  TOTAL[T/C/A/M]"
-    const contWithQtyRe = /^(\d+\.?\d*)\s+[xX×]\s+(\d+)\s+(\d+\.?\d*)[TCAM]?\s*$/;
-
-    // Línea de continuación solo precio: "TOTAL[T/C/A/M]" (solo número al inicio)
-    const contPriceRe = /^(\d+\.?\d*)[TCAM]?\s*$/;
-
-    let pendingName: string | null = null; // nombre esperando línea de precio
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (line.length < 2) { pendingName = null; continue; }
-
-      // Separadores → limpiar nombre pendiente
-      if (/^[-=*\.★]{3,}/.test(line)) { pendingName = null; continue; }
-
-      // ¿Es encabezado de sección?
-      const secMatch = SECTIONS.find((s) => s.pattern.test(line));
-      if (secMatch) {
-        currentCategory = secMatch.categoria;
-        pendingName = null;
-        continue;
-      }
-      // Encabezado de sección sin categoría conocida (ej. "JARDINERIA-----")
-      if (/^[A-ZÁÉÍÓÚÑ\s]{4,}[-─]{3,}/.test(line) || /^[A-ZÁÉÍÓÚÑ\s]{4,}\s*-{3,}/.test(line)) {
-        pendingName = null;
-        continue;
-      }
-
-      // Excluir líneas de pago/referencia/dirección
-      if (EXCLUDE_LINE.some((r) => r.test(line))) { pendingName = null; continue; }
-
-      // Excluir líneas de totales
-      if (TOTAL_LINE.some((r) => r.test(line))) { pendingName = null; continue; }
-
-      // ─── ¿Hay nombre pendiente? Intentar como línea de continuación ──────────
-      if (pendingName) {
-        const m = line.match(contWithQtyRe);
-        if (m) {
-          const unitPrice = this.parseAmount(m[1]);
-          const qty = parseInt(m[2], 10);
-          const subtotal = this.parseAmount(m[3]);
-          if (subtotal > 0 && subtotal <= 99_999) {
-            items.push({
-              nombre: pendingName, cantidad: qty,
-              precioUnitario: unitPrice, subtotal,
-              categoria: currentCategory ?? 'otros', confianza: 0,
-            });
-          }
-          pendingName = null;
-          continue;
-        }
-        const mp = line.match(contPriceRe);
-        if (mp) {
-          const subtotal = this.parseAmount(mp[1]);
-          if (subtotal > 0 && subtotal <= 99_999) {
-            items.push({
-              nombre: pendingName, cantidad: 1,
-              precioUnitario: subtotal, subtotal,
-              categoria: currentCategory ?? 'otros', confianza: 0,
-            });
-          }
-          pendingName = null;
-          continue;
-        }
-        pendingName = null; // la siguiente línea no fue continuación
-      }
-
-      // ─── Parsear línea de artículo ────────────────────────────────────────────
-      // Remover código de barras si lo hay
-      const cleanLine = line.replace(barcodeRe, '');
-
-      // Formato 1: "NOMBRE  PRECIO_UNIT x CANT  TOTAL"
-      const m1 = cleanLine.match(itemWithQtyRe);
-      if (m1) {
-        const nombre = m1[1].trim();
-        const unitPrice = this.parseAmount(m1[2]);
-        const qty = parseInt(m1[3], 10);
-        const subtotal = this.parseAmount(m1[4]);
-        if (this.isValidItemName(nombre) && subtotal > 0 && subtotal <= 99_999) {
-          items.push({ nombre, cantidad: qty, precioUnitario: unitPrice, subtotal, categoria: currentCategory ?? 'otros', confianza: 0 });
-          continue;
-        }
-      }
-
-      // Formato 2: "NOMBRE  TOTAL[T/C/A/M]" (precio al final, 2+ espacios)
-      const m2 = cleanLine.match(itemSimpleRe);
-      if (m2) {
-        const nombre = m2[1].trim();
-        const subtotal = this.parseAmount(m2[2]);
-        if (this.isValidItemName(nombre) && subtotal > 0 && subtotal <= 99_999) {
-          items.push({ nombre, cantidad: 1, precioUnitario: subtotal, subtotal, categoria: currentCategory ?? 'otros', confianza: 0 });
-          continue;
-        }
-      }
-
-      // Formato 3: Solo código de barras + nombre (el precio viene en la siguiente línea)
-      if (barcodeRe.test(line)) {
-        const nameOnly = cleanLine.trim();
-        if (nameOnly.length > 2 && this.isValidItemName(nameOnly)) {
-          pendingName = nameOnly;
-        }
-        continue;
-      }
-    }
-
-    // ─── Extracción de totales ────────────────────────────────────────────────────
-    // "TOTAL  $  382.00" → usar [^\d]* para saltar espacios y símbolos entre keyword y número
-    let total = 0;
-    let subtotal = 0;
-    let impuestos = 0;
-
-    const extractAmount = (regex: RegExp, text: string): number => {
-      const m = text.match(regex);
-      return m ? this.parseAmount(m[1]) : 0;
-    };
-
-    // Buscar TOTAL (sin SUB antes) y SUBTOTAL por separado
-    total = extractAmount(/\btotal\b[^\d]{0,25}([\d,]+\.?\d*)/i, fullText);
-    subtotal = extractAmount(/\bsubtotal\b[^\d]{0,25}([\d,]+\.?\d*)/i, fullText);
-
-    // Sumar IVA + IEPS como impuestos
-    const iva = extractAmount(/\biva\b[^\d]{0,30}([\d,]+\.?\d*)/i, fullText);
-    const ieps = extractAmount(/\bieps\b[^\d]{0,30}([\d,]+\.?\d*)/i, fullText);
-    impuestos = Math.round((iva + ieps) * 100) / 100;
-
-    // Fallbacks
-    if (subtotal === 0 && items.length > 0) {
-      subtotal = items.reduce((s, item) => s + item.subtotal, 0);
-    }
-    if (total === 0) total = subtotal + impuestos;
-    // Si el total parseado <= suma de items no tiene sentido, usar suma de items + impuestos
-    if (total < subtotal) total = subtotal + impuestos;
-
-    // ─── Método de pago ───────────────────────────────────────────────────────────
-    let metodoPago = '';
-    const payL = fullText.toLowerCase();
-    if (payL.includes('efectivo') || payL.includes('cash')) metodoPago = 'efectivo';
-    else if (payL.includes('tarjeta') || payL.includes('visa') || payL.includes('mastercard') || payL.includes('card')) metodoPago = 'tarjeta';
-    else if (payL.includes('transferencia') || payL.includes('spei')) metodoPago = 'transferencia';
-
-    return {
-      tienda: tienda.substring(0, 120),
-      direccionTienda: direccionTienda.substring(0, 200),
-      fechaCompra,
-      items,
-      subtotal: Math.round(subtotal * 100) / 100,
-      impuestos,
-      descuentos: 0,
-      propina: 0,
-      total: Math.round(total * 100) / 100,
-      metodoPago,
-    };
-  }
-
-  /** Valida que el nombre de un artículo sea meaningful (no es un número ni una línea de continuación) */
-  private isValidItemName(name: string): boolean {
-    if (!name || name.length < 2) return false;
-    // Solo dígitos → es un código, no un nombre
-    if (/^\d+\.?\d*$/.test(name)) return false;
-    // Empieza con número seguido de x/× → es una línea de qty, no nombre
-    if (/^\d+\.?\d*\s*[xX×]/.test(name)) return false;
-    // Solo caracteres especiales
-    if (/^[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]+$/.test(name)) return false;
-    // Palabras clave de pago/referencia que no deben ser artículos
-    if (/\b(total|subtotal|iva|ieps|cambio|efectivo|tarjeta|importe|afiliaci[oó]n|autorizaci[oó]n)\b/i.test(name)) return false;
-    return true;
-  }
-
-  private parseAmount(str: string): number {
-    return Number(str.replace(/,/g, '')) || 0;
-  }
-
-  // ─── Llamada a OCR.space ─────────────────────────────────────
-
-  private async callOcrSpace(base64Image: string, mimeType = 'image/jpeg'): Promise<string> {
-    const apiKey = process.env.OCR_SPACE_API_KEY;
-    if (!apiKey) {
-      this.logger.warn('OCR_SPACE_API_KEY no configurada — saltando OCR externo');
-      return '';
-    }
-
-    try {
-      const form = new FormData();
-      form.append('base64Image', `data:${mimeType};base64,${base64Image}`);
-      form.append('language', 'spa');
-      form.append('OCREngine', '2');
-      form.append('scale', 'true');
-      form.append('isTable', 'false');
-
-      const response = await axios.post<{
-        ParsedResults?: Array<{ ParsedText: string }>;
-        IsErroredOnProcessing?: boolean;
-      }>(
-        'https://api.ocr.space/parse/image',
-        form,
-        {
-          headers: {
-            ...form.getHeaders(),
-            apikey: apiKey,
-          },
-          timeout: 30_000,
-        },
-      );
-
-      const parsed = response.data?.ParsedResults?.[0]?.ParsedText ?? '';
-      this.logger.log(`OCR.space extrajo ${parsed.length} caracteres`);
-      return parsed;
-    } catch (err: any) {
-      this.logger.error(`Error al llamar OCR.space: ${err?.message}`);
-      return '';
-    }
-  }
-
-  private parseTicketDate(str: string): Date | null {
-    // DD/MM/YYYY or DD-MM-YYYY
-    let match = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
-    if (match) {
-      const day = Number(match[1]);
-      const month = Number(match[2]) - 1;
-      let year = Number(match[3]);
-      if (year < 100) year += 2000;
-      return new Date(year, month, day, 12, 0, 0);
-    }
-    // YYYY-MM-DD
-    match = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
-    if (match) {
-      return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0);
-    }
-    return null;
-  }
-
-  // ─── Crear ticket desde OCR ──────────────────────────────────
+  // ─── Crear ticket desde OCR (pipeline modular) ───────────────
 
   async createFromOcr(userId: string, dto: CreateTicketFromOcrDto, clientOcrText?: string) {
     const user = await this.userService.getProfile(userId);
     const moneda = dto.moneda || user.monedaPrincipal || 'MXN';
 
-    // 1. Obtener texto OCR: prioridad → texto del cliente → llamar OCR.space
-    let ocrText = clientOcrText ?? dto.ocrTexto ?? '';
-    if (ocrText.trim().length < 10 && dto.imagenBase64) {
-      ocrText = await this.callOcrSpace(
+    // 1. Ejecutar pipeline OCR: multi-variante → parse → score → best
+    const clientText = clientOcrText ?? dto.ocrTexto ?? '';
+    let parsed;
+
+    if (dto.imagenBase64) {
+      parsed = await this.ocrPipeline.process(
         dto.imagenBase64,
         dto.imagenMimeType ?? 'image/jpeg',
+        clientText || undefined,
       );
-    }
-
-    // 2. Parsear el texto extraído
-    let parsed: ReturnType<typeof this.parseOcrText> | null = null;
-
-    if (ocrText.trim().length > 10) {
-      parsed = this.parseOcrText(ocrText);
+    } else if (clientText.trim().length > 10) {
+      parsed = this.ocrPipeline.parseText(clientText);
+    } else {
+      parsed = null;
     }
 
     const ticketId = await generateUniqueId(this.ticketModel, 'ticketId');
 
-    const items = parsed ? this.categorizeItems(parsed.items, parsed.tienda) : [];
+    const itemDtos = parsed
+      ? parsed.items.map((it) => ({
+          nombre: it.nombre,
+          cantidad: it.cantidad,
+          precioUnitario: it.precioUnitario,
+          subtotal: it.subtotal,
+          categoria: it.categoria,
+          confianza: it.confianza,
+          detalles: it.detalles,
+        }))
+      : [];
+    const items = this.categorizeItems(itemDtos, parsed?.tienda);
     const resumenCategorias = this.buildCategorySummary(items);
 
     const ticket = await this.ticketModel.create({
@@ -661,7 +150,7 @@ export class TicketScanService {
       confirmado: false,
       imagenBase64: dto.imagenBase64,
       imagenMimeType: dto.imagenMimeType ?? 'image/jpeg',
-      ocrTextoRaw: ocrText ?? '',
+      ocrTextoRaw: parsed?.rawText ?? clientText ?? '',
       resumenCategorias,
       cuentaId: dto.cuentaId ?? undefined,
       subCuentaId: dto.subCuentaId ?? undefined,
@@ -672,10 +161,15 @@ export class TicketScanService {
       return this.confirmAndCharge(userId, ticketId);
     }
 
-    return {
+    const response = {
       message: 'Ticket procesado. Revisa los datos y confirma para aplicar el cargo.',
       ticket: this.formatTicketResponse(ticket),
     };
+    this.logger.log(
+      `[SCAN-RESPONSE] ═══ RESPUESTA AL FRONT ═══\n` +
+      JSON.stringify(response.ticket, null, 2),
+    );
+    return response;
   }
 
   // ─── Crear ticket manual ─────────────────────────────────────
@@ -853,6 +347,26 @@ export class TicketScanService {
     return {
       imagenBase64: ticket.imagenBase64,
       mimeType: ticket.imagenMimeType ?? 'image/jpeg',
+    };
+  }
+
+  // ─── Eliminar ticket ─────────────────────────────────────────
+
+  async remove(userId: string, ticketId: string) {
+    const ticket = await this.ticketModel.findOne({ ticketId, userId });
+    if (!ticket) throw new NotFoundException('Ticket no encontrado');
+
+    const transaccionIdAsociada = ticket.transaccionId ?? null;
+    await this.ticketModel.deleteOne({ ticketId, userId });
+
+    await this.dashboardVersionService.touchDashboard(userId, 'ticket_scan.delete');
+
+    return {
+      message: transaccionIdAsociada
+        ? 'Ticket eliminado. Nota: la transacción asociada NO fue eliminada automáticamente.'
+        : 'Ticket eliminado.',
+      ticketId,
+      transaccionIdAsociada,
     };
   }
 
