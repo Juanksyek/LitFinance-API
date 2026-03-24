@@ -1,5 +1,5 @@
 import {
-  Controller, Post, Get, Body, Param, Query, Req,
+  Controller, Post, Get, Delete, Body, Param, Query, Req,
   UseGuards, HttpCode,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -109,5 +109,18 @@ export class TicketScanController {
     @Param('ticketId') ticketId: string,
   ) {
     return this.ticketScanService.cancel(req.user.id, ticketId);
+  }
+
+  /**
+   * Eliminar ticket permanentemente.
+   * Si el ticket tiene una transacción asociada, esta NO se elimina automáticamente.
+   */
+  @Delete(':ticketId')
+  @HttpCode(200)
+  async deleteTicket(
+    @Req() req,
+    @Param('ticketId') ticketId: string,
+  ) {
+    return this.ticketScanService.remove(req.user.id, ticketId);
   }
 }

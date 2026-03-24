@@ -23,6 +23,10 @@ export class TicketItem {
   /** Confianza de la categorización (0-1) */
   @Prop({ default: 1 })
   confianza: number;
+
+  /** Componentes / detalles adicionales del artículo (ej. ingredientes de combo, modificadores) */
+  @Prop({ type: [String], default: [] })
+  detalles: string[];
 }
 
 // ─── Documento principal: ticket escaneado ─────────────────────

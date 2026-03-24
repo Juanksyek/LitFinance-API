@@ -5,6 +5,17 @@ import { TicketScanController } from './ticket-scan.controller';
 import { TicketScanService } from './ticket-scan.service';
 import { TransactionsModule } from '../transactions/transactions.module';
 import { UserModule } from '../user/user.module';
+import {
+  OcrOrchestrator,
+  OcrPipeline,
+  StoreDetector,
+  TicketClassifier,
+  ItemExtractor,
+  TotalsExtractor,
+  DateExtractor,
+  PaymentExtractor,
+  CandidateRanker,
+} from './ocr';
 
 @Module({
   imports: [
@@ -15,7 +26,18 @@ import { UserModule } from '../user/user.module';
     forwardRef(() => UserModule),
   ],
   controllers: [TicketScanController],
-  providers: [TicketScanService],
+  providers: [
+    TicketScanService,
+    OcrOrchestrator,
+    OcrPipeline,
+    StoreDetector,
+    TicketClassifier,
+    ItemExtractor,
+    TotalsExtractor,
+    DateExtractor,
+    PaymentExtractor,
+    CandidateRanker,
+  ],
   exports: [TicketScanService],
 })
 export class TicketScanModule {}

@@ -29,6 +29,12 @@ export class TicketItemDto {
   @IsOptional()
   @IsNumber()
   confianza?: number;
+
+  /** Componentes / detalles adicionales (ingredientes de combo, modificadores, etc.) */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  detalles?: string[];
 }
 
 // ─── Crear ticket desde texto OCR (frontend envía imagen) ──────
