@@ -119,6 +119,13 @@ export class User {
   @Prop({ type: Date, required: false })
   premiumUntil?: Date;
 
+  // Aceptación de términos y condiciones / política de privacidad
+  @Prop({ type: Boolean, required: true, default: false })
+  aceptaTerminos: boolean;
+
+  @Prop({ type: Date, required: false })
+  aceptaTerminosFecha?: Date;
+
   // Dashboard snapshot versioning (ETag)
   @Prop({ type: Number, default: 0 })
   dashboardVersion?: number;
