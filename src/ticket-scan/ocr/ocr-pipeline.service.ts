@@ -7,11 +7,17 @@ import { TotalsExtractor } from './totals-extractor';
 import { DateExtractor } from './date-extractor';
 import { PaymentExtractor } from './payment-extractor';
 import { CandidateRanker } from './candidate-ranker';
-import { TicketParseResult } from './ocr.types';
+import { ReconciliationService } from './reconciliation.service';
+import { SupermarketExtractor } from './extractors/supermarket.extractor';
+import { RestaurantExtractor } from './extractors/restaurant.extractor';
+import { GenericExtractor } from './extractors/generic.extractor';
+import { TicketParseResult, TicketKind } from './ocr.types';
+import { OcrProviderResult } from './ocr-provider.interface';
 
 /**
  * Pipeline OCR completo:
- *   imagen → OCR multi-variante → preprocess → parse (tienda, fecha, items, totales, pago) → score → pick best
+ *   imagen → preprocesamiento → OCR multi-proveedor → clasificar → extractor por familia
+ *   → reconciliación contable → score → merge con datos estructurados → pick best
  */
 @Injectable()
 export class OcrPipeline {
@@ -26,53 +32,96 @@ export class OcrPipeline {
     private readonly dateExtractor: DateExtractor,
     private readonly paymentExtractor: PaymentExtractor,
     private readonly candidateRanker: CandidateRanker,
+    private readonly reconciliation: ReconciliationService,
+    private readonly supermarketExtractor: SupermarketExtractor,
+    private readonly restaurantExtractor: RestaurantExtractor,
+    private readonly genericExtractor: GenericExtractor,
   ) {}
 
   /**
-   * Ejecuta el pipeline completo: OCR → parse → score → best candidate.
+   * Ejecuta el pipeline completo:
+   *   imagen → preprocesar → OCR multi-proveedor → parse cada texto → score → merge → best
+   *
+   * Devuelve el mejor resultado + metadata para el dataset de entrenamiento.
    */
   async process(
     base64Image: string,
     mimeType?: string,
     clientOcrText?: string,
-  ): Promise<TicketParseResult> {
-    // 1. Obtener textos candidatos
-    const rawTexts = await this.ocrOrchestrator.extractAll(
+  ): Promise<{
+    result: TicketParseResult;
+    providerResults: OcrProviderResult[];
+    extractorUsed: string;
+    reviewLevel: string;
+  }> {
+    // 1. OCR multi-proveedor (incluye preprocesamiento de imagen)
+    const { texts: rawTexts, providerResults } = await this.ocrOrchestrator.extractAll(
       base64Image,
       mimeType ?? 'image/jpeg',
       clientOcrText,
     );
 
-    this.logger.log(`[PIPELINE] ${rawTexts.length} textos candidatos obtenidos`);
-
-    if (rawTexts.length === 0) {
-      this.logger.warn('[PIPELINE] No se obtuvo texto OCR de ninguna fuente');
-      return this.candidateRanker.pickBest([]);
-    }
-
-    // 2. Parsear cada candidato
-    const candidates = rawTexts.map((raw) => this.parseCandidate(raw));
-
-    // 3. Elegir el mejor
-    const best = this.candidateRanker.pickBest(candidates);
     this.logger.log(
-      `[PIPELINE] Mejor candidato: score=${best.score} tienda="${best.tienda}" items=${best.items.length} total=${best.total}`,
+      `[PIPELINE] ${rawTexts.length} textos candidatos, ${providerResults.length} resultados de proveedores`,
     );
 
-    return best;
+    if (rawTexts.length === 0 && providerResults.length === 0) {
+      this.logger.warn('[PIPELINE] No se obtuvo texto OCR de ninguna fuente');
+      return {
+        result: this.candidateRanker.pickBest([]),
+        providerResults: [],
+        extractorUsed: 'none',
+        reviewLevel: 'manual',
+      };
+    }
+
+    // 2. Parsear cada texto candidato con extractores por familia
+    const candidates: TicketParseResult[] = [];
+    let bestExtractor = 'generic';
+
+    for (const raw of rawTexts) {
+      const { parsed, extractor } = this.parseCandidateWithFamily(raw);
+      candidates.push(parsed);
+      if (parsed.items.length > 0) bestExtractor = extractor;
+    }
+
+    // 3. Elegir el mejor candidato por score
+    let best = this.candidateRanker.pickBest(candidates);
+
+    // 4. Merge con datos estructurados de proveedores (Azure receipt, etc.)
+    best = this.reconciliation.mergeProviderResults(best, providerResults);
+
+    // 5. Calcular nivel de revisión
+    const reviewLevel = this.reconciliation.getReviewLevel(best.confidence);
+
+    this.logger.log(
+      `[PIPELINE] Mejor: score=${best.score} tienda="${best.tienda}" items=${best.items.length} total=${best.total} extractor=${bestExtractor} review=${reviewLevel}`,
+    );
+
+    return {
+      result: best,
+      providerResults,
+      extractorUsed: bestExtractor,
+      reviewLevel,
+    };
   }
 
   /**
    * Parsea un texto OCR directamente (sin llamar al OCR — para cuando ya tenemos texto).
    */
   parseText(raw: string): TicketParseResult {
-    return this.parseCandidate(raw);
+    const { parsed } = this.parseCandidateWithFamily(raw);
+    return this.reconciliation.reconcile(parsed);
   }
 
   /**
-   * Pipeline interno: pre-procesado → extractores → resultado.
+   * Pipeline interno con selección de extractor por familia:
+   *   preprocess → detectar tienda → clasificar → extractor específico → totales → reconciliar
    */
-  private parseCandidate(raw: string): TicketParseResult {
+  private parseCandidateWithFamily(raw: string): {
+    parsed: TicketParseResult;
+    extractor: string;
+  } {
     const lines = this.preprocessLines(raw);
     const fullText = lines.join('\n');
 
@@ -81,13 +130,46 @@ export class OcrPipeline {
       lines.map((l, i) => `  [${String(i).padStart(2, '0')}] ${l}`).join('\n'),
     );
 
-    // Extraer componentes
+    // Extraer componentes base
     const { store, tienda, direccionTienda } = this.storeDetector.detect(lines);
     const tipoTicket = this.ticketClassifier.classify(store, lines);
     const fechaCompra = this.dateExtractor.extract(lines);
-    const items = this.itemExtractor.extract(lines, store?.defaultCategory);
     const totals = this.totalsExtractor.extract(lines);
     const metodoPago = this.paymentExtractor.extract(fullText);
+
+    // ─── Seleccionar extractor por familia ───────────────────────
+    let items;
+    let extractorName: string;
+
+    if (this.isSupermercadoKind(tipoTicket)) {
+      items = this.supermarketExtractor.extractItems(lines, store?.defaultCategory);
+      extractorName = 'supermarket';
+    } else if (tipoTicket === 'restaurante') {
+      items = this.restaurantExtractor.extractItems(lines, store?.defaultCategory);
+      extractorName = 'restaurant';
+
+      // Fallback: si restaurante no sacó items, usar genérico
+      if (items.length === 0) {
+        items = this.genericExtractor.extractItems(lines, store?.defaultCategory);
+        extractorName = 'generic(fallback-rest)';
+      }
+    } else {
+      items = this.genericExtractor.extractItems(lines, store?.defaultCategory);
+      extractorName = 'generic';
+    }
+
+    // Si el extractor específico falló, intentar con el genérico original
+    if (items.length === 0 && extractorName !== 'generic') {
+      const genericItems = this.itemExtractor.extract(lines, store?.defaultCategory);
+      if (genericItems.length > items.length) {
+        items = genericItems;
+        extractorName = 'legacy-generic';
+      }
+    }
+
+    this.logger.log(
+      `[OCR-PARSER] Familia=${extractorName} Tipo=${tipoTicket} Items=${items.length}`,
+    );
 
     // Reconciliar totales con fallbacks
     let { subtotal, total } = totals;
@@ -104,27 +186,34 @@ export class OcrPipeline {
     );
 
     return {
-      rawText: raw,
-      tienda: tienda.substring(0, 120),
-      direccionTienda: direccionTienda.substring(0, 200),
-      fechaCompra,
-      items,
-      subtotal: Math.round(subtotal * 100) / 100,
-      impuestos,
-      iva,
-      ieps,
-      descuentos: Math.round(descuentos * 100) / 100,
-      propina: 0,
-      total: Math.round(total * 100) / 100,
-      metodoPago,
-      tipoTicket,
-      score: 0,
-      confidence: {
-        tienda: 0, fechaCompra: 0, items: 0,
-        subtotal: 0, impuestos: 0, total: 0, metodoPago: 0,
+      parsed: {
+        rawText: raw,
+        tienda: tienda.substring(0, 120),
+        direccionTienda: direccionTienda.substring(0, 200),
+        fechaCompra,
+        items,
+        subtotal: Math.round(subtotal * 100) / 100,
+        impuestos,
+        iva,
+        ieps,
+        descuentos: Math.round(descuentos * 100) / 100,
+        propina: 0,
+        total: Math.round(total * 100) / 100,
+        metodoPago,
+        tipoTicket,
+        score: 0,
+        confidence: {
+          tienda: 0, fechaCompra: 0, items: 0,
+          subtotal: 0, impuestos: 0, total: 0, metodoPago: 0,
+        },
+        warnings: [],
       },
-      warnings: [],
+      extractor: extractorName,
     };
+  }
+
+  private isSupermercadoKind(kind: TicketKind): boolean {
+    return kind === 'supermercado' || kind === 'departamental';
   }
 
   /**
