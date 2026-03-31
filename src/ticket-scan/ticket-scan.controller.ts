@@ -4,17 +4,22 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TicketScanService } from './ticket-scan.service';
+import { EvaluationService } from './ocr/evaluation.service';
 import {
   CreateTicketFromOcrDto,
   CreateTicketManualDto,
   ConfirmTicketDto,
   TicketFiltersDto,
+  LiquidateTicketDto,
 } from './dto/ticket-scan.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('tickets')
 export class TicketScanController {
-  constructor(private readonly ticketScanService: TicketScanService) {}
+  constructor(
+    private readonly ticketScanService: TicketScanService,
+    private readonly evaluationService: EvaluationService,
+  ) {}
 
   /**
    * Escanear ticket: recibe imagen base64 + texto OCR opcional.
@@ -77,6 +82,18 @@ export class TicketScanController {
   }
 
   /**
+   * Evaluación: métricas de precisión OCR por campo (usa tickets corregidos como ground truth).
+   */
+  @Get('evaluation')
+  async evaluation(
+    @Req() req,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+  ) {
+    return this.evaluationService.getAccuracyReport(req.user.id, desde, hasta);
+  }
+
+  /**
    * Detalle de un ticket (sin imagen por defecto).
    */
   @Get(':ticketId')
@@ -109,6 +126,20 @@ export class TicketScanController {
     @Param('ticketId') ticketId: string,
   ) {
     return this.ticketScanService.cancel(req.user.id, ticketId);
+  }
+
+  /**
+   * Liquidar (pagar) un ticket seleccionando cuenta o subcuenta.
+   * El frontend debe enviar opcionalmente `subCuentaId` o `cuentaId`.
+   */
+  @Post(':ticketId/liquidar')
+  @HttpCode(200)
+  async liquidarTicket(
+    @Req() req,
+    @Param('ticketId') ticketId: string,
+    @Body() dto,
+  ) {
+    return this.ticketScanService.liquidar(req.user.id, ticketId, dto);
   }
 
   /**
