@@ -129,31 +129,34 @@ export class TransactionsService {
     const balanceResult = await this.aplicarBalances(txObj, 1);
 
     if (balanceResult?.cuentaId) {
-      await this.historialService.upsertMovimientoTransaccion({
-        transaccionId,
-        movimiento: {
-          userId,
-          cuentaId: balanceResult.cuentaId,
-          monto: balanceResult.cuentaDelta ?? 0,
-          tipo: txObj.tipo,
-          descripcion: `Transacción de tipo ${txObj.tipo} aplicada`,
-          fecha: fechaEfectiva.toISOString(),
-          subcuentaId: txObj.subCuentaId,
-          motivo: txObj.motivo,
-          conceptoId: txObj.concepto,
-          metadata: {
-            ...balanceResult.metadata,
+      // If caller asked to skip historial (e.g. ticket-level movimiento will be created by caller), avoid creating per-transaction historial
+      if (!(payload.metadata && payload.metadata.skipHistorial)) {
+        await this.historialService.upsertMovimientoTransaccion({
+          transaccionId,
+          movimiento: {
+            userId,
+            cuentaId: balanceResult.cuentaId,
+            monto: balanceResult.cuentaDelta ?? 0,
+            tipo: txObj.tipo,
+            descripcion: `Transacción de tipo ${txObj.tipo} aplicada`,
+            fecha: fechaEfectiva.toISOString(),
+            subcuentaId: txObj.subCuentaId,
+            motivo: txObj.motivo,
+            conceptoId: txObj.concepto,
+            metadata: {
+              ...balanceResult.metadata,
+            },
           },
-        },
-        audit: {
-          source: 'transaction',
-          action: 'create',
-          status: 'active',
-          backdated,
-          registradoEn: registradoEn.toISOString(),
-          fechaEfectiva: fechaEfectiva.toISOString(),
-        },
-      });
+          audit: {
+            source: 'transaction',
+            action: 'create',
+            status: 'active',
+            backdated,
+            registradoEn: registradoEn.toISOString(),
+            fechaEfectiva: fechaEfectiva.toISOString(),
+          },
+        });
+      }
     }
 
     await this.dashboardVersionService.touchDashboard(userId, 'transaction.create');
@@ -861,7 +864,8 @@ export class TransactionsService {
           { $inc: { cantidad: montoAjustadoCuenta } }
         );
   
-        await this.historialService.registrarMovimiento({
+        if (!((t as any).metadata && (t as any).metadata.skipHistorial)) {
+          await this.historialService.registrarMovimiento({
           userId: t.userId,
           cuentaId: subcuenta.cuentaId,
           monto: montoAjustadoCuenta,
@@ -887,7 +891,8 @@ export class TransactionsService {
                 }
               : null,
           },
-        });
+          });
+        }
         historialResult = { cuentaId: subcuenta.cuentaId };
       }
     } else if (t.afectaCuenta && t.cuentaId) {
@@ -930,7 +935,8 @@ export class TransactionsService {
         { $inc: { cantidad: montoAjustadoCuenta } }
       );
   
-      await this.historialService.registrarMovimiento({
+      if (!((t as any).metadata && (t as any).metadata.skipHistorial)) {
+        await this.historialService.registrarMovimiento({
         userId: t.userId,
         cuentaId: t.cuentaId,
         monto: montoAjustadoCuenta,
@@ -947,7 +953,8 @@ export class TransactionsService {
           tasaConversion: conversionCuenta?.tasaConversion ?? null,
           fechaConversion: conversionCuenta?.fechaConversion ?? null,
         },
-      });
+        });
+      }
       historialResult = { cuentaId: t.cuentaId };
     }
   
