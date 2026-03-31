@@ -37,6 +37,33 @@ export class TicketItemDto {
   detalles?: string[];
 }
 
+// ─── Metadatos de captura ──────────────────────────────────────
+
+export class CaptureMetaDto {
+  @IsOptional()
+  @IsBoolean()
+  usedFlash?: boolean;
+
+  @IsOptional()
+  @IsString()
+  source?: string; // 'camera' | 'gallery'
+
+  @IsOptional()
+  @IsNumber()
+  rotation?: number;
+}
+
+// ─── OCR local del front (ML Kit / Apple Vision) ───────────────
+
+export class LocalOcrDto {
+  @IsString()
+  rawText: string;
+
+  @IsOptional()
+  @IsNumber()
+  score?: number;
+}
+
 // ─── Crear ticket desde texto OCR (frontend envía imagen) ──────
 
 export class CreateTicketFromOcrDto {
@@ -48,6 +75,33 @@ export class CreateTicketFromOcrDto {
   @IsOptional()
   @IsString()
   imagenMimeType?: string;
+
+  /** Ancho de la imagen original en px */
+  @IsOptional()
+  @IsNumber()
+  width?: number;
+
+  /** Alto de la imagen original en px */
+  @IsOptional()
+  @IsNumber()
+  height?: number;
+
+  /** Plataforma del dispositivo */
+  @IsOptional()
+  @IsIn(['ios', 'android'])
+  platform?: string;
+
+  /** OCR local del front (ML Kit / Apple Vision) — objeto con texto + score */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocalOcrDto)
+  localOcr?: LocalOcrDto;
+
+  /** Metadatos de captura (flash, fuente, rotación) */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CaptureMetaDto)
+  captureMeta?: CaptureMetaDto;
 
   /** Moneda (default: monedaPrincipal del usuario) */
   @IsOptional()
@@ -235,4 +289,23 @@ export class TicketFiltersDto {
   @IsOptional()
   @IsNumber()
   limit?: number;
+}
+
+// ─── Liquidar ticket (seleccionar cuenta/subcuenta) ─────────────
+export class LiquidateTicketDto {
+  @IsOptional()
+  @IsString()
+  cuentaId?: string;
+
+  @IsOptional()
+  @IsString()
+  subCuentaId?: string;
+
+  @IsOptional()
+  @IsNumber()
+  monto?: number; // Si se quiere liquidar un monto parcial
+
+  @IsOptional()
+  @IsString()
+  concepto?: string;
 }
