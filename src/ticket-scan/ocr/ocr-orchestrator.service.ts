@@ -1,94 +1,148 @@
 import { Injectable, Logger } from '@nestjs/common';
-import axios from 'axios';
-import * as FormData from 'form-data';
-import { OcrVariant } from './ocr.types';
+import { IOcrProvider, OcrProviderResult } from './ocr-provider.interface';
+import { ImagePreprocessor } from './image-preprocessor.service';
+import { AzureOcrProvider } from './providers/azure.provider';
+import { OcrSpaceProvider } from './providers/ocrspace.provider';
+import { PythonOcrWorkerProvider } from './providers/python-worker.provider';
 
 /**
- * Orquestador OCR: ejecuta múltiples variantes de OCR.space en paralelo
- * y devuelve todos los textos candidatos deduplicados.
+ * Orquestador OCR multi-proveedor:
+ *   1. Preprocesa la imagen (sharp: autorotate, grayscale, contrast, trim, tiles)
+ *   2. Ejecuta proveedores en orden de prioridad (Azure > OCR.space)
+ *   3. Incluye texto del cliente (ML Kit / Apple Vision) como candidato
+ *   4. Devuelve todos los resultados deduplicados + texto del cliente
+ *
+ * Si la imagen es larga, también pasa los tiles a los proveedores.
  */
 @Injectable()
 export class OcrOrchestrator {
   private readonly logger = new Logger(OcrOrchestrator.name);
+  private readonly providers: IOcrProvider[];
 
-  private readonly variants: OcrVariant[] = [
-    { engine: 2, isTable: false, label: 'E2-noTable' },
-    { engine: 2, isTable: true,  label: 'E2-table' },
-    { engine: 1, isTable: false, label: 'E1-noTable' },
-  ];
+  constructor(
+    private readonly imagePreprocessor: ImagePreprocessor,
+    private readonly azureProvider: AzureOcrProvider,
+    private readonly ocrSpaceProvider: OcrSpaceProvider,
+    private readonly pythonWorkerProvider: PythonOcrWorkerProvider,
+  ) {
+    // Ordenar proveedores por prioridad (menor = mayor prioridad)
+    this.providers = [this.pythonWorkerProvider, this.azureProvider, this.ocrSpaceProvider]
+      .filter(p => p.isEnabled())
+      .sort((a, b) => a.priority - b.priority);
+
+    this.logger.log(
+      `[ORCHESTRATOR] Proveedores activos: [${this.providers.map(p => `${p.name}(p${p.priority})`).join(', ')}]`,
+    );
+  }
 
   /**
-   * Ejecuta múltiples variantes OCR y devuelve textos candidatos únicos.
-   * Si se proporciona texto del cliente (ML Kit / Apple Vision), se incluye como primer candidato.
+   * Pipeline completo:
+   *   imagen → preprocesar → OCR multi-proveedor → deduplicar → devolver resultados + textos
+   *
+   * @returns texts - textos candidatos deduplicados (para parseo por regex/extractores)
+   * @returns providerResults - resultados crudos de cada proveedor (para merge inteligente)
    */
   async extractAll(
     base64Image: string,
     mimeType = 'image/jpeg',
     clientOcrText?: string,
-  ): Promise<string[]> {
-    const candidates: string[] = [];
+  ): Promise<{
+    texts: string[];
+    providerResults: OcrProviderResult[];
+  }> {
+    const allResults: OcrProviderResult[] = [];
+    const texts: string[] = [];
 
-    // Texto del cliente siempre como primer candidato
+    // 0. Texto del cliente siempre como primer candidato
     if (clientOcrText && clientOcrText.trim().length > 10) {
-      candidates.push(clientOcrText.trim());
+      texts.push(clientOcrText.trim());
+      allResults.push({
+        provider: 'client',
+        variant: 'mlkit-vision',
+        plainText: clientOcrText.trim(),
+        lines: clientOcrText.trim().split('\n').map(text => ({
+          text,
+          words: text.split(/\s+/).map(w => ({ text: w, confidence: 0.75 })),
+        })),
+        structuredFields: [],
+        structuredItems: [],
+        overallConfidence: 0.7,
+        rawJson: JSON.stringify({ source: 'client', text: clientOcrText }),
+      });
     }
 
-    const apiKey = process.env.OCR_SPACE_API_KEY;
-    if (!apiKey) {
-      this.logger.warn('OCR_SPACE_API_KEY no configurada — solo usando texto del cliente');
-      return candidates;
+    // 1. Preprocesar imagen
+    let processedBase64 = base64Image;
+    let processedMimeType = mimeType;
+    let tiles: string[] = [];
+
+    try {
+      const preprocessed = await this.imagePreprocessor.preprocess(base64Image, mimeType);
+      processedBase64 = preprocessed.processedBase64;
+      processedMimeType = preprocessed.mimeType;
+      tiles = preprocessed.tiles;
+      this.logger.log(
+        `[ORCHESTRATOR] Preprocesada: ${preprocessed.processedMeta.width}×${preprocessed.processedMeta.height} | tiles=${tiles.length}`,
+      );
+    } catch (err) {
+      this.logger.warn(`[ORCHESTRATOR] Preprocesamiento falló, usando imagen original: ${err}`);
     }
 
-    // Ejecutar variantes en paralelo
-    const results = await Promise.allSettled(
-      this.variants.map((v) => this.callOcrSpace(base64Image, mimeType, apiKey, v)),
-    );
+    // 2. Ejecutar proveedores habilitados en paralelo
+    if (this.providers.length === 0) {
+      this.logger.warn('[ORCHESTRATOR] No hay proveedores OCR configurados');
+      return { texts, providerResults: allResults };
+    }
 
-    for (let i = 0; i < results.length; i++) {
-      const r = results[i];
-      const label = this.variants[i].label;
-      if (r.status === 'fulfilled' && r.value.trim().length > 10) {
-        this.logger.log(`[OCR] ${label}: ${r.value.length} chars`);
-        candidates.push(r.value.trim());
-      } else if (r.status === 'rejected') {
-        this.logger.warn(`[OCR] ${label} falló: ${r.reason?.message ?? r.reason}`);
+    const providerPromises = this.providers.map(async (provider) => {
+      try {
+        const results = await provider.extract(processedBase64, processedMimeType);
+
+        // Si hay tiles, también pasarlos al proveedor y concatenar
+        if (tiles.length > 0 && provider.priority <= 2) {
+          const tileResults = await Promise.allSettled(
+            tiles.map(tile => provider.extract(tile, processedMimeType)),
+          );
+          for (const tr of tileResults) {
+            if (tr.status === 'fulfilled') {
+              results.push(...tr.value);
+            }
+          }
+        }
+
+        return results;
+      } catch (err) {
+        this.logger.warn(`[ORCHESTRATOR] ${provider.name} falló: ${err}`);
+        return [];
+      }
+    });
+
+    const providerResultArrays = await Promise.allSettled(providerPromises);
+
+    for (const pr of providerResultArrays) {
+      if (pr.status === 'fulfilled') {
+        allResults.push(...pr.value);
       }
     }
 
-    return this.deduplicateCandidates(candidates);
-  }
+    // 3. Extraer textos planos y deduplicar
+    for (const result of allResults) {
+      if (result.plainText.trim().length > 10 && result.provider !== 'client') {
+        texts.push(result.plainText.trim());
+      }
+    }
 
-  private async callOcrSpace(
-    base64Image: string,
-    mimeType: string,
-    apiKey: string,
-    variant: OcrVariant,
-  ): Promise<string> {
-    const form = new FormData();
-    form.append('base64Image', `data:${mimeType};base64,${base64Image}`);
-    form.append('language', 'spa');
-    form.append('OCREngine', String(variant.engine));
-    form.append('scale', 'true');
-    form.append('isTable', String(variant.isTable));
+    const dedupedTexts = this.deduplicateCandidates(texts);
 
-    const response = await axios.post<{
-      ParsedResults?: Array<{ ParsedText: string }>;
-      IsErroredOnProcessing?: boolean;
-    }>(
-      'https://api.ocr.space/parse/image',
-      form,
-      {
-        headers: { ...form.getHeaders(), apikey: apiKey },
-        timeout: 30_000,
-      },
+    this.logger.log(
+      `[ORCHESTRATOR] ${allResults.length} resultados de ${new Set(allResults.map(r => r.provider)).size} proveedores → ${dedupedTexts.length} textos únicos`,
     );
 
-    return response.data?.ParsedResults?.[0]?.ParsedText ?? '';
+    return { texts: dedupedTexts, providerResults: allResults };
   }
 
   /**
    * Elimina textos duplicados o demasiado similares entre candidatos.
-   * Usa normalización para comparar igualdad semántica.
    */
   private deduplicateCandidates(texts: string[]): string[] {
     const seen = new Set<string>();
@@ -102,7 +156,6 @@ export class OcrOrchestrator {
         .trim();
 
       if (normalized.length < 10) continue;
-      // Usar primeros 200 chars como huella digital
       const fingerprint = normalized.substring(0, 200);
       if (!seen.has(fingerprint)) {
         seen.add(fingerprint);
