@@ -5,9 +5,11 @@ import { TicketScanController } from './ticket-scan.controller';
 import { TicketScanService } from './ticket-scan.service';
 import { TransactionsModule } from '../transactions/transactions.module';
 import { UserModule } from '../user/user.module';
+import { CuentaHistorialModule } from '../cuenta-historial/cuenta-historial.module';
 import {
   OcrOrchestrator,
   OcrPipeline,
+  ImagePreprocessor,
   StoreDetector,
   TicketClassifier,
   ItemExtractor,
@@ -15,7 +17,15 @@ import {
   DateExtractor,
   PaymentExtractor,
   CandidateRanker,
+  ReconciliationService,
+  EvaluationService,
 } from './ocr';
+import { AzureOcrProvider } from './ocr/providers/azure.provider';
+import { OcrSpaceProvider } from './ocr/providers/ocrspace.provider';
+import { PythonOcrWorkerProvider } from './ocr/providers/python-worker.provider';
+import { SupermarketExtractor } from './ocr/extractors/supermarket.extractor';
+import { RestaurantExtractor } from './ocr/extractors/restaurant.extractor';
+import { GenericExtractor } from './ocr/extractors/generic.extractor';
 
 @Module({
   imports: [
@@ -24,12 +34,17 @@ import {
     ]),
     forwardRef(() => TransactionsModule),
     forwardRef(() => UserModule),
+    CuentaHistorialModule,
   ],
   controllers: [TicketScanController],
   providers: [
     TicketScanService,
+    ImagePreprocessor,
     OcrOrchestrator,
     OcrPipeline,
+    AzureOcrProvider,
+    OcrSpaceProvider,
+    PythonOcrWorkerProvider,
     StoreDetector,
     TicketClassifier,
     ItemExtractor,
@@ -37,6 +52,11 @@ import {
     DateExtractor,
     PaymentExtractor,
     CandidateRanker,
+    ReconciliationService,
+    EvaluationService,
+    SupermarketExtractor,
+    RestaurantExtractor,
+    GenericExtractor,
   ],
   exports: [TicketScanService],
 })

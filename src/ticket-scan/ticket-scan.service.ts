@@ -12,9 +12,11 @@ import {
 } from './dto/ticket-scan.dto';
 import { TransactionsService } from '../transactions/transactions.service';
 import { UserService } from '../user/user.service';
+import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.service';
 import { generateUniqueId } from '../utils/generate-id';
 import { DashboardVersionService } from '../user/services/dashboard-version.service';
 import { OcrPipeline } from './ocr';
+import { OcrProviderResult } from './ocr/ocr-provider.interface';
 import { CATEGORY_KEYWORDS, STORE_CATEGORY_HINTS } from './ocr/ocr.constants';
 
 @Injectable()
@@ -27,6 +29,7 @@ export class TicketScanService {
     private readonly userService: UserService,
     private readonly dashboardVersionService: DashboardVersionService,
     private readonly ocrPipeline: OcrPipeline,
+    private readonly cuentaHistorialService: CuentaHistorialService,
   ) {}
 
   // ─── Categorización inteligente ──────────────────────────────
@@ -100,16 +103,23 @@ export class TicketScanService {
     const user = await this.userService.getProfile(userId);
     const moneda = dto.moneda || user.monedaPrincipal || 'MXN';
 
-    // 1. Ejecutar pipeline OCR: multi-variante → parse → score → best
-    const clientText = clientOcrText ?? dto.ocrTexto ?? '';
+    // 1. Ejecutar pipeline OCR: multi-proveedor → parse → score → merge → best
+    const clientText = clientOcrText ?? dto.localOcr?.rawText ?? dto.ocrTexto ?? '';
     let parsed;
+    let providerResults: OcrProviderResult[] = [];
+    let extractorUsed = 'none';
+    let reviewLevel = 'manual';
 
     if (dto.imagenBase64) {
-      parsed = await this.ocrPipeline.process(
+      const pipelineResult = await this.ocrPipeline.process(
         dto.imagenBase64,
         dto.imagenMimeType ?? 'image/jpeg',
         clientText || undefined,
       );
+      parsed = pipelineResult.result;
+      providerResults = pipelineResult.providerResults;
+      extractorUsed = pipelineResult.extractorUsed;
+      reviewLevel = pipelineResult.reviewLevel;
     } else if (clientText.trim().length > 10) {
       parsed = this.ocrPipeline.parseText(clientText);
     } else {
@@ -151,6 +161,32 @@ export class TicketScanService {
       imagenBase64: dto.imagenBase64,
       imagenMimeType: dto.imagenMimeType ?? 'image/jpeg',
       ocrTextoRaw: parsed?.rawText ?? clientText ?? '',
+      ocrProvidersRaw: providerResults.map((pr) => ({
+        provider: pr.provider,
+        variant: pr.variant ?? '',
+        rawJson: JSON.stringify(pr),
+        overallConfidence: pr.overallConfidence,
+      })),
+      ocrRawCandidates: providerResults.map((pr) => ({
+        source: pr.provider,
+        variant: pr.variant ?? '',
+        score: pr.overallConfidence,
+        amountsDetected: 0,
+        wordsDetected: pr.plainText?.split(/\s+/).length ?? 0,
+      })),
+      ocrBestSource: providerResults.length > 0
+        ? `${providerResults[0].provider}:${providerResults[0].variant ?? ''}`
+        : 'none',
+      ocrFrontText: clientText || undefined,
+      ocrBackText: parsed?.rawText ?? '',
+      ocrConfidence: parsed?.score ?? 0,
+      needsReview: reviewLevel !== 'auto',
+      processingVersion: '2.0.0',
+      tipoTicket: parsed?.tipoTicket ?? 'desconocido',
+      extractorUsed,
+      ocrScore: parsed?.score ?? 0,
+      fieldConfidence: parsed?.confidence ?? {},
+      reviewLevel,
       resumenCategorias,
       cuentaId: dto.cuentaId ?? undefined,
       subCuentaId: dto.subCuentaId ?? undefined,
@@ -220,24 +256,48 @@ export class TicketScanService {
     if (ticket.confirmado) throw new BadRequestException('Este ticket ya fue confirmado');
     if (ticket.estado === 'cancelled') throw new BadRequestException('Este ticket fue cancelado');
 
-    // Aplicar ediciones del usuario antes de confirmar
+    // Aplicar ediciones del usuario antes de confirmar (y guardar originales para training)
     if (edits) {
-      if (edits.tienda) ticket.tienda = edits.tienda;
-      if (edits.fechaCompra) ticket.fechaCompra = new Date(edits.fechaCompra);
+      const corrections: Record<string, any> = {};
+      if (edits.tienda && edits.tienda !== ticket.tienda) {
+        corrections.tiendaOriginal = ticket.tienda;
+        ticket.tienda = edits.tienda;
+      }
+      if (edits.fechaCompra) {
+        corrections.fechaOriginal = ticket.fechaCompra?.toISOString();
+        ticket.fechaCompra = new Date(edits.fechaCompra);
+      }
       if (edits.items) {
+        corrections.itemsOriginal = ticket.items.length;
         ticket.items = this.categorizeItems(edits.items, ticket.tienda);
         ticket.resumenCategorias = this.buildCategorySummary(ticket.items);
       }
-      if (edits.subtotal !== undefined) ticket.subtotal = edits.subtotal;
-      if (edits.impuestos !== undefined) ticket.impuestos = edits.impuestos;
+      if (edits.subtotal !== undefined && edits.subtotal !== ticket.subtotal) {
+        corrections.subtotalOriginal = ticket.subtotal;
+        ticket.subtotal = edits.subtotal;
+      }
+      if (edits.impuestos !== undefined && edits.impuestos !== ticket.impuestos) {
+        corrections.impuestosOriginal = ticket.impuestos;
+        ticket.impuestos = edits.impuestos;
+      }
       if (edits.descuentos !== undefined) ticket.descuentos = edits.descuentos;
       if (edits.propina !== undefined) ticket.propina = edits.propina;
-      if (edits.total !== undefined) ticket.total = edits.total;
+      if (edits.total !== undefined && edits.total !== ticket.total) {
+        corrections.totalOriginal = ticket.total;
+        ticket.total = edits.total;
+      }
       if (edits.moneda) ticket.moneda = edits.moneda;
       if (edits.metodoPago) ticket.metodoPago = edits.metodoPago;
       if (edits.cuentaId) ticket.cuentaId = edits.cuentaId;
       if (edits.subCuentaId) ticket.subCuentaId = edits.subCuentaId;
       if (edits.notas) ticket.notas = edits.notas;
+
+      // Guardar correcciones del usuario para training dataset
+      if (Object.keys(corrections).length > 0) {
+        corrections.correctedAt = new Date();
+        ticket.userCorrections = corrections;
+        ticket.wasUserCorrected = true;
+      }
     }
 
     if (ticket.total <= 0) {
@@ -304,7 +364,7 @@ export class TicketScanService {
     const [tickets, total] = await Promise.all([
       this.ticketModel
         .find(query)
-        .select('-imagenBase64 -ocrTextoRaw') // No enviar imagen en listado
+        .select('-imagenBase64 -ocrTextoRaw -ocrProvidersRaw -ocrRawCandidates -ocrFrontText -ocrBackText') // No enviar datos pesados en listado
         .sort({ fechaCompra: -1 })
         .skip(skip)
         .limit(limit)
@@ -391,6 +451,79 @@ export class TicketScanService {
         : 'Ticket cancelado.',
       ticketId,
       transaccionIdAsociada: ticket.transaccionId ?? null,
+    };
+  }
+
+  // ─── Liquidar ticket (pagar) ───────────────────────────────
+  async liquidar(userId: string, ticketId: string, dto: { cuentaId?: string; subCuentaId?: string; monto?: number; concepto?: string }) {
+    const ticket = await this.ticketModel.findOne({ ticketId, userId });
+    if (!ticket) throw new NotFoundException('Ticket no encontrado');
+    if (ticket.estado === 'cancelled') throw new BadRequestException('Este ticket fue cancelado');
+    if (ticket.estado === 'liquidado' || ticket.estado === 'completed') throw new BadRequestException('Este ticket ya fue liquidado');
+
+    const monto = typeof dto.monto === 'number' && dto.monto > 0 ? dto.monto : ticket.total;
+    if (monto <= 0) throw new BadRequestException('Monto inválido para liquidar');
+
+    // Crear transacción de egreso usando TransactionsService — este método
+    // maneja conversión, subcuentas y actualización de saldos e historiales.
+    const txResult = await this.transactionsService.crear(
+      {
+        tipo: 'egreso',
+        monto,
+        moneda: ticket.moneda,
+        concepto: dto.concepto ?? `Liquidación ticket ${ticket.ticketId}`,
+        motivo: `Liquidación ticket #${ticket.ticketId} - ${ticket.tienda}`,
+        cuentaId: dto.cuentaId ?? ticket.cuentaId ?? undefined,
+        subCuentaId: dto.subCuentaId ?? ticket.subCuentaId ?? undefined,
+        afectaCuenta: true,
+        fecha: new Date().toISOString(),
+        metadata: { source: 'ticket.liquidation', skipHistorial: true },
+      },
+      userId,
+    );
+
+    // Marcar ticket como liquidado y guardar referencia a la transacción
+    ticket.estado = 'liquidado';
+    ticket.confirmado = true;
+    ticket.transaccionId = (txResult.transaccion as any).transaccionId;
+    ticket.montoLiquidado = monto;
+    ticket.liquidadoPorCuenta = dto.cuentaId ?? ticket.cuentaId ?? null;
+    ticket.liquidadoPorSubcuenta = dto.subCuentaId ?? ticket.subCuentaId ?? null;
+    ticket.fechaLiquidacion = new Date();
+    ticket.liquidadoPorUsuario = userId;
+
+    await ticket.save();
+
+    // Asegurar que exista un movimiento en cuenta-historial para esta transacción
+    try {
+      const trans = txResult.transaccion as any;
+      const transId = trans.transaccionId ?? trans._id ?? null;
+      if (transId) {
+        await this.cuentaHistorialService.upsertMovimientoTransaccion({
+          transaccionId: String(transId),
+          movimiento: {
+            userId,
+            cuentaId: trans.cuentaId ?? ticket.cuentaId ?? undefined,
+            monto: trans.tipo === 'egreso' ? -Math.abs(trans.monto) : trans.monto,
+            tipo: trans.tipo,
+            descripcion: dto.concepto ?? `Liquidación ticket #${ticket.ticketId}`,
+            fecha: new Date().toISOString(),
+            subcuentaId: trans.subCuentaId ?? ticket.subCuentaId ?? undefined,
+            metadata: { source: 'ticket.liquidation' },
+          },
+          audit: { source: 'ticket.liquidation', action: 'create', status: 'active' },
+        });
+      }
+    } catch (err) {
+      this.logger.error(`[LIQUIDATION] Error al upsert historial: ${err.message}`);
+    }
+
+    await this.dashboardVersionService.touchDashboard(userId, 'ticket_scan.liquidar');
+
+    return {
+      message: 'Ticket liquidado correctamente',
+      ticket: this.formatTicketResponse(ticket),
+      transaccion: txResult.transaccion,
     };
   }
 

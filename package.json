@@ -26,6 +26,8 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.787.0",
+    "@azure/ai-form-recognizer": "^5.1.0",
+    "@azure/identity": "^4.13.1",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",
@@ -53,6 +55,7 @@
     "reflect-metadata": "^0.2.2",
     "resend": "^4.2.0",
     "rxjs": "^7.8.1",
+    "sharp": "^0.34.5",
     "stripe": "^20.1.0"
   },
   "devDependencies": {
@@ -68,6 +71,7 @@
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.7",
     "@types/pdfkit": "^0.17.4",
+    "@types/sharp": "^0.32.0",
     "@types/supertest": "^6.0.2",
     "eslint": "^9.24.0",
     "globals": "^16.0.0",

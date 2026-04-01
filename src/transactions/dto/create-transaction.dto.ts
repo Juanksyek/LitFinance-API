@@ -41,4 +41,8 @@ export class CreateTransactionDto {
   @IsString()
   @IsOptional()
   transaccionId?: string;
+  
+  // Optional metadata bag that can be used by services (e.g., { skipHistorial: true })
+  @IsOptional()
+  metadata?: Record<string, any>;
 }

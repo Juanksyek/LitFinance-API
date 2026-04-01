@@ -1,0 +1,6 @@
+{
+  // ocr-worker is a Docker-only Python service — packages (fastapi, paddleocr, cv2)
+  // are installed inside the container, not in any local venv. Ignoring the folder
+  // prevents Pylance from reporting false-positive missing-import errors.
+  "python.analysis.ignore": ["ocr-worker/**"]
+}

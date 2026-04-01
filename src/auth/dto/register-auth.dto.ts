@@ -35,4 +35,12 @@ export class RegisterAuthDto {
   @IsOptional()
   @IsString()
   monedaPreferencia?: string; // Moneda de visualización (puede cambiar después)
+
+  @IsBoolean()
+  @IsNotEmpty()
+  aceptaTerminos: boolean; // Debe ser true para completar el registro
+
+  @IsBoolean()
+  @IsNotEmpty()
+  aceptaDatosFinancieros: boolean; // Consentimiento expreso de tratamiento de datos patrimoniales/financieros
 }

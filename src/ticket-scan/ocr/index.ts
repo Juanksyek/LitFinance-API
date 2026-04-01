@@ -1,7 +1,9 @@
 export * from './ocr.types';
 export * from './ocr.constants';
+export * from './ocr-provider.interface';
 export * from './ocr-orchestrator.service';
 export * from './ocr-pipeline.service';
+export * from './image-preprocessor.service';
 export * from './store-detector';
 export * from './ticket-classifier';
 export * from './item-extractor';
@@ -9,3 +11,7 @@ export * from './totals-extractor';
 export * from './date-extractor';
 export * from './payment-extractor';
 export * from './candidate-ranker';
+export * from './reconciliation.service';
+export * from './evaluation.service';
+export * from './providers';
+export * from './extractors';

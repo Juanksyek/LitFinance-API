@@ -143,6 +143,16 @@ export class AuthService {
             throw new BadRequestException('Faltan campos obligatorios: edad y ocupacion');
         }
 
+        // El usuario debe aceptar los términos y condiciones para registrarse
+        if (!dto.aceptaTerminos) {
+            throw new BadRequestException('Debes aceptar los términos y condiciones y la política de privacidad para registrarte');
+        }
+
+        // El usuario debe dar consentimiento expreso para tratamiento de datos financieros
+        if (!dto.aceptaDatosFinancieros) {
+            throw new BadRequestException('Debes otorgar tu consentimiento para el tratamiento de datos patrimoniales y financieros para registrarte');
+        }
+
         // Normalizar y validar `edad`: debe ser entero y dentro del rango aceptable
         const edadNum = Number(dto.edad);
         if (!Number.isFinite(edadNum) || Number.isNaN(edadNum)) {
@@ -182,6 +192,10 @@ export class AuthService {
             nombreCompleto: dto.nombreCompleto,
             edad: dto.edad,
             ocupacion: dto.ocupacion,
+            aceptaTerminos: dto.aceptaTerminos,
+            aceptaTerminosFecha: new Date(),
+            aceptaDatosFinancieros: dto.aceptaDatosFinancieros,
+            aceptaDatosFinancierosFecha: new Date(),
             // otros campos opcionales del DTO
         });
 

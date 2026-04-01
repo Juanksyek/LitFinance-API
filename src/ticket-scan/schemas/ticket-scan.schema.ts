@@ -92,7 +92,7 @@ export class TicketScan {
   /** Estado del procesamiento */
   @Prop({
     required: true,
-    enum: ['processing', 'completed', 'review', 'failed', 'cancelled'],
+    enum: ['processing', 'completed', 'review', 'failed', 'cancelled', 'liquidado'],
     default: 'processing',
     index: true,
   })
@@ -114,6 +114,89 @@ export class TicketScan {
   @Prop()
   ocrTextoRaw: string;
 
+  /** JSON crudo de cada proveedor OCR (Azure, OCR.space, Python worker, etc.) — para dataset/training */
+  @Prop({ type: [Object], default: [] })
+  ocrProvidersRaw: Array<{
+    provider: string;
+    variant: string;
+    rawJson: string;
+    overallConfidence: number;
+  }>;
+
+  /** Candidatos OCR crudos rankeados del Python worker */
+  @Prop({ type: [Object], default: [] })
+  ocrRawCandidates: Array<{
+    source: string;
+    variant: string;
+    score: number;
+    amountsDetected: number;
+    wordsDetected: number;
+  }>;
+
+  /** Fuente del mejor candidato OCR (paddle:contrast, tesseract:grayscale, etc.) */
+  @Prop()
+  ocrBestSource: string;
+
+  /** Texto OCR enviado por el front (ML Kit / Apple Vision) */
+  @Prop()
+  ocrFrontText: string;
+
+  /** Texto OCR del backend (mejor candidato del worker) */
+  @Prop()
+  ocrBackText: string;
+
+  /** Confianza global del OCR (0-1) */
+  @Prop({ type: Number, default: 0 })
+  ocrConfidence: number;
+
+  /** Variantes de imagen generadas por OpenCV */
+  @Prop({ type: [String], default: [] })
+  imageVariants: string[];
+
+  /** Si el ticket requiere revisión humana */
+  @Prop({ default: true })
+  needsReview: boolean;
+
+  /** Versión del pipeline de procesamiento (para re-procesamiento futuro) */
+  @Prop({ default: '2.0.0' })
+  processingVersion: string;
+
+  /** Tipo de ticket detectado (supermercado, restaurante, etc.) */
+  @Prop()
+  tipoTicket: string;
+
+  /** Nombre del extractor que ganó (supermarket, restaurant, generic) */
+  @Prop()
+  extractorUsed: string;
+
+  /** Score del mejor candidato OCR */
+  @Prop({ type: Number, default: 0 })
+  ocrScore: number;
+
+  /** Confianza por campo { tienda: 0.9, fecha: 0.8, items: 0.7, ... } */
+  @Prop({ type: Object, default: {} })
+  fieldConfidence: Record<string, number>;
+
+  /** Nivel de revisión sugerido: auto | light | full | manual */
+  @Prop({ default: 'full' })
+  reviewLevel: string;
+
+  /** Correcciones del usuario (para entrenamiento continuo) */
+  @Prop({ type: Object })
+  userCorrections: {
+    tiendaOriginal?: string;
+    fechaOriginal?: string;
+    totalOriginal?: number;
+    subtotalOriginal?: number;
+    impuestosOriginal?: number;
+    itemsOriginal?: number; // cantidad de items antes de edición
+    correctedAt?: Date;
+  };
+
+  /** Si los datos procesados fueron corregidos por el usuario */
+  @Prop({ default: false })
+  wasUserCorrected: boolean;
+
   /** Notas del usuario */
   @Prop()
   notas: string;
@@ -129,6 +212,22 @@ export class TicketScan {
   /** Subcuenta afectada (opcional) */
   @Prop()
   subCuentaId: string;
+
+  /** Campos de liquidación */
+  @Prop({ default: 0 })
+  montoLiquidado: number;
+
+  @Prop()
+  liquidadoPorCuenta?: string;
+
+  @Prop()
+  liquidadoPorSubcuenta?: string;
+
+  @Prop()
+  fechaLiquidacion?: Date;
+
+  @Prop()
+  liquidadoPorUsuario?: string;
 }
 
 export const TicketScanSchema = SchemaFactory.createForClass(TicketScan);

@@ -1,22 +1,64 @@
 version: '3.8'
 
+# ─────────────────────────────────────────────
+#  LitFinance — stack completo
+#
+#  Servicios:
+#    api         → NestJS (TypeScript)  :3001
+#    ocr-worker  → FastAPI (Python)     :8100
+#    mongo       → MongoDB             :27017
+#
+#  Levantar todo:          docker compose up --build
+#  Solo ocr-worker:        docker compose up --build ocr-worker
+#  Desarrollo NestJS:      docker compose up mongo ocr-worker
+#                          (luego: npm run start:dev en host)
+# ─────────────────────────────────────────────
+
 services:
+
+  # ── 1. Python OCR Worker ─────────────────────
+  ocr-worker:
+    build:
+      context: ./ocr-worker
+      dockerfile: Dockerfile
+    container_name: litfinance-ocr-worker
+    ports:
+      - '8100:8100'
+    volumes:
+      # Cachea modelos PaddleOCR entre reinicios (evita descarga cada vez)
+      - paddle_models:/root/.paddleocr
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8100/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s   # PaddleOCR tarda ~30s en cargar modelos
+    restart: unless-stopped
+
+  # ── 2. NestJS API ────────────────────────────
   api:
     build: .
     command: npm run start:dev
+    container_name: litfinance-api
     ports:
-      - '3000:3000'
+      - '3001:3000'
     environment:
       - NODE_ENV=development
+      # Nombre de servicio Docker = hostname interno en la red del compose
+      - OCR_WORKER_URL=http://ocr-worker:8100
       # Uncomment to enable server-side auth diagnostics added earlier
       # - DEBUG_AUTH=1
+    env_file:
+      - .env
     volumes:
       - ./:/usr/src/app:cached
       - /usr/src/app/node_modules
     depends_on:
       - mongo
+      - ocr-worker
     tty: true
 
+  # ── 3. MongoDB ───────────────────────────────
   mongo:
     image: mongo:6.0
     restart: unless-stopped
@@ -27,3 +69,4 @@ services:
 
 volumes:
   mongo_data:
+  paddle_models:
