@@ -39,4 +39,8 @@ export class RegisterAuthDto {
   @IsBoolean()
   @IsNotEmpty()
   aceptaTerminos: boolean; // Debe ser true para completar el registro
+
+  @IsBoolean()
+  @IsNotEmpty()
+  aceptaDatosFinancieros: boolean; // Consentimiento expreso de tratamiento de datos patrimoniales/financieros
 }
