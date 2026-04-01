@@ -1,4 +1,4 @@
-FROM node:20-bullseye-slim
+FROM node:22-bookworm-slim
 
 # Create app directory
 WORKDIR /usr/src/app
@@ -8,6 +8,7 @@ ENV NODE_ENV=development
 
 # Install build deps for some native modules if required by dev tooling
 RUN apt-get update \
+  && apt-get upgrade -y \
   && apt-get install -y --no-install-recommends \
     build-essential python3 make g++ ca-certificates git \
     libvips-dev libvips-tools libjpeg-dev libpng-dev libcairo2-dev \
