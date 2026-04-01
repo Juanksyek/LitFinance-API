@@ -126,6 +126,13 @@ export class User {
   @Prop({ type: Date, required: false })
   aceptaTerminosFecha?: Date;
 
+  // Consentimiento expreso de tratamiento de datos patrimoniales/financieros
+  @Prop({ type: Boolean, required: true, default: false })
+  aceptaDatosFinancieros: boolean;
+
+  @Prop({ type: Date, required: false })
+  aceptaDatosFinancierosFecha?: Date;
+
   // Dashboard snapshot versioning (ETag)
   @Prop({ type: Number, default: 0 })
   dashboardVersion?: number;
