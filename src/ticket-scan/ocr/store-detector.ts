@@ -1,21 +1,26 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { KNOWN_STORES } from './ocr.constants';
 import { DetectedStore } from './ocr.types';
+import { TicketLearningService } from '../learning/ticket-learning.service';
 
 @Injectable()
 export class StoreDetector {
   private readonly logger = new Logger(StoreDetector.name);
 
+  constructor(private readonly learningService: TicketLearningService) {}
+
   /**
    * Busca el nombre de tienda en las primeras 12 líneas (header) y últimas 15 (footer).
-   * Si no coincide con KNOWN_STORES, intenta extraer el nombre de la primera línea legible.
+   * Primero busca en KNOWN_STORES (hardcoded), luego en tiendas aprendidas.
    */
-  detect(lines: string[]): {
+  async detect(lines: string[]): Promise<{
     store: DetectedStore | null;
     tienda: string;
     direccionTienda: string;
-  } {
+    learnedTemplateId?: string;
+  }> {
     let store: DetectedStore | null = null;
+    let learnedTemplateId: string | undefined;
 
     // 1. Buscar en header (primeras 12 líneas)
     const headerBlock = lines.slice(0, Math.min(12, lines.length)).join(' ');
@@ -37,20 +42,31 @@ export class StoreDetector {
       }
     }
 
-    // 3. Nombre de tienda
+    // 3. Si no se encontró en KNOWN_STORES, buscar en tiendas aprendidas
+    if (!store) {
+      const learned = await this.learningService.findStoreByText(headerBlock);
+      if (learned) {
+        store = { name: learned.storeName, defaultCategory: learned.defaultCategory };
+        learnedTemplateId = learned.templateId;
+        this.logger.log(`[STORE] Tienda detectada por aprendizaje: "${learned.storeName}"`);
+      }
+    }
+
+    // 4. Nombre de tienda
     let tienda = store?.name ?? 'Tienda desconocida';
     if (!store) {
       tienda = this.extractFallbackName(lines);
     }
 
-    // 4. Dirección
+    // 5. Dirección
     const direccionTienda = this.extractAddress(lines);
 
     this.logger.log(
-      `[STORE] Detectada="${tienda}" KnownStore=${store?.name ?? '—'} Dir="${direccionTienda}"`,
+      `[STORE] Detectada="${tienda}" KnownStore=${store?.name ?? '—'} Dir="${direccionTienda}"` +
+      (learnedTemplateId ? ` (learned:${learnedTemplateId})` : ''),
     );
 
-    return { store, tienda, direccionTienda };
+    return { store, tienda, direccionTienda, learnedTemplateId };
   }
 
   /** Extrae nombre de la primera línea que parezca un nombre de tienda */

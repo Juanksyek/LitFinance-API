@@ -18,6 +18,7 @@ import { DashboardVersionService } from '../user/services/dashboard-version.serv
 import { OcrPipeline } from './ocr';
 import { OcrProviderResult } from './ocr/ocr-provider.interface';
 import { CATEGORY_KEYWORDS, STORE_CATEGORY_HINTS } from './ocr/ocr.constants';
+import { TicketLearningService } from './learning/ticket-learning.service';
 
 @Injectable()
 export class TicketScanService {
@@ -30,6 +31,7 @@ export class TicketScanService {
     private readonly dashboardVersionService: DashboardVersionService,
     private readonly ocrPipeline: OcrPipeline,
     private readonly cuentaHistorialService: CuentaHistorialService,
+    private readonly learningService: TicketLearningService,
   ) {}
 
   // ─── Categorización inteligente ──────────────────────────────
@@ -326,6 +328,11 @@ export class TicketScanService {
     ticket.confirmado = true;
     await ticket.save();
 
+    // ─── Aprendizaje continuo: aprender del ticket confirmado ───
+    this.learningService.learnFromTicket(ticket).catch((err) =>
+      this.logger.warn(`[LEARNING] Error aprendiendo del ticket ${ticketId}: ${err.message}`),
+    );
+
     await this.dashboardVersionService.touchDashboard(userId, 'ticket_scan.confirm');
 
     return {
@@ -344,6 +351,7 @@ export class TicketScanService {
     hasta?: string;
     page?: number;
     limit?: number;
+    includeImage?: boolean;
   }) {
     const query: any = { userId };
 
@@ -361,10 +369,13 @@ export class TicketScanService {
     const limit = Math.min(50, Math.max(1, filters?.limit ?? 20));
     const skip = (page - 1) * limit;
 
+    const heavyExcludes = '-ocrTextoRaw -ocrProvidersRaw -ocrRawCandidates -ocrFrontText -ocrBackText';
+    const select = filters?.includeImage ? heavyExcludes : `-imagenBase64 ${heavyExcludes}`;
+
     const [tickets, total] = await Promise.all([
       this.ticketModel
         .find(query)
-        .select('-imagenBase64 -ocrTextoRaw -ocrProvidersRaw -ocrRawCandidates -ocrFrontText -ocrBackText') // No enviar datos pesados en listado
+        .select(select) // No enviar datos pesados en listado a menos que se solicite
         .sort({ fechaCompra: -1 })
         .skip(skip)
         .limit(limit)

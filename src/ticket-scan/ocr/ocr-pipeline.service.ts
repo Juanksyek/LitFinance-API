@@ -13,6 +13,7 @@ import { RestaurantExtractor } from './extractors/restaurant.extractor';
 import { GenericExtractor } from './extractors/generic.extractor';
 import { TicketParseResult, TicketKind } from './ocr.types';
 import { OcrProviderResult } from './ocr-provider.interface';
+import { TicketLearningService } from '../learning/ticket-learning.service';
 
 /**
  * Pipeline OCR completo:
@@ -36,6 +37,7 @@ export class OcrPipeline {
     private readonly supermarketExtractor: SupermarketExtractor,
     private readonly restaurantExtractor: RestaurantExtractor,
     private readonly genericExtractor: GenericExtractor,
+    private readonly learningService: TicketLearningService,
   ) {}
 
   /**
@@ -80,7 +82,7 @@ export class OcrPipeline {
     let bestExtractor = 'generic';
 
     for (const raw of rawTexts) {
-      const { parsed, extractor } = this.parseCandidateWithFamily(raw);
+      const { parsed, extractor } = await this.parseCandidateWithFamily(raw);
       candidates.push(parsed);
       if (parsed.items.length > 0) bestExtractor = extractor;
     }
@@ -109,19 +111,20 @@ export class OcrPipeline {
   /**
    * Parsea un texto OCR directamente (sin llamar al OCR — para cuando ya tenemos texto).
    */
-  parseText(raw: string): TicketParseResult {
-    const { parsed } = this.parseCandidateWithFamily(raw);
-    return this.reconciliation.reconcile(parsed);
+  parseText(raw: string): Promise<TicketParseResult> {
+    return this.parseCandidateWithFamily(raw).then(({ parsed }) =>
+      this.reconciliation.reconcile(parsed),
+    );
   }
 
   /**
    * Pipeline interno con selección de extractor por familia:
    *   preprocess → detectar tienda → clasificar → extractor específico → totales → reconciliar
    */
-  private parseCandidateWithFamily(raw: string): {
+  private async parseCandidateWithFamily(raw: string): Promise<{
     parsed: TicketParseResult;
     extractor: string;
-  } {
+  }> {
     const lines = this.preprocessLines(raw);
     const fullText = lines.join('\n');
 
@@ -131,20 +134,33 @@ export class OcrPipeline {
     );
 
     // Extraer componentes base
-    const { store, tienda, direccionTienda } = this.storeDetector.detect(lines);
+    const { store, tienda, direccionTienda } = await this.storeDetector.detect(lines);
     const tipoTicket = this.ticketClassifier.classify(store, lines);
     const fechaCompra = this.dateExtractor.extract(lines);
     const totals = this.totalsExtractor.extract(lines);
     const metodoPago = this.paymentExtractor.extract(fullText);
 
+    // ─── Consultar template aprendido para guiar extracción ─────
+    let templateHintExtractor: string | null = null;
+    const hints = await this.learningService.getTemplateHints(tienda);
+    if (hints) {
+      templateHintExtractor = hints.preferredExtractor;
+      this.logger.log(
+        `[OCR-PARSER] Template hints: extractor=${hints.preferredExtractor} formats=${hints.itemFormats.length} dateFormats=${hints.dateFormats.join(',')}`,
+      );
+    }
+
     // ─── Seleccionar extractor por familia ───────────────────────
+    // Si hay template hint con extractor preferido, usarlo primero
     let items;
     let extractorName: string;
 
-    if (this.isSupermercadoKind(tipoTicket)) {
+    const effectiveExtractor = templateHintExtractor || this.kindToExtractor(tipoTicket);
+
+    if (effectiveExtractor === 'supermarket' || this.isSupermercadoKind(tipoTicket)) {
       items = this.supermarketExtractor.extractItems(lines, store?.defaultCategory);
       extractorName = 'supermarket';
-    } else if (tipoTicket === 'restaurante') {
+    } else if (effectiveExtractor === 'restaurant' || tipoTicket === 'restaurante') {
       items = this.restaurantExtractor.extractItems(lines, store?.defaultCategory);
       extractorName = 'restaurant';
 
@@ -214,6 +230,12 @@ export class OcrPipeline {
 
   private isSupermercadoKind(kind: TicketKind): boolean {
     return kind === 'supermercado' || kind === 'departamental';
+  }
+
+  private kindToExtractor(kind: TicketKind): string {
+    if (this.isSupermercadoKind(kind)) return 'supermarket';
+    if (kind === 'restaurante') return 'restaurant';
+    return 'generic';
   }
 
   /**

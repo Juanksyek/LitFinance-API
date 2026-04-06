@@ -26,11 +26,15 @@ import { PythonOcrWorkerProvider } from './ocr/providers/python-worker.provider'
 import { SupermarketExtractor } from './ocr/extractors/supermarket.extractor';
 import { RestaurantExtractor } from './ocr/extractors/restaurant.extractor';
 import { GenericExtractor } from './ocr/extractors/generic.extractor';
+import { TicketTemplate, TicketTemplateSchema } from './learning/ticket-template.schema';
+import { TicketLearningService } from './learning/ticket-learning.service';
+import { StructureAnalyzer } from './learning/structure-analyzer';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: TicketScan.name, schema: TicketScanSchema },
+      { name: TicketTemplate.name, schema: TicketTemplateSchema },
     ]),
     forwardRef(() => TransactionsModule),
     forwardRef(() => UserModule),
@@ -57,7 +61,9 @@ import { GenericExtractor } from './ocr/extractors/generic.extractor';
     SupermarketExtractor,
     RestaurantExtractor,
     GenericExtractor,
+    StructureAnalyzer,
+    TicketLearningService,
   ],
-  exports: [TicketScanService],
+  exports: [TicketScanService, TicketLearningService],
 })
 export class TicketScanModule {}
