@@ -5,6 +5,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TicketScanService } from './ticket-scan.service';
 import { EvaluationService } from './ocr/evaluation.service';
+import { TicketLearningService } from './learning/ticket-learning.service';
 import {
   CreateTicketFromOcrDto,
   CreateTicketManualDto,
@@ -19,6 +20,7 @@ export class TicketScanController {
   constructor(
     private readonly ticketScanService: TicketScanService,
     private readonly evaluationService: EvaluationService,
+    private readonly learningService: TicketLearningService,
   ) {}
 
   /**
@@ -57,6 +59,52 @@ export class TicketScanController {
   ) {
     return this.ticketScanService.confirmAndCharge(req.user.id, ticketId, dto);
   }
+
+  // ─── Learning endpoints ───────────────────────────────────────
+
+  /**
+   * Bootstrap: aprender de tickets históricos confirmados.
+   * Ejecutar una vez para poblar templates iniciales.
+   */
+  @Post('learning/bootstrap')
+  @HttpCode(200)
+  async learningBootstrap(@Req() req) {
+    return this.learningService.learnFromHistory(req.user.id);
+  }
+
+  /**
+   * Métricas globales del sistema de aprendizaje.
+   */
+  @Get('learning/metrics')
+  async learningMetrics() {
+    return this.learningService.getMetrics();
+  }
+
+  /**
+   * Listar templates aprendidos con filtros opcionales.
+   */
+  @Get('learning/templates')
+  async learningTemplates(
+    @Query('onlyMature') onlyMature?: string,
+    @Query('minAccuracy') minAccuracy?: string,
+    @Query('ticketType') ticketType?: string,
+  ) {
+    return this.learningService.listTemplates({
+      onlyMature: onlyMature === undefined ? undefined : onlyMature === 'true',
+      minAccuracy: minAccuracy ? parseFloat(minAccuracy) : undefined,
+      ticketType,
+    });
+  }
+
+  /**
+   * Obtener detalle de un template por tienda.
+   */
+  @Get('learning/templates/:storeName')
+  async learningTemplateDetail(@Param('storeName') storeName: string) {
+    return this.learningService.getTemplateByStore(storeName);
+  }
+
+  // ─── Ticket CRUD ──────────────────────────────────────────────
 
   /**
    * Listar tickets del usuario con filtros opcionales.
