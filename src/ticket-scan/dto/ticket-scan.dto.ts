@@ -289,6 +289,9 @@ export class TicketFiltersDto {
   @IsOptional()
   @IsNumber()
   limit?: number;
+  @IsOptional()
+  @IsBoolean()
+  includeImage?: boolean;
 }
 
 // ─── Liquidar ticket (seleccionar cuenta/subcuenta) ─────────────
