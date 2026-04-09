@@ -126,6 +126,16 @@ export class SubscriptionVerifyCronService {
 
       const users = await this.userModel.find({
         premiumSubscriptionId: { $exists: true, $nin: [null, 'tipjar'] },
+        // Skip subscriptions already confirmed canceled with expired premium — webhooks handle those
+        $nor: [
+          {
+            premiumSubscriptionStatus: 'canceled',
+            $or: [
+              { premiumUntil: { $exists: false } },
+              { premiumUntil: { $lte: now } },
+            ],
+          },
+        ],
         $or: [
           { premiumSubscriptionStatus: { $nin: ['active', 'trialing'] } },
           { premiumSubscriptionUntil: { $exists: false } },
@@ -200,7 +210,41 @@ export class SubscriptionVerifyCronService {
             isPremiumNow,
           });
         } catch (err: any) {
-          this.logger.warn(`[verifySubscriptions] Error recuperando sub ${subId}: ${err?.message}`);
+          const msg: string = err?.message ?? '';
+          if (msg.includes('No such subscription')) {
+            // Subscription was deleted in Stripe — clean up DB so cron stops querying it
+            this.logger.warn(
+              `[verifySubscriptions] Suscripción eliminada en Stripe: ${subId}. Marcando como cancelada en DB.`,
+            );
+            try {
+              const reconciled = reconcileEntitlements(
+                { ...(u as any), premiumSubscriptionStatus: 'canceled', premiumSubscriptionUntil: null },
+                now,
+              );
+              await this.userModel.updateOne(
+                { _id: u._id },
+                {
+                  $set: {
+                    premiumSubscriptionStatus: 'canceled',
+                    premiumSubscriptionUntil: null,
+                    isPremium: reconciled.isPremium,
+                    planType: reconciled.planType,
+                    premiumUntil: reconciled.premiumUntil,
+                    jarExpiresAt: reconciled.jarExpiresAt,
+                    jarRemainingMs: reconciled.jarRemainingMs,
+                  },
+                },
+              );
+              // Enforce free plan limits if premium was lost
+              if (!reconciled.isPremium && wasPremium) {
+                toEnforce.push({ userId, planType: 'free_plan', wasPremium, isPremiumNow: false });
+              }
+            } catch (cleanupErr: any) {
+              this.logger.error(`[verifySubscriptions] Error al limpiar sub ${subId}: ${cleanupErr?.message}`);
+            }
+          } else {
+            this.logger.warn(`[verifySubscriptions] Error recuperando sub ${subId}: ${msg}`);
+          }
           continue;
         }
       }
