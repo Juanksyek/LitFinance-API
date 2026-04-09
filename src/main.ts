@@ -1,33 +1,12 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
 import * as bodyParser from 'body-parser';
 import { PlanConfigService } from './plan-config/plan-config.service';
 
 async function bootstrap() {
-  const isProd = process.env.NODE_ENV === 'production';
-
   // IMPORTANT: Stripe webhook signature verification requires the raw body.
   // Nest's default body parser would consume it before we can validate the signature.
-  const app = await NestFactory.create(AppModule, {
-    bodyParser: false,
-    // Keep debug/verbose off in prod to save RAM, but keep log+warn+error always on
-    logger: isProd
-      ? ['log', 'error', 'warn']
-      : ['log', 'error', 'warn', 'debug', 'verbose'],
-  });
-
-  // Global validation pipe
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-      stopAtFirstError: true,
-      // Always show which field fails — critical for diagnosing 400s in production
-      disableErrorMessages: false,
-    }),
-  );
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
 
   // Inicializar planes por defecto
   const planConfigService = app.get(PlanConfigService);
@@ -38,9 +17,8 @@ async function bootstrap() {
   app.use('/stripe/webhook', bodyParser.raw({ type: 'application/json' }));
 
   // 2) Parsers normales para TODO MENOS el webhook
-  // 10mb to accommodate base64-encoded ticket images (~7MB photo → ~9.5MB base64)
-  const jsonParser = bodyParser.json({ limit: '10mb' });
-  const urlParser = bodyParser.urlencoded({ extended: true, limit: '10mb' });
+  const jsonParser = bodyParser.json({ limit: '2mb' });
+  const urlParser = bodyParser.urlencoded({ extended: true, limit: '2mb' });
 
   app.use((req, res, next) => {
     if (req.originalUrl.startsWith('/stripe/webhook')) return next();

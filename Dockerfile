@@ -1,30 +1,28 @@
-## ─── Production image ─────────────────────────────────────────
 FROM node:22-bookworm-slim
 
+# Create app directory
 WORKDIR /usr/src/app
 
-# Native build deps (needed by sharp, canvas, etc.)
+# Use development environment by default
+ENV NODE_ENV=development
+
+# Install build deps for some native modules if required by dev tooling
 RUN apt-get update \
+  && apt-get upgrade -y \
   && apt-get install -y --no-install-recommends \
-    build-essential python3 make g++ ca-certificates \
-    libvips-dev libjpeg-dev libpng-dev libcairo2-dev \
+    build-essential python3 make g++ ca-certificates git \
+    libvips-dev libvips-tools libjpeg-dev libpng-dev libcairo2-dev \
   && rm -rf /var/lib/apt/lists/*
 
-# Install ALL deps (devDeps needed for nest build)
+# Copy package files and install dependencies (including devDeps for nodemon/ts-node)
 COPY package.json package-lock.json* ./
 RUN npm ci --silent
 
-# Copy sources and build.
-# SWC builder usa mucho menos RAM que tsc. Por seguridad se da 4GB al proceso.
+# Copy rest of the sources
 COPY . .
-RUN node --max-old-space-size=4096 ./node_modules/.bin/nest build
 
-# Remove devDependencies after build, then switch to production mode
-RUN npm prune --production
-
-ENV NODE_ENV=production
-
+# Expose default port
 EXPOSE 3000
 
-# NODE_OPTIONS solo aplica al proceso runtime, no al build
-CMD ["node", "--max-old-space-size=512", "dist/main"]
+# Default command for development: nodemon (script `start:dev` uses nodemon)
+CMD ["npm", "run", "start:dev"]
