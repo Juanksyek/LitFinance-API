@@ -34,7 +34,13 @@ import { TicketScanModule } from './ticket-scan/ticket-scan.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    MongooseModule.forRoot(process.env.MONGO_URI!),
+    MongooseModule.forRoot(process.env.MONGO_URI!, {
+      autoIndex: process.env.NODE_ENV !== 'production',
+      maxPoolSize: 5,
+      minPoolSize: 0,
+      maxIdleTimeMS: 30_000,
+      serverSelectionTimeoutMS: 5_000,
+    }),
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot({
       throttlers: [
