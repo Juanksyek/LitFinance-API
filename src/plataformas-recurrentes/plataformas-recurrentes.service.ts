@@ -72,7 +72,7 @@ export class PlataformasRecurrentesService {
       ];
     }
   
-    return this.plataformaModel.find(filtro).sort({ nombre: 1 }).exec();
+    return this.plataformaModel.find(filtro).sort({ nombre: 1 }).lean().exec();
   }
 
   async editar(id: string, dto: EditarPlataformaDto) {
