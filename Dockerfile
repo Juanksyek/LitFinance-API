@@ -1,28 +1,30 @@
 FROM node:22-bookworm-slim
 
-# Create app directory
 WORKDIR /usr/src/app
 
-# Use development environment by default
-ENV NODE_ENV=development
-
-# Install build deps for some native modules if required by dev tooling
+# Install native build deps (required by sharp/libvips and other native modules)
 RUN apt-get update \
   && apt-get upgrade -y \
   && apt-get install -y --no-install-recommends \
-    build-essential python3 make g++ ca-certificates git \
+    build-essential python3 make g++ ca-certificates \
     libvips-dev libvips-tools libjpeg-dev libpng-dev libcairo2-dev \
   && rm -rf /var/lib/apt/lists/*
 
-# Copy package files and install dependencies (including devDeps for nodemon/ts-node)
+# Install ALL deps (including devDeps needed for nest build / SWC)
 COPY package.json package-lock.json* ./
 RUN npm ci --silent
 
-# Copy rest of the sources
+# Copy sources and compile with SWC (low-memory, fast)
 COPY . .
+RUN node --max-old-space-size=4096 ./node_modules/.bin/nest build
 
-# Expose default port
+# Remove devDependencies to shrink the image
+RUN npm prune --production
+
+# Runtime environment
+ENV NODE_ENV=production
+
 EXPOSE 3000
 
-# Default command for development: nodemon (script `start:dev` uses nodemon)
-CMD ["npm", "run", "start:dev"]
+# 768MB gives enough headroom for NestJS + sharp + Mongoose at runtime
+CMD ["node", "--max-old-space-size=768", "dist/main"]
