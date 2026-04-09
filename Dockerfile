@@ -3,7 +3,8 @@ FROM node:22-bookworm-slim
 
 WORKDIR /usr/src/app
 
-ENV NODE_ENV=production
+# NODE_ENV se pone en production DESPUÉS del build para que npm ci
+# instale también las devDependencies (nest cli, ts, etc.) necesarias.
 ENV NODE_OPTIONS=--max-old-space-size=512
 
 # Native build deps (needed by sharp, canvas, etc.)
@@ -21,8 +22,10 @@ RUN npm ci --silent
 COPY . .
 RUN npm run build
 
-# Remove devDependencies after build
+# Remove devDependencies after build, then switch to production mode
 RUN npm prune --production
+
+ENV NODE_ENV=production
 
 EXPOSE 3000
 
