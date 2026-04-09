@@ -8,7 +8,7 @@ export class SharedMovementSplit {
   @Prop({ required: true, unique: true })
   splitId: string;
 
-  @Prop({ required: true, index: true })
+  @Prop({ required: true })
   movementId: string;
 
   @Prop({ required: true })

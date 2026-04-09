@@ -183,7 +183,7 @@ export type TicketTemplateDocument = TicketTemplate & Document;
 export class TicketTemplate {
   // ─── Identificación de tienda ────────────────────────────────
 
-  @Prop({ required: true, index: true })
+  @Prop({ required: true })
   storeName: string;
 
   @Prop({ type: [String], default: [] })
