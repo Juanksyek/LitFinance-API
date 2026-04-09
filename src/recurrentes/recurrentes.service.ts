@@ -661,7 +661,19 @@ export class RecurrentesService {
           );
         }
 
-        r.estado = 'activo';
+        // ===========================
+        // COMPLETAR al terminar el último pago (plazo_fijo)
+        // ===========================
+        if (
+          r.tipoRecurrente === 'plazo_fijo' &&
+          r.totalPagos &&
+          r.pagosRealizados >= r.totalPagos
+        ) {
+          r.estado = 'completado';
+          r.pausado = true;
+        } else {
+          r.estado = 'activo';
+        }
         r.ultimaEjecucion = new Date();
         r.mensajeError = undefined;
         await r.save();
