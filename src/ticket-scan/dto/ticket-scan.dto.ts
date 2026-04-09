@@ -128,6 +128,10 @@ export class CreateTicketFromOcrDto {
   @IsOptional()
   @IsString()
   ocrTexto?: string;
+
+  /** Metadatos adicionales del dispositivo / captura (shape libre, no validado) */
+  @IsOptional()
+  metadata?: Record<string, any>;
 }
 
 // ─── Crear ticket manualmente (fallback sin OCR) ───────────────
