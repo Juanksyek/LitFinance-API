@@ -14,7 +14,7 @@ export class PasswordReset {
   @Prop({ required: true })
   otpHash: string;
 
-  @Prop({ required: true, index: true })
+  @Prop({ required: true })
   expiresAt: Date;
 
   @Prop({ type: Number, default: 0 })
