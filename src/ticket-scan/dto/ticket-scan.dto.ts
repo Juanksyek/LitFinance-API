@@ -89,7 +89,7 @@ export class CreateTicketFromOcrDto {
 
   /** Plataforma del dispositivo */
   @IsOptional()
-  @IsIn(['ios', 'android'])
+  @IsString()
   platform?: string;
 
   /** OCR local del front (ML Kit / Apple Vision) — objeto con texto + score */

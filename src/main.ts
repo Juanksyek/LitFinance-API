@@ -11,8 +11,9 @@ async function bootstrap() {
   // Nest's default body parser would consume it before we can validate the signature.
   const app = await NestFactory.create(AppModule, {
     bodyParser: false,
+    // Keep debug/verbose off in prod to save RAM, but keep log+warn+error always on
     logger: isProd
-      ? ['error', 'warn']
+      ? ['log', 'error', 'warn']
       : ['log', 'error', 'warn', 'debug', 'verbose'],
   });
 
@@ -23,7 +24,8 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
       transform: true,
       stopAtFirstError: true,
-      disableErrorMessages: isProd,
+      // Always show which field fails — critical for diagnosing 400s in production
+      disableErrorMessages: false,
     }),
   );
 
@@ -36,8 +38,9 @@ async function bootstrap() {
   app.use('/stripe/webhook', bodyParser.raw({ type: 'application/json' }));
 
   // 2) Parsers normales para TODO MENOS el webhook
-  const jsonParser = bodyParser.json({ limit: '2mb' });
-  const urlParser = bodyParser.urlencoded({ extended: true, limit: '2mb' });
+  // 10mb to accommodate base64-encoded ticket images (~7MB photo → ~9.5MB base64)
+  const jsonParser = bodyParser.json({ limit: '10mb' });
+  const urlParser = bodyParser.urlencoded({ extended: true, limit: '10mb' });
 
   app.use((req, res, next) => {
     if (req.originalUrl.startsWith('/stripe/webhook')) return next();
