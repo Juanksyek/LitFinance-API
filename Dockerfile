@@ -14,9 +14,10 @@ RUN apt-get update \
 COPY package.json package-lock.json* ./
 RUN npm ci --silent
 
-# Copy sources and build (sin NODE_OPTIONS para que tsc tenga memoria suficiente)
+# Copy sources and build.
+# SWC builder usa mucho menos RAM que tsc. Por seguridad se da 4GB al proceso.
 COPY . .
-RUN npm run build
+RUN node --max-old-space-size=4096 ./node_modules/.bin/nest build
 
 # Remove devDependencies after build, then switch to production mode
 RUN npm prune --production
