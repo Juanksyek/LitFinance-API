@@ -51,7 +51,7 @@ export class AnalyticsService {
       this.validarFiltrosMontos(filtros);
     }
 
-    const usuario = await this.userModel.findOne({ id: userId });
+    const usuario = await this.userModel.findOne({ id: userId }).lean();
     if (!usuario) {
       throw new NotFoundException('Usuario no encontrado');
     }
@@ -60,14 +60,14 @@ export class AnalyticsService {
     const monedaBase = filtros.monedaBase || usuario.monedaPreferencia || 'USD';
 
     const query = this.construirQueryTransacciones(userId, filtros, fechaInicio, fechaFin);
-    const transacciones = await this.transactionModel.find(query);
+    const transacciones = await this.transactionModel.find(query).lean();
 
     if (transacciones.length > 0) {
       this.analizarTransaccionesSospechosas(transacciones, userId);
     }
 
     const queryHistorial = this.construirQueryHistorial(userId, filtros, fechaInicio, fechaFin);
-    const historial = await this.historialModel.find(queryHistorial);
+    const historial = await this.historialModel.find(queryHistorial).lean();
 
     const { totalIngresado, totalGastado } = await this.procesarIngresosGastos(
       transacciones, 
@@ -182,7 +182,7 @@ export class AnalyticsService {
     const conceptos = await this.conceptoModel.find({ 
       conceptoId: { $in: conceptosIds },
       userId
-    });
+    }).lean();
 
     const conceptosMap = new Map(conceptos.map(c => [c.conceptoId, c]));
 
@@ -379,7 +379,7 @@ export class AnalyticsService {
     const totalGeneral = actual.reduce((sum: number, r: any) => sum + (r.total || 0), 0);
 
     const conceptosIds = actual.map((r: any) => r._id).filter((id: any) => id && id !== 'sin_concepto');
-    const conceptos = await this.conceptoModel.find({ userId, conceptoId: { $in: conceptosIds } });
+    const conceptos = await this.conceptoModel.find({ userId, conceptoId: { $in: conceptosIds } }).lean();
     const conceptosMap = new Map(conceptos.map((c) => [c.conceptoId, c]));
 
     return actual
@@ -587,7 +587,7 @@ export class AnalyticsService {
       querySubcuentas.activa = true;
     }
 
-    const subcuentas = await this.subcuentaModel.find(querySubcuentas);
+    const subcuentas = await this.subcuentaModel.find(querySubcuentas).lean();
 
     const estadisticas = await Promise.all(
       subcuentas.map(async (subcuenta) => {
@@ -598,7 +598,7 @@ export class AnalyticsService {
           userId,
           subCuentaId: subcuenta.subCuentaId,
           createdAt: { $gte: fechaInicio, $lte: fechaFin }
-        });
+        }).lean();
 
         const totalIngresos = transacciones
           .filter(t => t.tipo === 'ingreso')
@@ -649,7 +649,7 @@ export class AnalyticsService {
     try {
       // Obtener recurrentes usando el modelo dinámico
       const RecurrenteModel = this.userModel.db.model('Recurrente');
-      const recurrentes = await RecurrenteModel.find({ userId });
+      const recurrentes = await RecurrenteModel.find({ userId }).lean();
 
       if (recurrentes.length === 0) {
         return [];
@@ -664,7 +664,7 @@ export class AnalyticsService {
           const historialEjecuciones = await HistorialRecurrenteModel.find({
             recurrenteId: recurrente.recurrenteId,
             fecha: { $gte: fechaInicio, $lte: fechaFin }
-          });
+          }).lean();
 
           const totalEjecutado = historialEjecuciones.reduce((sum, h) => sum + h.monto, 0);
           const ultimaEjecucion = historialEjecuciones.length > 0
@@ -849,8 +849,8 @@ export class AnalyticsService {
 
       // Obtener transacciones y historial
       const [transacciones, historial] = await Promise.all([
-        this.transactionModel.find(queryTransacciones),
-        this.historialModel.find(queryHistorial)
+        this.transactionModel.find(queryTransacciones).lean(),
+        this.historialModel.find(queryHistorial).lean()
       ]);
 
       // Convertir a formato unificado
@@ -1279,7 +1279,7 @@ export class AnalyticsService {
       querySubcuentas.activa = true;
     }
 
-    const subcuentas = await this.subcuentaModel.find(querySubcuentas);
+    const subcuentas = await this.subcuentaModel.find(querySubcuentas).lean();
     
     let totalMonto = 0;
     const subcuentasValidas: any[] = [];
@@ -1358,7 +1358,7 @@ export class AnalyticsService {
       userId,
       subCuentaId: subcuentaId,
       createdAt: { $gte: mesAnterior, $lte: ahora }
-    });
+    }).lean();
 
     const balanceActual = transaccionesActuales.reduce((sum, tx) => 
       sum + (tx.tipo === 'ingreso' ? tx.monto : -tx.monto), 0
@@ -1506,7 +1506,7 @@ export class AnalyticsService {
     const transacciones = await this.transactionModel.find({
       userId,
       createdAt: { $gte: fechaInicio, $lte: fechaFin }
-    });
+    }).lean();
 
     const ingresos = transacciones.filter(t => t.tipo === 'ingreso').reduce((sum, t) => sum + t.monto, 0);
     const gastos = transacciones.filter(t => t.tipo === 'egreso').reduce((sum, t) => sum + t.monto, 0);
