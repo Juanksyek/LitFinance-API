@@ -142,12 +142,25 @@ export class OcrPipeline {
 
     // ─── Consultar template aprendido para guiar extracción ─────
     let templateHintExtractor: string | null = null;
+    let templateWarnings: string[] = [];
     const hints = await this.learningService.getTemplateHints(tienda);
     if (hints) {
       templateHintExtractor = hints.preferredExtractor;
       this.logger.log(
-        `[OCR-PARSER] Template hints: extractor=${hints.preferredExtractor} formats=${hints.itemFormats.length} dateFormats=${hints.dateFormats.join(',')}`,
+        `[OCR-PARSER] Template hints: extractor=${hints.preferredExtractor} ` +
+        `formats=${hints.itemFormats.length} avgItems=${hints.avgItemCount?.toFixed(1) || '?'} ` +
+        `avgLines=${hints.avgLineCount?.toFixed(0) || '?'} ` +
+        `priceCol=${hints.priceColumn ? `${hints.priceColumn.avgPositionPct}%` : 'none'} ` +
+        `fieldAcc=[${(hints.fieldAccuracy || []).map(f => `${f.field}:${(f.accuracy * 100).toFixed(0)}%`).join(',')}]`,
       );
+
+      // Detectar ticket truncado por comparación con promedio
+      if (hints.avgLineCount > 0 && lines.length < hints.avgLineCount * 0.5) {
+        templateWarnings.push(
+          `Posible ticket truncado: ${lines.length} líneas vs ~${hints.avgLineCount.toFixed(0)} promedio`,
+        );
+        this.logger.warn(`[OCR-PARSER] Ticket truncado: ${lines.length} vs avg ${hints.avgLineCount.toFixed(0)}`);
+      }
     }
 
     // ─── Seleccionar extractor por familia ───────────────────────
@@ -187,6 +200,16 @@ export class OcrPipeline {
       `[OCR-PARSER] Familia=${extractorName} Tipo=${tipoTicket} Items=${items.length}`,
     );
 
+    // ─── Validación con template hints ───────────────────────────
+    if (hints && items.length > 0) {
+      // Alerta si items extraídos son mucho menos que el promedio aprendido
+      if (hints.avgItemCount > 0 && items.length < hints.avgItemCount * 0.4) {
+        templateWarnings.push(
+          `Pocos items: ${items.length} vs ~${hints.avgItemCount.toFixed(1)} promedio`,
+        );
+      }
+    }
+
     // Reconciliar totales con fallbacks
     let { subtotal, total } = totals;
     const { iva, ieps, impuestos, descuentos } = totals;
@@ -222,7 +245,7 @@ export class OcrPipeline {
           tienda: 0, fechaCompra: 0, items: 0,
           subtotal: 0, impuestos: 0, total: 0, metodoPago: 0,
         },
-        warnings: [],
+        warnings: templateWarnings,
       },
       extractor: extractorName,
     };
