@@ -14,7 +14,7 @@ export class AccountDeletion {
   @Prop({ required: true })
   otpHash: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true, index: true })
   expiresAt: Date;
 
   @Prop({ type: Number, default: 0 })

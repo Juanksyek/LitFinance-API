@@ -68,9 +68,8 @@ export class LocalOcrDto {
 
 export class CreateTicketFromOcrDto {
   /** Imagen del ticket en base64 (sin prefijo data:...) */
-  @IsOptional()
   @IsString()
-  imagenBase64?: string;
+  imagenBase64: string;
 
   /** MIME type: image/jpeg, image/png */
   @IsOptional()
@@ -89,7 +88,7 @@ export class CreateTicketFromOcrDto {
 
   /** Plataforma del dispositivo */
   @IsOptional()
-  @IsString()
+  @IsIn(['ios', 'android'])
   platform?: string;
 
   /** OCR local del front (ML Kit / Apple Vision) — objeto con texto + score */
@@ -128,10 +127,6 @@ export class CreateTicketFromOcrDto {
   @IsOptional()
   @IsString()
   ocrTexto?: string;
-
-  /** Metadatos adicionales del dispositivo / captura (shape libre, no validado) */
-  @IsOptional()
-  metadata?: Record<string, any>;
 }
 
 // ─── Crear ticket manualmente (fallback sin OCR) ───────────────

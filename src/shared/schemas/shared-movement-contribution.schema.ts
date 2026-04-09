@@ -8,7 +8,7 @@ export class SharedMovementContribution {
   @Prop({ required: true, unique: true })
   contributionId: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true, index: true })
   movementId: string;
 
   @Prop({ required: true })

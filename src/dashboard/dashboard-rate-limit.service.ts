@@ -14,20 +14,6 @@ export class DashboardRateLimitService {
   private readonly windowMs = 10_000;
   private readonly limit = 12;
 
-  // Cleanup expired buckets every 60s to prevent unbounded growth
-  private readonly cleanupInterval = setInterval(() => this.purgeExpired(), 60_000);
-
-  onModuleDestroy() {
-    clearInterval(this.cleanupInterval);
-  }
-
-  private purgeExpired() {
-    const now = Date.now();
-    for (const [key, bucket] of this.buckets) {
-      if (now >= bucket.resetAt) this.buckets.delete(key);
-    }
-  }
-
   /**
    * Retorna null si está permitido, o el retryAfterSeconds si excede.
    */
