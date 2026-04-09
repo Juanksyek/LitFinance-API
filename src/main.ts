@@ -1,12 +1,31 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { ValidationPipe } from '@nestjs/common';
 import * as bodyParser from 'body-parser';
 import { PlanConfigService } from './plan-config/plan-config.service';
 
 async function bootstrap() {
+  const isProd = process.env.NODE_ENV === 'production';
+
   // IMPORTANT: Stripe webhook signature verification requires the raw body.
   // Nest's default body parser would consume it before we can validate the signature.
-  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  const app = await NestFactory.create(AppModule, {
+    bodyParser: false,
+    logger: isProd
+      ? ['error', 'warn']
+      : ['log', 'error', 'warn', 'debug', 'verbose'],
+  });
+
+  // Global validation pipe
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      stopAtFirstError: true,
+      disableErrorMessages: isProd,
+    }),
+  );
 
   // Inicializar planes por defecto
   const planConfigService = app.get(PlanConfigService);
