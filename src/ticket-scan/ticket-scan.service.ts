@@ -201,7 +201,7 @@ export class TicketScanService {
 
     const response = {
       message: 'Ticket procesado. Revisa los datos y confirma para aplicar el cargo.',
-      ticket: this.formatTicketResponse(ticket),
+      ticket: this.formatTicketResponse(ticket, { includeImage: !!dto.imagenBase64 }),
     };
     this.logger.log(
       `[SCAN-RESPONSE] ═══ RESPUESTA AL FRONT ═══\n` +
@@ -246,7 +246,7 @@ export class TicketScanService {
 
     return {
       message: 'Ticket creado. Confirma para aplicar el cargo.',
-      ticket: this.formatTicketResponse(ticket),
+      ticket: this.formatTicketResponse(ticket, { includeImage: !!dto.imagenBase64 }),
     };
   }
 
@@ -611,14 +611,22 @@ export class TicketScanService {
     return this.formatTicketResponse(ticket);
   }
 
-  // ─── Formatear respuesta (sin imagen en base64) ──────────────
-
-  private formatTicketResponse(ticket: any) {
+  // ─── Formatear respuesta (opcionalmente incluir imagen en base64)
+  private formatTicketResponse(ticket: any, opts?: { includeImage?: boolean; includeRawOcr?: boolean }) {
     const t = ticket.toObject ? ticket.toObject() : ticket;
+    const includeImage = opts?.includeImage ?? false;
+    const includeRawOcr = opts?.includeRawOcr ?? false;
+
     const { imagenBase64, ocrTextoRaw, ...rest } = t;
-    return {
+
+    const base = {
       ...rest,
       hasImage: !!imagenBase64,
-    };
+    } as any;
+
+    if (includeImage && imagenBase64) base.imagenBase64 = imagenBase64;
+    if (includeRawOcr && ocrTextoRaw) base.ocrTextoRaw = ocrTextoRaw;
+
+    return base;
   }
 }

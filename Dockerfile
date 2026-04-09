@@ -1,28 +1,45 @@
-FROM node:22-bookworm-slim
+## ─── Stage 1: Build ───────────────────────────────────────────
+FROM node:22-bookworm-slim AS builder
 
-# Create app directory
 WORKDIR /usr/src/app
 
-# Use development environment by default
-ENV NODE_ENV=development
-
-# Install build deps for some native modules if required by dev tooling
+# Install native build dependencies (sharp, etc.)
 RUN apt-get update \
-  && apt-get upgrade -y \
   && apt-get install -y --no-install-recommends \
     build-essential python3 make g++ ca-certificates git \
     libvips-dev libvips-tools libjpeg-dev libpng-dev libcairo2-dev \
   && rm -rf /var/lib/apt/lists/*
 
-# Copy package files and install dependencies (including devDeps for nodemon/ts-node)
+# Install all dependencies (including devDeps for nest build)
 COPY package.json package-lock.json* ./
 RUN npm ci --silent
 
-# Copy rest of the sources
+# Copy sources and build
 COPY . .
+RUN npm run build
 
-# Expose default port
+# Prune dev dependencies — keep only production deps
+RUN npm prune --production
+
+## ─── Stage 2: Production ─────────────────────────────────────
+FROM node:22-bookworm-slim
+
+WORKDIR /usr/src/app
+
+ENV NODE_ENV=production
+ENV NODE_OPTIONS=--max-old-space-size=512
+
+# Runtime libraries only (no compilers)
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates libvips42 libjpeg62-turbo libpng16-16 libcairo2 \
+  && rm -rf /var/lib/apt/lists/*
+
+# Copy built app + production node_modules from builder
+COPY --from=builder /usr/src/app/dist ./dist
+COPY --from=builder /usr/src/app/node_modules ./node_modules
+COPY --from=builder /usr/src/app/package.json ./package.json
+
 EXPOSE 3000
 
-# Default command for development: nodemon (script `start:dev` uses nodemon)
-CMD ["npm", "run", "start:dev"]
+CMD ["node", "dist/main"]
