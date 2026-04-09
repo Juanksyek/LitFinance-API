@@ -3,10 +3,6 @@ FROM node:22-bookworm-slim
 
 WORKDIR /usr/src/app
 
-# NODE_ENV se pone en production DESPUÉS del build para que npm ci
-# instale también las devDependencies (nest cli, ts, etc.) necesarias.
-ENV NODE_OPTIONS=--max-old-space-size=512
-
 # Native build deps (needed by sharp, canvas, etc.)
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
@@ -18,7 +14,7 @@ RUN apt-get update \
 COPY package.json package-lock.json* ./
 RUN npm ci --silent
 
-# Copy sources and build
+# Copy sources and build (sin NODE_OPTIONS para que tsc tenga memoria suficiente)
 COPY . .
 RUN npm run build
 
@@ -29,4 +25,5 @@ ENV NODE_ENV=production
 
 EXPOSE 3000
 
-CMD ["node", "dist/main"]
+# NODE_OPTIONS solo aplica al proceso runtime, no al build
+CMD ["node", "--max-old-space-size=512", "dist/main"]
