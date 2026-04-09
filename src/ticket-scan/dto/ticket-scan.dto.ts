@@ -68,8 +68,9 @@ export class LocalOcrDto {
 
 export class CreateTicketFromOcrDto {
   /** Imagen del ticket en base64 (sin prefijo data:...) */
+  @IsOptional()
   @IsString()
-  imagenBase64: string;
+  imagenBase64?: string;
 
   /** MIME type: image/jpeg, image/png */
   @IsOptional()
