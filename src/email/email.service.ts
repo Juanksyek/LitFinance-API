@@ -147,10 +147,9 @@ export class EmailService {
                 <p style="text-align:center; margin:22px 0;">
                   <a href="${confirmUrl}" class="button">Confirmar cuenta</a>
                 </p>
-                <p class="small">Este enlace expirará en 30 minutos. Si tienes problemas, copia y pega la siguiente URL en tu navegador:</p>
-                <p class="small" style="word-break:break-all;">${confirmUrl}</p>
+                <p class="small">Este enlace expirará en 30 minutos.</p>
               </div>
-              <div class="footer">¿Necesitas ayuda? Responde este correo o visita nuestra ayuda en línea.</div>
+              <div class="footer">¿Necesitas ayuda? Contáctanos mediante este correo: jc_haran@hotmail.com</div>
             </div>
           </div>
         </body>
