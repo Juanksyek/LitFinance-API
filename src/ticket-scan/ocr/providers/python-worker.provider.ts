@@ -27,8 +27,8 @@ export class PythonOcrWorkerProvider implements IOcrProvider {
   }
 
   isEnabled(): boolean {
-    // Habilitado si la URL está configurada (o si hay un worker local corriendo)
-    return !!process.env.OCR_WORKER_URL;
+    // Always try — if the worker is unreachable axios will fail gracefully
+    return true;
   }
 
   async extract(base64Image: string, mimeType: string, clientOcrText?: string): Promise<OcrProviderResult[]> {
