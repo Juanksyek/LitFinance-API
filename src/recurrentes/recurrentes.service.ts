@@ -16,6 +16,7 @@ import { ConversionService } from '../utils/services/conversion.service';
 import { UserService } from '../user/user.service';
 import { PlanConfigService } from '../plan-config/plan-config.service';
 import { DashboardVersionService } from '../user/services/dashboard-version.service';
+import { PlanAutoPauseService } from '../user/services/plan-auto-pause.service';
 
 @Injectable()
 export class RecurrentesService {
@@ -32,6 +33,7 @@ export class RecurrentesService {
     private readonly userService: UserService,
     private readonly planConfigService: PlanConfigService,
     private readonly dashboardVersionService: DashboardVersionService,
+    private readonly planAutoPauseService: PlanAutoPauseService,
   ) {}
 
   async crear(dto: CrearRecurrenteDto, userId: string): Promise<Recurrente> {
@@ -338,6 +340,16 @@ export class RecurrentesService {
     if (res.deletedCount > 0) {
 
       await this.dashboardVersionService.touchDashboard(recurrente.userId, 'recurrente.delete');
+
+      // Re-enforce plan limits so recurrentes pausadoPorPlan fill the freed slot
+      try {
+        const user = await this.userService.getProfile(recurrente.userId);
+        const planType = (user as any).planType === 'premium_plan' ? 'premium_plan' : 'free_plan';
+        await this.planAutoPauseService.enforcePlanLimits(recurrente.userId, planType, 'recurrente.delete');
+      } catch (_) {
+        // Best-effort — don't fail the delete if enforcement fails
+      }
+
       return {
         eliminado: true,
         mensaje: `El recurrente con ID ${recurrenteId} fue eliminado correctamente.`,
