@@ -38,7 +38,6 @@ services:
   # ── 2. NestJS API ────────────────────────────
   api:
     build: .
-    command: npm run start:dev
     container_name: litfinance-api
     ports:
       - '3001:3000'
