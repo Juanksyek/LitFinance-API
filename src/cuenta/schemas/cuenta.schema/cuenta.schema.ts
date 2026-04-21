@@ -28,6 +28,14 @@ export class Cuenta {
 
   @Prop({ default: true })
   isPrincipal: boolean;
+
+  /** Permite que esta cuenta entre en saldo negativo (sobregiro) */
+  @Prop({ default: false })
+  allowOverdraft?: boolean;
+
+  /** Límite máximo de sobregiro (valor positivo). Si se establece, el saldo no podrá bajar de -overdraftLimit */
+  @Prop({ default: null })
+  overdraftLimit?: number | null;
 }
 
 export const CuentaSchema = SchemaFactory.createForClass(Cuenta);
