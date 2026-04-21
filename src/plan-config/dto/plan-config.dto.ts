@@ -20,48 +20,65 @@ export class CreatePlanConfigDto {
   @Min(0)
   subcuentasPorUsuario: number;
 
+  @IsInt()
+  @Min(-1)
+  tarjetasPorUsuario: number;
+
   @IsBoolean()
   graficasAvanzadas: boolean;
 
-  @IsBoolean()
   @IsOptional()
+  @IsBoolean()
   reportesExportables?: boolean;
 
-  @IsBoolean()
   @IsOptional()
+  @IsBoolean()
   activo?: boolean;
+  
+    @IsBoolean()
+    @IsOptional()
+    allowOverdraft?: boolean;
 }
 
 export class UpdatePlanConfigDto {
+  @IsOptional()
   @IsInt()
   @Min(1)
-  @IsOptional()
   transaccionesPorDia?: number;
 
+  @IsOptional()
   @IsInt()
   @Min(1)
-  @IsOptional()
   historicoLimitadoDias?: number;
 
+  @IsOptional()
   @IsInt()
   @Min(0)
-  @IsOptional()
   recurrentesPorUsuario?: number;
 
+  @IsOptional()
   @IsInt()
   @Min(0)
-  @IsOptional()
   subcuentasPorUsuario?: number;
 
-  @IsBoolean()
   @IsOptional()
+  @IsInt()
+  @Min(-1)
+  tarjetasPorUsuario?: number;
+
+  @IsOptional()
+  @IsBoolean()
   graficasAvanzadas?: boolean;
 
-  @IsBoolean()
   @IsOptional()
+  @IsBoolean()
   reportesExportables?: boolean;
 
-  @IsBoolean()
   @IsOptional()
+  @IsBoolean()
   activo?: boolean;
+  
+    @IsOptional()
+    @IsBoolean()
+    allowOverdraft?: boolean;
 }
