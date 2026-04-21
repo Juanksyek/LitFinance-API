@@ -52,6 +52,14 @@ export class Subcuenta {
   @Prop({ default: false })
   pausadaPorPlan?: boolean;
 
+  /** Permite que esta subcuenta entre en saldo negativo (sobregiro) */
+  @Prop({ default: false })
+  allowOverdraft?: boolean;
+
+  /** Límite máximo de sobregiro para la subcuenta (valor positivo). Si se establece, el saldo no podrá bajar de -overdraftLimit */
+  @Prop({ default: null })
+  overdraftLimit?: number | null;
+
   // Campos de conversión (se calculan cuando afectaCuenta=true y moneda != monedaPrincipal del usuario)
   @Prop()
   montoConvertido?: number; // Monto convertido a monedaPrincipal del usuario
