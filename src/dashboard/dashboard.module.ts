@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
@@ -17,6 +17,7 @@ import { SharedSpace, SharedSpaceSchema } from '../shared/schemas/shared-space.s
 import { SharedInvitation, SharedInvitationSchema } from '../shared/schemas/shared-invitation.schema';
 import { SharedNotification, SharedNotificationSchema } from '../shared/schemas/shared-notification.schema';
 import { SharedMovement, SharedMovementSchema } from '../shared/schemas/shared-movement.schema';
+import { CreditCardModule } from '../credit-card/credit-card.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { SharedMovement, SharedMovementSchema } from '../shared/schemas/shared-m
     PlanConfigModule,
     CuentaHistorialModule,
     AuthModule,
+    forwardRef(() => CreditCardModule),
   ],
   controllers: [DashboardController],
   providers: [DashboardService, DashboardRateLimitService],
