@@ -124,6 +124,8 @@ export class TransactionsService {
       ...guardada.toObject(),
       motivo: dto.motivo,
       concepto: dto.concepto,
+      // Propagar allowOverdraft para que aplicarBalances pueda respetarlo
+      allowOverdraft: (dto as any).allowOverdraft === true,
     };
 
     const balanceResult = await this.aplicarBalances(txObj, 1);
@@ -386,10 +388,7 @@ export class TransactionsService {
       const cuenta = await this.cuentaModel.findOne({ id: cuentaId, userId });
       if (!cuenta) throw new NotFoundException('Cuenta principal no encontrada');
 
-      if (deltaCuenta < 0 && cuenta.cantidad + deltaCuenta < 0) {
-        throw new BadRequestException(`No puede retirar más de ${cuenta.cantidad} desde la cuenta principal.`);
-      }
-
+      // Permitir saldo negativo: no lanzamos excepción por saldo insuficiente.
       await this.cuentaModel.updateOne({ id: cuentaId, userId }, { $inc: { cantidad: deltaCuenta } });
 
       // Restore subcuenta (only if conversionSubcuenta exists)
@@ -401,12 +400,7 @@ export class TransactionsService {
 
         // montoDestino ya viene con signo (ingreso +, egreso -). Para eliminar, se revierte.
         const deltaSubcuenta = -Number(conversionSubcuenta.montoDestino);
-        if (deltaSubcuenta < 0 && subcuenta.cantidad + deltaSubcuenta < 0) {
-          throw new BadRequestException(
-            `No puede retirar más de ${subcuenta.cantidad} desde la subcuenta "${subcuenta.nombre}".`
-          );
-        }
-
+        // Permitir saldo negativo en subcuenta: aplicar cambio aunque quede negativo.
         await this.subcuentaModel.updateOne(
           { subCuentaId: subcuentaId, userId },
           { $inc: { cantidad: deltaSubcuenta } },
@@ -590,12 +584,7 @@ export class TransactionsService {
 
       const montoAjustadoSubcuenta = signo * montoSubcuentaAbs;
 
-      if (montoAjustadoSubcuenta < 0 && subcuenta.cantidad + montoAjustadoSubcuenta < 0) {
-        throw new BadRequestException(
-          `No puede retirar más de ${subcuenta.cantidad} desde la subcuenta "${subcuenta.nombre}".`
-        );
-      }
-
+      // Permitir saldo negativo en subcuenta: aplicar ajuste aunque deje saldo negativo
       await this.subcuentaModel.updateOne(
         { subCuentaId: t.subCuentaId, userId: t.userId },
         { $inc: { cantidad: montoAjustadoSubcuenta } }
@@ -645,12 +634,7 @@ export class TransactionsService {
 
         const montoAjustadoCuenta = signo * montoCuentaAbs;
 
-        if (montoAjustadoCuenta < 0 && cuenta.cantidad + montoAjustadoCuenta < 0) {
-          throw new BadRequestException(
-            `No puede retirar más de ${cuenta.cantidad} desde la cuenta principal, ya que parte del saldo está reservado en subcuentas.`
-          );
-        }
-
+        // Permitir saldo negativo en cuenta principal: aplicamos el cambio aunque deje saldo negativo.
         await this.cuentaModel.updateOne(
           { id: cuentaId, userId: t.userId },
           { $inc: { cantidad: montoAjustadoCuenta } }
@@ -710,10 +694,7 @@ export class TransactionsService {
 
       const montoAjustadoCuenta = signo * montoCuentaAbs;
 
-      if (montoAjustadoCuenta < 0 && cuenta.cantidad + montoAjustadoCuenta < 0) {
-        throw new BadRequestException(`No puede retirar más de ${cuenta.cantidad} desde la cuenta principal.`);
-      }
-
+      // Permitir saldo negativo en cuenta principal: aplicamos el cambio aunque deje saldo negativo.
       await this.cuentaModel.updateOne(
         { id: t.cuentaId, userId: t.userId },
         { $inc: { cantidad: montoAjustadoCuenta } }
@@ -809,12 +790,7 @@ export class TransactionsService {
 
       const montoAjustadoSubcuenta = signo * montoSubcuenta;
   
-      if (t.tipo === 'egreso' && subcuenta.cantidad + montoAjustadoSubcuenta < 0) {
-        throw new BadRequestException(
-          `No puede retirar más de ${subcuenta.cantidad} desde la subcuenta "${subcuenta.nombre}".`
-        );
-      }
-  
+      // Permitir saldo negativo en subcuenta: aplicar ajuste aunque deje saldo negativo
       await this.subcuentaModel.updateOne(
         { subCuentaId: t.subCuentaId, userId: t.userId },
         { $inc: { cantidad: montoAjustadoSubcuenta } }
@@ -853,12 +829,7 @@ export class TransactionsService {
 
         const montoAjustadoCuenta = signo * montoCuenta;
   
-        if (t.tipo === 'egreso' && cuenta.cantidad + montoAjustadoCuenta < 0) {
-          throw new BadRequestException(
-            `No puede retirar más de ${cuenta.cantidad} desde la cuenta principal, ya que parte del saldo está reservado en subcuentas.`
-          );
-        }
-  
+        // Permitir saldo negativo en cuenta principal: aplicar ajuste aunque deje saldo negativo
         await this.cuentaModel.updateOne(
           { id: subcuenta.cuentaId, userId: t.userId },
           { $inc: { cantidad: montoAjustadoCuenta } }
@@ -924,12 +895,7 @@ export class TransactionsService {
 
       const montoAjustadoCuenta = signo * montoCuenta;
   
-      if (t.tipo === 'egreso' && cuenta.cantidad + montoAjustadoCuenta < 0) {
-        throw new BadRequestException(
-          `No puede retirar más de ${cuenta.cantidad} desde la cuenta principal.`
-        );
-      }
-  
+      // Permitir saldo negativo en cuenta principal: aplicar ajuste aunque deje saldo negativo
       await this.cuentaModel.updateOne(
         { id: t.cuentaId, userId: t.userId },
         { $inc: { cantidad: montoAjustadoCuenta } }

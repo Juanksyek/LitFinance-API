@@ -484,14 +484,7 @@ export class RecurrentesService {
             tasaConversionSubcuenta = conversion.tasaConversion;
           }
 
-          // Verificar saldo suficiente
-          if (subcuenta.cantidad < montoConvertidoSubcuenta) {
-            throw new BadRequestException(
-              `Saldo insuficiente en subcuenta "${subcuenta.nombre}". Disponible: ${subcuenta.cantidad} ${subcuenta.moneda}, Requerido: ${montoConvertidoSubcuenta} ${subcuenta.moneda}`
-            );
-          }
-
-          // Descontar de subcuenta
+          // Descontar de subcuenta (permitir que el saldo quede negativo si es necesario)
           await this.subcuentaModel.updateOne(
             { subCuentaId: r.subcuentaId, userId: r.userId },
             { $inc: { cantidad: -montoConvertidoSubcuenta } }
@@ -522,14 +515,7 @@ export class RecurrentesService {
             tasaConversionCuenta = conversion.tasaConversion;
           }
 
-          // Verificar saldo suficiente
-          if (cuentaDoc.cantidad < montoConvertidoCuenta) {
-            throw new BadRequestException(
-              `Saldo insuficiente en cuenta principal. Disponible: ${cuentaDoc.cantidad} ${cuentaDoc.moneda}, Requerido: ${montoConvertidoCuenta} ${cuentaDoc.moneda}`
-            );
-          }
-
-          // Descontar de cuenta principal
+          // Descontar de cuenta principal (permitir que el saldo quede negativo si es necesario)
           await this.cuentaModel.updateOne(
             { id: cuenta.id, userId: r.userId },
             { $inc: { cantidad: -montoConvertidoCuenta } }

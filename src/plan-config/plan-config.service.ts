@@ -61,15 +61,20 @@ export class PlanConfigService {
         historicoLimitadoDias: 30,
         recurrentesPorUsuario: 3,
         subcuentasPorUsuario: 2,
+        tarjetasPorUsuario: 1,
         graficasAvanzadas: false,
         reportesExportables: false,
         activo: true,
+        allowOverdraft: false,
       });
     } else {
       // Backfill campos nuevos en planes existentes
       const needsBackfill = (freePlan as any).reportesExportables == null;
       if (needsBackfill) {
-        await this.update('free_plan', { reportesExportables: false } as any);
+        await this.update('free_plan', { reportesExportables: false, allowOverdraft: false } as any);
+      }
+      if ((freePlan as any).tarjetasPorUsuario == null) {
+        await this.update('free_plan', { tarjetasPorUsuario: 1 } as any);
       }
     }
 
@@ -82,14 +87,19 @@ export class PlanConfigService {
         historicoLimitadoDias: -1, // -1 significa ilimitado
         recurrentesPorUsuario: -1, // -1 significa ilimitado
         subcuentasPorUsuario: -1, // -1 significa ilimitado
+        tarjetasPorUsuario: -1, // -1 significa ilimitado
         graficasAvanzadas: true,
         reportesExportables: true,
         activo: true,
+        allowOverdraft: true,
       });
     } else {
       const needsBackfill = (premiumPlan as any).reportesExportables == null;
       if (needsBackfill) {
-        await this.update('premium_plan', { reportesExportables: true } as any);
+        await this.update('premium_plan', { reportesExportables: true, allowOverdraft: true } as any);
+      }
+      if ((premiumPlan as any).tarjetasPorUsuario == null) {
+        await this.update('premium_plan', { tarjetasPorUsuario: -1 } as any);
       }
     }
   }

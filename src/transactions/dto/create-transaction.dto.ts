@@ -45,4 +45,13 @@ export class CreateTransactionDto {
   // Optional metadata bag that can be used by services (e.g., { skipHistorial: true })
   @IsOptional()
   metadata?: Record<string, any>;
+
+  /**
+   * Permite que la transacción provoque saldo negativo en la cuenta/subcuenta.
+   * Cuando es `true` se omiten las validaciones de "saldo insuficiente" y
+   * se aplican los cambios aun si el resultado es negativo.
+   */
+  @IsOptional()
+  @IsBoolean()
+  allowOverdraft?: boolean;
 }

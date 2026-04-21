@@ -20,6 +20,9 @@ export class PlanConfig {
   @Prop({ required: true, default: 2 })
   subcuentasPorUsuario: number;
 
+  @Prop({ required: true, default: 1 })
+  tarjetasPorUsuario: number;
+
   @Prop({ required: true, default: false })
   graficasAvanzadas: boolean;
 
@@ -28,6 +31,9 @@ export class PlanConfig {
 
   @Prop({ default: true })
   activo: boolean;
+
+  @Prop({ required: true, default: false })
+  allowOverdraft: boolean;
 }
 
 export const PlanConfigSchema = SchemaFactory.createForClass(PlanConfig);
