@@ -14,6 +14,7 @@ import { SharedSpace, SharedSpaceDocument } from '../shared/schemas/shared-space
 import { SharedInvitation, SharedInvitationDocument } from '../shared/schemas/shared-invitation.schema';
 import { SharedNotification, SharedNotificationDocument } from '../shared/schemas/shared-notification.schema';
 import { SharedMovement, SharedMovementDocument } from '../shared/schemas/shared-movement.schema';
+import { CreditCardService } from '../credit-card/credit-card.service';
 
 type SnapshotRange = 'day' | 'week' | 'month' | '3months' | '6months' | 'year' | 'all';
 
@@ -66,6 +67,7 @@ export class DashboardService {
     @InjectModel(SharedInvitation.name) private readonly sharedInvitationModel: Model<SharedInvitationDocument>,
     @InjectModel(SharedNotification.name) private readonly sharedNotificationModel: Model<SharedNotificationDocument>,
     @InjectModel(SharedMovement.name) private readonly sharedMovementModel: Model<SharedMovementDocument>,
+    private readonly creditCardService: CreditCardService,
   ) {}
 
   async getDashboardVersion(userId: string): Promise<string> {
@@ -311,6 +313,7 @@ export class DashboardService {
       recurrentesTotalsAgg,
       sharedData,
       conceptoBreakdownAgg,
+      creditCardsSummary,
     ] = await Promise.all([
       this.cuentaModel
         .findOne({ userId, isPrincipal: true })
@@ -502,6 +505,9 @@ export class DashboardService {
           { $sort: { total: -1 } },
         ])
         .exec(),
+
+      // Resumen de tarjetas de crédito
+      this.creditCardService.obtenerResumenDashboard(userId).catch(() => null),
     ]);
 
     // Enforzar (en respuesta) qué recursos deben considerarse pausados por plan.
@@ -635,6 +641,7 @@ export class DashboardService {
           items: [
             toLimitItem('subcuentas', 'Subcuentas', planConfig?.subcuentasPorUsuario),
             toLimitItem('recurrentes', 'Recurrentes', planConfig?.recurrentesPorUsuario),
+            toLimitItem('tarjetas', 'Tarjetas de crédito', (planConfig as any)?.tarjetasPorUsuario),
             toLimitItem('transaccionesPorDia', 'Transacciones por día', planConfig?.transaccionesPorDia),
             toLimitItem('historicoLimitadoDias', 'Histórico (días)', planConfig?.historicoLimitadoDias),
           ],
@@ -749,6 +756,7 @@ export class DashboardService {
         })),
       },
       sharedSpacesSummary: sharedData,
+      creditCardsSummary: creditCardsSummary ?? { total: 0, totalLimiteCredito: 0, totalSaldoUsado: 0, totalSaldoDisponible: 0, utilizacionPromedio: 0, saludGeneral: 'excelente', tarjetas: [] },
       conceptoBreakdown: (() => {
         // Build two maps: egresos and ingresos, keyed by concepto
         const egresoMap: Record<string, { total: number; maxPrecio: number; count: number }> = {};
