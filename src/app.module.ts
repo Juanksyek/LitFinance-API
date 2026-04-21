@@ -30,6 +30,7 @@ import { BlocsModule } from './blocs/blocs.module';
 import { TransferenciasModule } from './transferencias/transferencias.module';
 import { SharedModule } from './shared/shared.module';
 import { TicketScanModule } from './ticket-scan/ticket-scan.module';
+import { CreditCardModule } from './credit-card/credit-card.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { TicketScanModule } from './ticket-scan/ticket-scan.module';
     TransferenciasModule,
     SharedModule,
     TicketScanModule,
+    CreditCardModule,
   ],
   controllers: [AppController],
   providers: [
