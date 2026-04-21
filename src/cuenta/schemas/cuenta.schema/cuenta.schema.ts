@@ -34,7 +34,7 @@ export class Cuenta {
   allowOverdraft?: boolean;
 
   /** Límite máximo de sobregiro (valor positivo). Si se establece, el saldo no podrá bajar de -overdraftLimit */
-  @Prop({ default: null })
+  @Prop({ type: Number, default: null })
   overdraftLimit?: number | null;
 }
 
