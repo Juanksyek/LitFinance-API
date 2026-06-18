@@ -17,6 +17,8 @@ import { PasswordResetController } from './password-reset.controller';
 import { AccountDeletion, AccountDeletionSchema } from './schemas/account-deletion.schema';
 import { AccountDeletionService } from './account-deletion.service';
 import { AccountDeletionController } from './account-deletion.controller';
+import { AccountResetController } from './account-reset.controller';
+import { AccountResetService } from './account-reset.service';
 
 // Schemas necesarios para cascade delete
 import { Cuenta, CuentaSchema } from '../cuenta/schemas/cuenta.schema/cuenta.schema';
@@ -33,6 +35,8 @@ import { InternalTransfer, InternalTransferSchema } from '../goals/schemas/inter
 import { TicketScan, TicketScanSchema } from '../ticket-scan/schemas/ticket-scan.schema';
 import { DispositivoUsuario, DispositivoUsuarioSchema } from '../notificaciones/schemas/dispositivo-usuario.schema';
 import { SupportTicket, SupportTicketSchema } from '../reports/schemas/support-ticket.schema';
+import { CreditCard, CreditCardSchema } from '../credit-card/schemas/credit-card.schema';
+import { Moneda, MonedaSchema } from '../moneda/schema/moneda.schema';
 
 @Module({
   imports: [
@@ -56,6 +60,8 @@ import { SupportTicket, SupportTicketSchema } from '../reports/schemas/support-t
       { name: TicketScan.name, schema: TicketScanSchema },
       { name: DispositivoUsuario.name, schema: DispositivoUsuarioSchema },
       { name: SupportTicket.name, schema: SupportTicketSchema },
+      { name: CreditCard.name, schema: CreditCardSchema },
+      { name: Moneda.name, schema: MonedaSchema },
     ]),
     EmailModule,
     CuentaModule,
@@ -68,8 +74,20 @@ import { SupportTicket, SupportTicketSchema } from '../reports/schemas/support-t
       }),
     }),
   ],
-  controllers: [AuthController, ActivationController, PasswordResetController, AccountDeletionController],
-  providers: [AuthService, JwtStrategy, PasswordResetService, AccountDeletionService],
+  controllers: [
+    AuthController,
+    ActivationController,
+    PasswordResetController,
+    AccountDeletionController,
+    AccountResetController,
+  ],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    PasswordResetService,
+    AccountDeletionService,
+    AccountResetService,
+  ],
   exports: [AuthService],
 })
 export class AuthModule {}
