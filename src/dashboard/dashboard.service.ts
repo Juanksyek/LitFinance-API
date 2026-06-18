@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from '../user/schemas/user.schema/user.schema';
+import { RedisService } from '../redis/redis.service';
 import { Cuenta, CuentaDocument } from '../cuenta/schemas/cuenta.schema/cuenta.schema';
 import { Subcuenta, SubcuentaDocument } from '../subcuenta/schemas/subcuenta.schema/subcuenta.schema';
 import { Meta, MetaDocument } from '../goals/schemas/meta.schema';
@@ -43,16 +44,13 @@ type SnapshotOptions = {
   sharedMovementsLimit?: number;
 };
 
-type Cached = {
-  expiresAt: number;
-  data: any;
-};
+/** TTL (seconds) for cached dashboard snapshots stored in Redis. */
+const SNAPSHOT_TTL_S = 120;
+/** TTL (seconds) for cached dashboard version stored in Redis. */
+const VERSION_TTL_S = 30;
 
 @Injectable()
 export class DashboardService {
-  private readonly microCache = new Map<string, Cached>();
-  private readonly microCacheTtlMs = 3_000;
-
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(Cuenta.name) private readonly cuentaModel: Model<CuentaDocument>,
@@ -68,16 +66,26 @@ export class DashboardService {
     @InjectModel(SharedNotification.name) private readonly sharedNotificationModel: Model<SharedNotificationDocument>,
     @InjectModel(SharedMovement.name) private readonly sharedMovementModel: Model<SharedMovementDocument>,
     private readonly creditCardService: CreditCardService,
+    private readonly redis: RedisService,
   ) {}
 
   async getDashboardVersion(userId: string): Promise<string> {
+    const redisKey = `lf:version:${userId}`;
+
+    // Fast path: version is cached in Redis
+    const cached = await this.redis.get<string>(redisKey);
+    if (cached !== null) return cached;
+
+    // Slow path: read from MongoDB and cache for VERSION_TTL_S seconds
     const u = await this.userModel
       .findOne({ id: userId })
       .select('dashboardVersion')
       .lean();
 
     const versionNum = Number((u as any)?.dashboardVersion ?? 0);
-    return String(versionNum);
+    const version = String(versionNum);
+    await this.redis.set(redisKey, version, VERSION_TTL_S);
+    return version;
   }
 
   private resolveRange(opts?: SnapshotOptions): { range: SnapshotRange; start: Date; end: Date; isCustom: boolean } {
@@ -255,12 +263,11 @@ export class DashboardService {
     const tipo = opts?.tipoTransaccion ?? 'ambos';
     const moneda = (opts?.moneda ?? '').trim();
     const customKey = isCustom ? `${opts?.fechaInicio ?? ''}_${opts?.fechaFin ?? ''}` : '';
-    const cacheKey = `${userId}:${version}:${range}:${customKey}:tipo:${tipo}:moneda:${moneda}:tx:${recentLimit}:${recentPage}:sub:${subaccountsLimit}:${subaccountsPage}:rec:${recurrentesLimit}:${recurrentesPage}`;
-    const cached = this.microCache.get(cacheKey);
-    const nowMs = Date.now();
-    if (cached && nowMs < cached.expiresAt) {
-      return cached.data;
-    }
+    const snapshotSuffix = `${version}:${range}:${customKey}:tipo:${tipo}:moneda:${moneda}:tx:${recentLimit}:${recentPage}:sub:${subaccountsLimit}:${subaccountsPage}:rec:${recurrentesLimit}:${recurrentesPage}`;
+    const redisSnapKey = `lf:snap:${userId}:${snapshotSuffix}`;
+
+    const cachedSnap = await this.redis.get<any>(redisSnapKey);
+    if (cachedSnap !== null) return cachedSnap;
 
     const user = await this.userModel
       .findOne({ id: userId })
@@ -783,7 +790,8 @@ export class DashboardService {
       })(),
     };
 
-    this.microCache.set(cacheKey, { expiresAt: nowMs + this.microCacheTtlMs, data: snapshot });
+    // Store in Redis; fire-and-forget (don't block the response)
+    void this.redis.set(redisSnapKey, snapshot, SNAPSHOT_TTL_S);
     return snapshot;
   }
 

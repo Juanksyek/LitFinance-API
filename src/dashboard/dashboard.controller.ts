@@ -132,7 +132,7 @@ export class DashboardController {
       throw new UnauthorizedException();
     }
 
-    const rl = this.rateLimit.check(String(userId));
+    const rl = await this.rateLimit.check(String(userId));
     if (!rl.allowed) {
       res.setHeader('Retry-After', String(rl.retryAfterSeconds));
       return res.status(HttpStatus.TOO_MANY_REQUESTS).json({
@@ -170,7 +170,7 @@ export class DashboardController {
       throw new UnauthorizedException();
     }
 
-    const rl = this.rateLimit.check(String(userId));
+    const rl = await this.rateLimit.check(String(userId));
     if (!rl.allowed) {
       res.setHeader('Retry-After', String(rl.retryAfterSeconds));
       return res.status(HttpStatus.TOO_MANY_REQUESTS).json({
@@ -200,7 +200,7 @@ export class DashboardController {
       throw new UnauthorizedException();
     }
 
-    const rl = this.rateLimit.check(String(userId));
+    const rl = await this.rateLimit.check(String(userId));
     if (!rl.allowed) {
       res.setHeader('Retry-After', String(rl.retryAfterSeconds));
       return res.status(HttpStatus.TOO_MANY_REQUESTS).json({
@@ -246,7 +246,7 @@ export class DashboardController {
     }
 
     // User-based rate limit (suave) solo para este endpoint
-    const rl = this.rateLimit.check(String(userId));
+    const rl = await this.rateLimit.check(String(userId));
     if (!rl.allowed) {
       res.setHeader('Retry-After', String(rl.retryAfterSeconds));
       return res.status(HttpStatus.TOO_MANY_REQUESTS).json({
