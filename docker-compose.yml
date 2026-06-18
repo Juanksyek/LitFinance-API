@@ -41,8 +41,10 @@ services:
     container_name: litfinance-api
     ports:
       - '3001:3000'
+    command: sh -c "npm install --legacy-peer-deps && npm run start:dev"
     environment:
       - NODE_ENV=development
+      - REDIS_URL=redis://redis:6379
       # Nombre de servicio Docker = hostname interno en la red del compose
       - OCR_WORKER_URL=http://ocr-worker:8100
       # Uncomment to enable server-side auth diagnostics added earlier
@@ -53,6 +55,7 @@ services:
       - ./:/usr/src/app:cached
       - /usr/src/app/node_modules
     depends_on:
+      - redis
       - mongo
       - ocr-worker
     tty: true
@@ -66,6 +69,18 @@ services:
     volumes:
       - mongo_data:/data/db
 
+  # ── 4. Redis (caché) ─────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: litfinance-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+
 volumes:
   mongo_data:
   paddle_models:
+  redis_data:
