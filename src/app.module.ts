@@ -5,6 +5,7 @@ import { ThrottlerModule, ThrottlerGuard, seconds } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { RedisModule } from './redis/redis.module';
+import { CommonModule } from './common/common.module';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -26,16 +27,19 @@ import { ReportsModule } from './reports/reports.module';
 import { StripeModule } from './stripe/stripe.module';
 import { PlanConfigModule } from './plan-config/plan-config.module';
 import { DashboardModule } from './dashboard/dashboard.module';
-//import { VersionModule } from './version/version.module';
+import { VersionModule } from './version/version.module';
 import { BlocsModule } from './blocs/blocs.module';
 import { TransferenciasModule } from './transferencias/transferencias.module';
 import { SharedModule } from './shared/shared.module';
 import { TicketScanModule } from './ticket-scan/ticket-scan.module';
 import { CreditCardModule } from './credit-card/credit-card.module';
+import { HealthModule } from './health/health.module';
+import { MobileModule } from './mobile/mobile.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    CommonModule,
     RedisModule,
     MongooseModule.forRoot(process.env.MONGO_URI!),
     ScheduleModule.forRoot(),
@@ -64,12 +68,14 @@ import { CreditCardModule } from './credit-card/credit-card.module';
     StripeModule,
     PlanConfigModule,
     DashboardModule,
-    // VersionModule,
+    VersionModule,
     BlocsModule,
     TransferenciasModule,
     SharedModule,
     TicketScanModule,
     CreditCardModule,
+    HealthModule,
+    MobileModule,
   ],
   controllers: [AppController],
   providers: [

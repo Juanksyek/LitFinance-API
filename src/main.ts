@@ -1,7 +1,12 @@
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import * as bodyParser from 'body-parser';
 import { PlanConfigService } from './plan-config/plan-config.service';
+import { ApiExceptionFilter } from './common/http/api-exception.filter';
+import { ApiResponseInterceptor } from './common/http/api-response.interceptor';
+import { requestLoggingMiddleware } from './common/http/request-logging.middleware';
+import { requestIdMiddleware } from './common/http/request-id.middleware';
 
 async function bootstrap() {
   // IMPORTANT: Stripe webhook signature verification requires the raw body.
@@ -29,6 +34,22 @@ async function bootstrap() {
     if (req.originalUrl.startsWith('/stripe/webhook')) return next();
     return urlParser(req, res, next);
   });
+
+  app.use(requestIdMiddleware);
+  app.use(requestLoggingMiddleware);
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
+    }),
+  );
+  app.useGlobalInterceptors(new ApiResponseInterceptor());
+  app.useGlobalFilters(new ApiExceptionFilter());
 
   app.enableCors({
     origin: (origin, callback) => {
