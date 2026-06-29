@@ -1,12 +1,17 @@
-import { Controller, Get, Post, Body, Query, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Param, Delete, Req, UseGuards } from '@nestjs/common';
 import { CuentaHistorialService } from './cuenta-historial.service';
 import { CreateCuentaHistorialDto } from './dto/create-cuenta-historial.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { HistorialQueryDto } from './dto/historial-query.dto';
+import { SearchProtectionService } from '../common/services/search-protection.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('cuenta-historial')
 export class CuentaHistorialController {
-    constructor(private readonly historialService: CuentaHistorialService) { }
+    constructor(
+      private readonly historialService: CuentaHistorialService,
+      private readonly searchProtectionService: SearchProtectionService,
+    ) { }
 
     @Post()
     async registrar(@Body() dto: CreateCuentaHistorialDto) {
@@ -15,16 +20,20 @@ export class CuentaHistorialController {
 
     @Get()
     async buscar(
-        @Query('cuentaId') cuentaId: string,
-        @Query('page') page = 1,
-        @Query('limit') limit = 10,
-        @Query('search') search?: string
+        @Req() req,
+        @Query() query: HistorialQueryDto,
     ) {
+        await this.searchProtectionService.guard({
+            search: query.search,
+            tracker: String(req.user?.id ?? req.ip ?? 'anonymous'),
+            scope: 'cuenta-historial',
+        });
+
         return this.historialService.buscarHistorial(
-            cuentaId,
-            Number(page),
-            Number(limit),
-            search
+            query.cuentaId,
+            Number(query.page ?? 1),
+            Number(query.limit ?? 10),
+            query.search,
         );
     }
 
