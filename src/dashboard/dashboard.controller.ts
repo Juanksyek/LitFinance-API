@@ -4,6 +4,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { DashboardService } from './dashboard.service';
 import { DashboardRateLimitService } from './dashboard-rate-limit.service';
 import { AuthService } from '../auth/auth.service';
+import {
+  sendErrorResponse,
+  sendSuccessResponse,
+} from '../common/http/http-response.helper';
 
 @Controller('dashboard')
 export class DashboardController {
@@ -12,6 +16,21 @@ export class DashboardController {
     private readonly rateLimit: DashboardRateLimitService,
     private readonly authService: AuthService,
   ) {}
+
+  private respondRateLimited(
+    req: Request,
+    res: Response,
+    retryAfterSeconds: number,
+  ) {
+    return sendErrorResponse(req, res, {
+      statusCode: HttpStatus.TOO_MANY_REQUESTS,
+      retryAfterSeconds,
+      code: 'RATE_LIMITED',
+      message: 'Too Many Requests',
+      retryable: true,
+      path: req.url,
+    });
+  }
 
   private decodeJwtPayload(token: string): any | null {
     try {
@@ -134,13 +153,7 @@ export class DashboardController {
 
     const rl = await this.rateLimit.check(String(userId));
     if (!rl.allowed) {
-      res.setHeader('Retry-After', String(rl.retryAfterSeconds));
-      return res.status(HttpStatus.TOO_MANY_REQUESTS).json({
-        statusCode: 429,
-        code: 'RATE_LIMITED',
-        message: 'Too Many Requests',
-        retryAfterSeconds: rl.retryAfterSeconds,
-      });
+      return this.respondRateLimited(req, res, rl.retryAfterSeconds);
     }
 
     const safeRange = this.normalizeRange(range);
@@ -152,7 +165,7 @@ export class DashboardController {
       moneda,
     });
 
-    return res.status(HttpStatus.OK).json(payload);
+    return sendSuccessResponse(req, res, payload);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -172,13 +185,7 @@ export class DashboardController {
 
     const rl = await this.rateLimit.check(String(userId));
     if (!rl.allowed) {
-      res.setHeader('Retry-After', String(rl.retryAfterSeconds));
-      return res.status(HttpStatus.TOO_MANY_REQUESTS).json({
-        statusCode: 429,
-        code: 'RATE_LIMITED',
-        message: 'Too Many Requests',
-        retryAfterSeconds: rl.retryAfterSeconds,
-      });
+      return this.respondRateLimited(req, res, rl.retryAfterSeconds);
     }
 
     const safePeriodo = this.normalizePeriodoBalance(periodo) ?? 'mes';
@@ -187,7 +194,7 @@ export class DashboardController {
       moneda,
     });
 
-    return res.status(HttpStatus.OK).json(payload);
+    return sendSuccessResponse(req, res, payload);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -202,17 +209,11 @@ export class DashboardController {
 
     const rl = await this.rateLimit.check(String(userId));
     if (!rl.allowed) {
-      res.setHeader('Retry-After', String(rl.retryAfterSeconds));
-      return res.status(HttpStatus.TOO_MANY_REQUESTS).json({
-        statusCode: 429,
-        code: 'RATE_LIMITED',
-        message: 'Too Many Requests',
-        retryAfterSeconds: rl.retryAfterSeconds,
-      });
+      return this.respondRateLimited(req, res, rl.retryAfterSeconds);
     }
 
     const payload = await this.dashboardService.getTotals(String(userId));
-    return res.status(HttpStatus.OK).json(payload);
+    return sendSuccessResponse(req, res, payload);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -248,13 +249,7 @@ export class DashboardController {
     // User-based rate limit (suave) solo para este endpoint
     const rl = await this.rateLimit.check(String(userId));
     if (!rl.allowed) {
-      res.setHeader('Retry-After', String(rl.retryAfterSeconds));
-      return res.status(HttpStatus.TOO_MANY_REQUESTS).json({
-        statusCode: 429,
-        code: 'RATE_LIMITED',
-        message: 'Too Many Requests',
-        retryAfterSeconds: rl.retryAfterSeconds,
-      });
+      return this.respondRateLimited(req, res, rl.retryAfterSeconds);
     }
 
     // "Inicio de sesión perpetuo" (best-effort):
@@ -317,6 +312,6 @@ export class DashboardController {
       recurrentesPage: safeRecurrentesPage,
     });
 
-    return res.status(HttpStatus.OK).json(snapshot);
+    return sendSuccessResponse(req, res, snapshot, { etag, version });
   }
 }
