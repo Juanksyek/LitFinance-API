@@ -162,8 +162,9 @@ export class SubcuentaService {
       total,
       page,
       limit,
+      totalPages: total > 0 ? Math.ceil(total / limit) : 0,
       hasNextPage: end < total,
-      data: todos.slice(start, end),
+      items: todos.slice(start, end),
     };
   }
 
@@ -275,6 +276,8 @@ export class SubcuentaService {
   }
 
   async listar( userId: string, subCuentaId?: string, search = '', page = 1, limit = 10, incluirInactivas = true, excluirMeta = true ) {
+    const safePage = Math.max(1, Number(page || 1));
+    const safeLimit = Math.min(100, Math.max(1, Number(limit || 10)));
     const query: any = { userId };
   
     if (!incluirInactivas) {
@@ -290,14 +293,14 @@ export class SubcuentaService {
     if (subCuentaId) query.subCuentaId = subCuentaId;
     if (search) query.nombre = { $regex: search, $options: 'i' };
   
-    const skip = (page - 1) * limit;
+    const skip = (safePage - 1) * safeLimit;
     
     const [items, totalCount] = await Promise.all([
       this.subcuentaModel
         .find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(limit)
+        .limit(safeLimit)
         .lean(),
       this.subcuentaModel.countDocuments(query),
     ]);
@@ -319,7 +322,7 @@ export class SubcuentaService {
         totalCount,
         planLimit,
         planType,
-        currentPage: page,
+        currentPage: safePage,
         skip,
       });
       
@@ -353,11 +356,18 @@ export class SubcuentaService {
       // En caso de error, devolver items sin modificar
     }
     
-    return itemsWithPauseStatus;
+    return {
+      items: itemsWithPauseStatus,
+      total: totalCount,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: totalCount > 0 ? Math.ceil(totalCount / safeLimit) : 0,
+      hasNextPage: safePage * safeLimit < totalCount,
+    };
   }
 
-  async buscarPorSubCuentaId(subCuentaId: string) {
-    const resultado = await this.subcuentaModel.findOne({ subCuentaId }).lean();
+  async buscarPorSubCuentaId(subCuentaId: string, userId: string) {
+    const resultado = await this.subcuentaModel.findOne({ subCuentaId, userId }).lean();
     if (!resultado) {
       throw new NotFoundException(`Subcuenta no encontrada`);
     }
@@ -471,6 +481,7 @@ export class SubcuentaService {
         }
       }
   
+      await this.userService.clearRecurringSubaccountPreference(userId, sub.subCuentaId);
       await sub.deleteOne();
   
       await this.historialModel.create({
@@ -644,6 +655,7 @@ export class SubcuentaService {
       tipo: { $ne: 'eliminacion' },
     });
 
+    await this.userService.clearRecurringSubaccountPreference(userId, sub.subCuentaId);
     await sub.deleteOne();
     await this.dashboardVersionService.touchDashboard(userId, 'subcuenta.delete');
 
@@ -665,7 +677,12 @@ export class SubcuentaService {
     tipo?: string,
     desde?: string,
     hasta?: string,
+    page = 1,
+    limit = 20,
+    search = '',
   ) {
+    const safePage = Math.max(1, Number(page || 1));
+    const safeLimit = Math.min(100, Math.max(1, Number(limit || 20)));
     const query: any = { userId };
     if (subcuentaId) {
       const sub = await this.subcuentaModel.findOne({ subCuentaId: subcuentaId, userId }).lean();
@@ -680,8 +697,32 @@ export class SubcuentaService {
       if (desde) query.createdAt.$gte = new Date(desde);
       if (hasta) query.createdAt.$lte = new Date(hasta);
     }
-  
-    return this.historialModel.find(query).sort({ createdAt: -1 });
+
+    if (search) {
+      query.$or = [
+        { descripcion: { $regex: search, $options: 'i' } },
+        { tipo: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const [items, total] = await Promise.all([
+      this.historialModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip((safePage - 1) * safeLimit)
+        .limit(safeLimit)
+        .lean(),
+      this.historialModel.countDocuments(query),
+    ]);
+
+    return {
+      items,
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: total > 0 ? Math.ceil(total / safeLimit) : 0,
+      hasNextPage: safePage * safeLimit < total,
+    };
   }
 
   async desactivar(id: string, userId: string) {
@@ -701,6 +742,7 @@ export class SubcuentaService {
       datos: { activa: false },
     });
 
+    await this.userService.clearRecurringSubaccountPreference(userId, updated.subCuentaId);
     await this.dashboardVersionService.touchDashboard(userId, 'subcuenta.deactivate');
   
     return updated;

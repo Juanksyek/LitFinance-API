@@ -25,4 +25,22 @@ export class DashboardVersionService {
     // Fire-and-forget: don't block the calling operation.
     void this.redis.invalidateUserDashboard(userId);
   }
+
+  async touchlessGetDashboardVersion(userId: string): Promise<string> {
+    const redisKey = `lf:version:${userId}`;
+    const cached = await this.redis.get<string>(redisKey);
+    if (cached) {
+      return String(cached);
+    }
+
+    const user = await this.userModel
+      .findOne({ id: userId })
+      .select('dashboardVersion')
+      .lean();
+
+    const versionNum = Number((user as any)?.dashboardVersion ?? 0);
+    const version = String(versionNum);
+    await this.redis.set(redisKey, version, 300);
+    return version;
+  }
 }

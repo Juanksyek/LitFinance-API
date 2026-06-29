@@ -8,6 +8,7 @@ import { SubcuentaHistorial } from './schemas/subcuenta-historial.schema/subcuen
 import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.service';
 import { Transaction } from '../transactions/schemas/transaction.schema/transaction.schema';
 import { HistorialRecurrente } from '../recurrentes/schemas/historial-recurrente.schema';
+import { Recurrente } from '../recurrentes/schemas/recurrente.schema';
 import { ConversionService } from '../utils/services/conversion.service';
 import { UserService } from '../user/user.service';
 import { PlanConfigService } from '../plan-config/plan-config.service';
@@ -40,6 +41,7 @@ describe('SubcuentaService', () => {
   const mockUserService = {
     findById: jest.fn(),
     getProfile: jest.fn().mockResolvedValue({ monedaPrincipal: 'MXN' }),
+    clearRecurringSubaccountPreference: jest.fn().mockResolvedValue(undefined),
   };
 
   const mockPlanConfigService = {
@@ -59,6 +61,7 @@ describe('SubcuentaService', () => {
         { provide: getModelToken(SubcuentaHistorial.name), useValue: mockModel },
         { provide: getModelToken(Transaction.name), useValue: mockModel },
         { provide: getModelToken(HistorialRecurrente.name), useValue: mockModel },
+        { provide: getModelToken(Recurrente.name), useValue: mockModel },
         { provide: MonedaService, useValue: mockMonedaService },
         { provide: CuentaHistorialService, useValue: mockCuentaHistorialService },
         { provide: ConversionService, useValue: mockConversionService },

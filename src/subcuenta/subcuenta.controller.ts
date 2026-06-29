@@ -5,6 +5,9 @@ import { CreateSubcuentaDto } from './dto/create-subcuenta.dto/create-subcuenta.
 import { UpdateSubcuentaDto } from './dto/update-subcuenta.dto/update-subcuenta.dto';
 import { DeleteSubcuentaDto } from './dto/delete-subcuenta.dto/delete-subcuenta.dto';
 import { PlanConfigService } from '../plan-config/plan-config.service';
+import { SubcuentaHistoryQueryDto } from './dto/subcuenta-history-query.dto';
+import { SubcuentaListQueryDto } from './dto/subcuenta-list-query.dto';
+import { SearchProtectionService } from '../common/services/search-protection.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('subcuenta')
@@ -14,6 +17,7 @@ export class SubcuentaController {
   constructor(
     private readonly subcuentaService: SubcuentaService,
     private readonly planConfigService: PlanConfigService,
+    private readonly searchProtectionService: SearchProtectionService,
   ) {}
 
   @Post()
@@ -41,30 +45,58 @@ export class SubcuentaController {
     return this.subcuentaService.crear(dto, userId);
   }
 
-  @Get(':userId')
-  async listarPorUserId(
-    @Param('userId') userId: string,
-    @Query('subCuentaId') subCuentaId?: string,
-    @Query('search') search?: string,
-    @Query('page') page = 1,
-    @Query('limit') limit = 4,
-    @Query('soloActivas') soloActivas?: string,
+  @Get()
+  async listar(
+    @Req() req,
+    @Query() query: SubcuentaListQueryDto,
   ) {
-    const incluirInactivas = soloActivas === 'true' ? false : true;
+    await this.searchProtectionService.guard({
+      search: query.search,
+      tracker: String(req.user?.id ?? req.ip ?? 'anonymous'),
+      scope: 'subcuenta',
+    });
+
+    const userId = req.user.id;
+    const incluirInactivas = query.soloActivas === 'true' ? false : true;
   
     return this.subcuentaService.listar(
       userId,
-      subCuentaId,
-      search,
-      +page,
-      +limit,
+      query.subCuentaId,
+      query.search,
+      Number(query.page ?? 1),
+      Number(query.limit ?? 4),
+      incluirInactivas,
+    );
+  }
+
+  @Get(':userId')
+  async listarPorUserId(
+    @Req() req,
+    @Param('userId') _userId: string,
+    @Query() query: SubcuentaListQueryDto,
+  ) {
+    await this.searchProtectionService.guard({
+      search: query.search,
+      tracker: String(req.user?.id ?? req.ip ?? 'anonymous'),
+      scope: 'subcuenta',
+    });
+
+    const userId = req.user.id;
+    const incluirInactivas = query.soloActivas === 'true' ? false : true;
+  
+    return this.subcuentaService.listar(
+      userId,
+      query.subCuentaId,
+      query.search,
+      Number(query.page ?? 1),
+      Number(query.limit ?? 4),
       incluirInactivas,
     );
   }
 
   @Get('buscar/:subCuentaId')
-  async buscarPorSubCuentaId(@Param('subCuentaId') subCuentaId: string) {
-    return this.subcuentaService.buscarPorSubCuentaId(subCuentaId);
+  async buscarPorSubCuentaId(@Req() req, @Param('subCuentaId') subCuentaId: string) {
+    return this.subcuentaService.buscarPorSubCuentaId(subCuentaId, req.user.id);
   }
 
   @Patch(':id')
@@ -84,8 +116,27 @@ export class SubcuentaController {
 
   @UseGuards(JwtAuthGuard)
   @Get(':id/historial')
-  async obtenerHistorial(@Param('id') id: string, @Req() req) {
-    return this.subcuentaService.obtenerHistorial(id, req.user.id);
+  async obtenerHistorial(
+    @Param('id') id: string,
+    @Req() req,
+    @Query() query: SubcuentaHistoryQueryDto,
+  ) {
+    await this.searchProtectionService.guard({
+      search: query.search,
+      tracker: String(req.user?.id ?? req.ip ?? 'anonymous'),
+      scope: 'subcuenta-history',
+    });
+
+    return this.subcuentaService.obtenerHistorial(
+      id,
+      req.user.id,
+      undefined,
+      query.desde,
+      query.hasta,
+      Number(query.page ?? 1),
+      Number(query.limit ?? 20),
+      query.search ?? '',
+    );
   }
 
   // Movimientos financieros de una subcuenta (transacciones + recurrentes ejecutados)
@@ -93,24 +144,41 @@ export class SubcuentaController {
   async obtenerMovimientos(
     @Param('id') id: string,
     @Req() req,
-    @Query('page') page = 1,
-    @Query('limit') limit = 20,
-    @Query('desde') desde?: string,
-    @Query('hasta') hasta?: string,
-    @Query('search') search?: string,
+    @Query() query: SubcuentaHistoryQueryDto,
   ) {
+    await this.searchProtectionService.guard({
+      search: query.search,
+      tracker: String(req.user?.id ?? req.ip ?? 'anonymous'),
+      scope: 'subcuenta-movimientos',
+    });
+
     return this.subcuentaService.obtenerMovimientosFinancieros(id, req.user.id, {
-      page: Number(page),
-      limit: Number(limit),
-      desde,
-      hasta,
-      search,
+      page: Number(query.page ?? 1),
+      limit: Number(query.limit ?? 20),
+      desde: query.desde,
+      hasta: query.hasta,
+      search: query.search,
     });
   }
 
   @Get('historial')
-  async historialGeneral(@Req() req) {
-    return this.subcuentaService.obtenerHistorial(null, req.user.id);
+  async historialGeneral(@Req() req, @Query() query: SubcuentaHistoryQueryDto) {
+    await this.searchProtectionService.guard({
+      search: query.search,
+      tracker: String(req.user?.id ?? req.ip ?? 'anonymous'),
+      scope: 'subcuenta-history',
+    });
+
+    return this.subcuentaService.obtenerHistorial(
+      null,
+      req.user.id,
+      undefined,
+      query.desde,
+      query.hasta,
+      Number(query.page ?? 1),
+      Number(query.limit ?? 20),
+      query.search ?? '',
+    );
   }
 
   @Patch(':id/activar')
