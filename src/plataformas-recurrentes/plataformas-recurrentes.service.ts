@@ -61,7 +61,9 @@ export class PlataformasRecurrentesService {
     return await this.plataformaModel.create({ ...dto, plataformaId });
   }
 
-  async listar(search?: string) {
+  async listar(search?: string, page = 1, limit = 20) {
+    const safePage = Math.max(1, Number(page || 1));
+    const safeLimit = Math.min(100, Math.max(1, Number(limit || 20)));
     const filtro: any = {};
   
     if (search) {
@@ -72,7 +74,25 @@ export class PlataformasRecurrentesService {
       ];
     }
   
-    return this.plataformaModel.find(filtro).sort({ nombre: 1 }).exec();
+    const [items, total] = await Promise.all([
+      this.plataformaModel
+        .find(filtro)
+        .sort({ nombre: 1 })
+        .skip((safePage - 1) * safeLimit)
+        .limit(safeLimit)
+        .lean()
+        .exec(),
+      this.plataformaModel.countDocuments(filtro),
+    ]);
+
+    return {
+      items,
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: total > 0 ? Math.ceil(total / safeLimit) : 0,
+      hasNextPage: safePage * safeLimit < total,
+    };
   }
 
   async editar(id: string, dto: EditarPlataformaDto) {

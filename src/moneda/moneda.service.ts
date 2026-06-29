@@ -30,21 +30,48 @@ export class MonedaService {
     return this.monedaModel.find();
   }
 
-  async listarMonedasConFavoritas(userId?: string): Promise<{
+  async listarMonedasConFavoritas(userId?: string, page = 1, limit = 20, search?: string): Promise<{
     favoritas: any[];
     otras: any[];
     total: number;
     totalFavoritas: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    hasNextPage: boolean;
   }> {
+    const safePage = Math.max(1, Number(page || 1));
+    const safeLimit = Math.min(100, Math.max(1, Number(limit || 20)));
     const todasLasMonedas = await this.monedaModel
       .find()
       .sort({ nombre: 1 })
       .lean()
       .exec();
 
+    const filteredMonedas = search
+      ? todasLasMonedas.filter((m: any) => {
+          const term = String(search).toLowerCase();
+          return (
+            String(m.nombre ?? '').toLowerCase().includes(term) ||
+            String(m.codigo ?? '').toLowerCase().includes(term) ||
+            String(m.simbolo ?? '').toLowerCase().includes(term)
+          );
+        })
+      : todasLasMonedas;
+
     if (!userId) {
-      const otras = todasLasMonedas.map((m) => ({ ...m, esFavorita: false }));
-      return { favoritas: [], otras, total: otras.length, totalFavoritas: 0 };
+      const otras = filteredMonedas.map((m) => ({ ...m, esFavorita: false }));
+      const paged = otras.slice((safePage - 1) * safeLimit, (safePage - 1) * safeLimit + safeLimit);
+      return {
+        favoritas: [],
+        otras: paged,
+        total: otras.length,
+        totalFavoritas: 0,
+        page: safePage,
+        limit: safeLimit,
+        totalPages: otras.length > 0 ? Math.ceil(otras.length / safeLimit) : 0,
+        hasNextPage: safePage * safeLimit < otras.length,
+      };
     }
 
     const user = await this.findUserByAnyId(userId);
@@ -56,7 +83,7 @@ export class MonedaService {
     const favoritas: any[] = [];
     const otras: any[] = [];
 
-    for (const moneda of todasLasMonedas) {
+    for (const moneda of filteredMonedas) {
       if (favSet.has(moneda.codigo)) {
         favoritas.push({ ...moneda, esFavorita: true });
       } else {
@@ -64,11 +91,17 @@ export class MonedaService {
       }
     }
 
+    const pagedOtras = otras.slice((safePage - 1) * safeLimit, (safePage - 1) * safeLimit + safeLimit);
+
     return {
       favoritas,
-      otras,
-      total: todasLasMonedas.length,
+      otras: pagedOtras,
+      total: filteredMonedas.length,
       totalFavoritas: favoritas.length,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: otras.length > 0 ? Math.ceil(otras.length / safeLimit) : 0,
+      hasNextPage: safePage * safeLimit < otras.length,
     };
   }
 

@@ -5,6 +5,8 @@ import { CrearRecurrenteDto } from './dto/crear-recurrente.dto';
 import { EditarRecurrenteDto } from './dto/editar-recurrente.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PlanConfigService } from '../plan-config/plan-config.service';
+import { RecurrentesListQueryDto } from './dto/recurrentes-list-query.dto';
+import { SearchProtectionService } from '../common/services/search-protection.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('recurrentes')
@@ -15,6 +17,7 @@ export class RecurrentesController {
     private readonly recurrentesService: RecurrentesService,
     private readonly recurrentesTestService: RecurrentesTestService,
     private readonly planConfigService: PlanConfigService,
+    private readonly searchProtectionService: SearchProtectionService,
   ) {}
 
   @Post()
@@ -45,17 +48,20 @@ export class RecurrentesController {
   @Get()
   async listar(
     @Req() req,
-    @Query('page') page = 1,
-    @Query('limit') limit = 4,
-    @Query('search') search = '',
-    @Query('subcuentaId') subcuentaId = '',
+    @Query() query: RecurrentesListQueryDto,
   ) {
+    await this.searchProtectionService.guard({
+      search: query.search,
+      tracker: String(req.user?.id ?? req.ip ?? 'anonymous'),
+      scope: 'recurrentes',
+    });
+
     return this.recurrentesService.listar(
       req.user.id,
-      Number(page),
-      Number(limit),
-      search,
-      subcuentaId || undefined,
+      Number(query.page ?? 1),
+      Number(query.limit ?? 4),
+      query.search ?? '',
+      query.subcuentaId || undefined,
     );
   }
 

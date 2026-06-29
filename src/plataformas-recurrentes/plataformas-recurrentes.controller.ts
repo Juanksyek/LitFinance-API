@@ -3,6 +3,7 @@ import { PlataformasRecurrentesService } from './plataformas-recurrentes.service
 import { CrearPlataformaDto } from './dto/crear-plataforma.dto';
 import { EditarPlataformaDto } from './dto/editar-plataforma.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { SearchPaginationQueryDto } from '../common/dto/search-pagination-query.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('plataformas-recurrentes')
@@ -15,8 +16,12 @@ export class PlataformasRecurrentesController {
   }
 
   @Get()
-  async listar(@Query('search') search?: string) {
-    return this.servicio.listar(search);
+  async listar(@Query() query: SearchPaginationQueryDto) {
+    return this.servicio.listar(
+      query.search,
+      Number(query.page ?? 1),
+      Number(query.limit ?? 20),
+    );
   }
 
   @Patch(':plataformaId')
