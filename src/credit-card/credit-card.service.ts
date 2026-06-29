@@ -209,16 +209,67 @@ export class CreditCardService {
     return newCard;
   }
 
-  async listar(userId: string): Promise<Array<CreditCard & { salud: SaludFinanciera }>> {
-    const cards = await this.creditCardModel
-      .find({ userId })
-      .sort({ createdAt: -1 })
-      .lean();
+  async listar(userId: string, page = 1, limit = 20, search = '', estado?: string): Promise<{
+    items: Array<CreditCard & { salud: SaludFinanciera }>;
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    hasNextPage: boolean;
+  }> {
+    const safePage = Math.max(1, Number(page || 1));
+    const safeLimit = Math.min(100, Math.max(1, Number(limit || 20)));
+    const filter: any = { userId };
 
-    return (cards as any[]).map((c) => ({
+    const andClauses: any[] = [];
+
+    if (search) {
+      andClauses.push({
+        $or: [
+        { nombre: { $regex: search, $options: 'i' } },
+        { banco: { $regex: search, $options: 'i' } },
+        { emisor: { $regex: search, $options: 'i' } },
+        { last4: { $regex: search, $options: 'i' } },
+        ],
+      });
+    }
+
+    if (estado === 'activas') {
+      filter.activa = { $ne: false };
+      filter.pausadaPorPlan = { $ne: true };
+    } else if (estado === 'pausadas') {
+      andClauses.push({
+        $or: [{ pausadaPorPlan: true }, { activa: false }],
+      });
+    }
+
+    if (andClauses.length > 0) {
+      filter.$and = andClauses;
+    }
+
+    const [cards, total] = await Promise.all([
+      this.creditCardModel
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .skip((safePage - 1) * safeLimit)
+        .limit(safeLimit)
+        .lean(),
+      this.creditCardModel.countDocuments(filter),
+    ]);
+
+    const items = (cards as any[]).map((c) => ({
       ...c,
       salud: calcularSalud(c as unknown as CreditCard),
     }));
+
+    return {
+      items,
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: total > 0 ? Math.ceil(total / safeLimit) : 0,
+      hasNextPage: safePage * safeLimit < total,
+    };
   }
 
   async obtenerDetalle(cardId: string, userId: string): Promise<CreditCard & { salud: SaludFinanciera }> {
@@ -384,7 +435,15 @@ export class CreditCardService {
     cardId: string,
     userId: string,
     query: MovimientosQueryDto,
-  ): Promise<{ total: number; page: number; limit: number; data: any[] }> {
+  ): Promise<{
+    items: any[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    data: any[];
+  }> {
     const card = await this.creditCardModel.findOne({ cardId, userId }).lean();
     if (!card) throw new NotFoundException('Tarjeta no encontrada.');
 
@@ -409,7 +468,15 @@ export class CreditCardService {
     const skip = (page - 1) * limit;
     const data = movimientos.slice(skip, skip + limit);
 
-    return { total, page, limit, data };
+    return {
+      items: data,
+      total,
+      page,
+      limit,
+      totalPages: total > 0 ? Math.ceil(total / limit) : 0,
+      hasNextPage: page * limit < total,
+      data,
+    };
   }
 
   // ─── Salud individual ────────────────────────────────────────────────────
