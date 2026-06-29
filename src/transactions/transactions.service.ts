@@ -431,16 +431,20 @@ export class TransactionsService {
     userId: string,
     input?:
       | string
-      | {
+        | {
           rango?: string;
           fechaInicio?: string;
           fechaFin?: string;
           moneda?: string;
           withTotals?: boolean;
+          page?: number;
+          limit?: number;
         },
   ) {
     const opts = typeof input === 'string' ? { rango: input } : (input ?? {});
     const query: any = { userId };
+    const page = Math.max(1, Number(opts.page ?? 1));
+    const limit = Math.min(100, Math.max(1, Number(opts.limit ?? 20)));
 
     // Si vienen fechas explícitas, siempre priorizarlas
     if (opts.fechaInicio && opts.fechaFin) {
@@ -503,7 +507,12 @@ export class TransactionsService {
       query.$or = [{ moneda: opts.moneda }, { monedaConvertida: opts.moneda }];
     }
 
-    const data = await this.transactionModel.find(query).sort({ fecha: -1, createdAt: -1 });
+    const total = await this.transactionModel.countDocuments(query);
+    const data = await this.transactionModel
+      .find(query)
+      .sort({ fecha: -1, createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
 
     const normalized = (data ?? []).map((t: any) => {
       const fechaEfectiva = t.fecha ? new Date(t.fecha) : new Date(t.createdAt || Date.now());
@@ -518,7 +527,13 @@ export class TransactionsService {
     });
 
     if (!opts.withTotals) {
-      return normalized;
+      return {
+        items: normalized,
+        total,
+        page,
+        limit,
+        totalPages: total > 0 ? Math.ceil(total / limit) : 0,
+      };
     }
 
     const totals = (normalized ?? []).reduce(
@@ -531,7 +546,14 @@ export class TransactionsService {
       { ingresos: 0, egresos: 0 },
     );
 
-    return { data: normalized, totals };
+    return {
+      items: normalized,
+      total,
+      page,
+      limit,
+      totalPages: total > 0 ? Math.ceil(total / limit) : 0,
+      totals,
+    };
   }
 
   async obtener(id: string, userId: string) {

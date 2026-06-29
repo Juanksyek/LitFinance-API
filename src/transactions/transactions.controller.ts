@@ -4,6 +4,9 @@ import { Controller, Post, Get, Body, Param, Patch, Delete, Query, Req, UseGuard
   import { UpdateTransactionDto } from './dto/update-transaction.dto';
   import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
   import { CuentaHistorialService } from '../cuenta-historial/cuenta-historial.service';
+  import { SearchProtectionService } from '../common/services/search-protection.service';
+  import { TransactionHistoryQueryDto } from './dto/transaction-history-query.dto';
+  import { TransactionListQueryDto } from './dto/transaction-list-query.dto';
   
   @UseGuards(JwtAuthGuard)
   @Controller('transacciones')
@@ -11,6 +14,7 @@ import { Controller, Post, Get, Body, Param, Patch, Delete, Query, Req, UseGuard
     constructor(
       private readonly transactionsService: TransactionsService,
       private readonly cuentaHistorialService: CuentaHistorialService,
+      private readonly searchProtectionService: SearchProtectionService,
     ) {}
   
     @Post()
@@ -58,37 +62,38 @@ import { Controller, Post, Get, Body, Param, Patch, Delete, Query, Req, UseGuard
     @Get()
         async listar(
           @Req() req,
-          @Query('rango') rango?: string,
-          @Query('fechaInicio') fechaInicio?: string,
-          @Query('fechaFin') fechaFin?: string,
-          @Query('moneda') moneda?: string,
-          @Query('withTotals') withTotals?: string,
+          @Query() query: TransactionListQueryDto,
         ) {
           return this.transactionsService.listar(req.user.id, {
-            rango,
-            fechaInicio,
-            fechaFin,
-            moneda,
-            withTotals: withTotals === 'true' || withTotals === '1',
+            rango: query.rango,
+            fechaInicio: query.fechaInicio,
+            fechaFin: query.fechaFin,
+            moneda: query.moneda,
+            page: Number(query.page ?? 1),
+            limit: Number(query.limit ?? 20),
+            withTotals: query.withTotals === 'true' || query.withTotals === '1',
           });
     }
   
     @Get('subcuenta/:id/historial')
     async historialSubcuenta(
+      @Req() req,
       @Param('id') subCuentaId: string,
-      @Query('desde') desde?: string,
-      @Query('hasta') hasta?: string,
-      @Query('limite') limite = 5,
-      @Query('pagina') pagina = 1,
-      @Query('descripcion') descripcion?: string,
+      @Query() query: TransactionHistoryQueryDto,
     ) {
+      await this.searchProtectionService.guard({
+        search: query.descripcion,
+        tracker: String(req.user?.id ?? req.ip ?? 'anonymous'),
+        scope: 'transaction-history',
+      });
+
       return this.transactionsService.obtenerHistorial({
         subCuentaId,
-        desde,
-        hasta,
-        limite: +limite,
-        pagina: +pagina,
-        descripcion,
+        desde: query.desde,
+        hasta: query.hasta,
+        limite: Number(query.limit ?? 5),
+        pagina: Number(query.page ?? 1),
+        descripcion: query.descripcion,
       });
     }
 

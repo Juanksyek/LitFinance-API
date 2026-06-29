@@ -4,8 +4,10 @@ import { Model } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema/user.schema';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { Moneda, MonedaDocument } from '../moneda/schema/moneda.schema';
+import { Subcuenta, SubcuentaDocument } from '../subcuenta/schemas/subcuenta.schema/subcuenta.schema';
 import { reconcileEntitlements } from './premium-entitlements';
 import { PlanAutoPauseService } from './services/plan-auto-pause.service';
+import { RedisService } from '../redis/redis.service';
 
 @Injectable()
 export class UserService {
@@ -40,13 +42,17 @@ export class UserService {
       } else if (wasPremium && !isPremiumNow) {
         await this.planAutoPauseService.enforcePlanLimits(userId, 'free_plan', 'user.syncPremiumStatus');
       }
+
+      void this.redis.invalidateUserMobileBootstrap(userId);
       
       return reconciled.isPremium;
     }
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(Moneda.name) private readonly monedaModel: Model<MonedaDocument>,
+    @InjectModel(Subcuenta.name) private readonly subcuentaModel: Model<SubcuentaDocument>,
     private readonly planAutoPauseService: PlanAutoPauseService,
+    private readonly redis: RedisService,
   ) {}
 
   async getProfile(userId: string) {
@@ -82,6 +88,57 @@ export class UserService {
       }
     }
 
+    const hasRecurringSubaccountToggle = Object.prototype.hasOwnProperty.call(
+      updateData,
+      'usarSubcuentaPorDefectoEnRecurrentes',
+    );
+    const hasRecurringSubaccountId = Object.prototype.hasOwnProperty.call(
+      updateData,
+      'subcuentaPorDefectoRecurrentesId',
+    );
+
+    if (hasRecurringSubaccountToggle || hasRecurringSubaccountId) {
+      const existingUser = await this.userModel.findOne({ id: userId }).select(
+        'usarSubcuentaPorDefectoEnRecurrentes subcuentaPorDefectoRecurrentesId',
+      );
+      if (!existingUser) {
+        throw new NotFoundException('Usuario no encontrado');
+      }
+
+      const usarSubcuentaPorDefecto =
+        hasRecurringSubaccountToggle
+          ? updateData.usarSubcuentaPorDefectoEnRecurrentes === true
+          : existingUser.usarSubcuentaPorDefectoEnRecurrentes === true;
+
+      const subcuentaPreferidaId =
+        hasRecurringSubaccountId
+          ? updateData.subcuentaPorDefectoRecurrentesId ?? null
+          : existingUser.subcuentaPorDefectoRecurrentesId ?? null;
+
+      if (usarSubcuentaPorDefecto) {
+        if (!subcuentaPreferidaId) {
+          throw new BadRequestException(
+            'subcuentaPorDefectoRecurrentesId es requerida cuando la opción está activa',
+          );
+        }
+
+        const subcuenta = await this.subcuentaModel.findOne({
+          subCuentaId: subcuentaPreferidaId,
+          userId,
+        });
+
+        if (!subcuenta) {
+          throw new BadRequestException('La subcuenta preferida para recurrentes no existe');
+        }
+
+        if (subcuenta.activa !== true) {
+          throw new BadRequestException('La subcuenta preferida para recurrentes debe estar activa');
+        }
+      } else {
+        updateData.subcuentaPorDefectoRecurrentesId = null;
+      }
+    }
+
     const user = await this.userModel.findOneAndUpdate(
       { id: userId },
       { $set: updateData },
@@ -91,10 +148,26 @@ export class UserService {
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
     }
+    void this.redis.invalidateUserMobileBootstrap(userId);
     return {
       message: 'Perfil actualizado correctamente',
       user,
     };
+  }
+
+  async clearRecurringSubaccountPreference(userId: string, subCuentaId: string) {
+    await this.userModel.updateOne(
+      {
+        id: userId,
+        subcuentaPorDefectoRecurrentesId: subCuentaId,
+      },
+      {
+        $set: {
+          usarSubcuentaPorDefectoEnRecurrentes: false,
+          subcuentaPorDefectoRecurrentesId: null,
+        },
+      },
+    );
   }
 
   async toggleMonedaFavorita(userId: string, codigoMoneda: string) {
@@ -132,6 +205,7 @@ export class UserService {
       throw new NotFoundException('Usuario no encontrado al actualizar');
     }
 
+    void this.redis.invalidateUserMobileBootstrap(userId);
     return {
       message: mensaje,
       esFavorita: !yaEsFavorita,

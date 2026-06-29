@@ -71,6 +71,12 @@ export class User {
   @Prop({ type: [String], default: [] })
   monedasFavoritas: string[];
 
+  @Prop({ type: Boolean, default: false })
+  usarSubcuentaPorDefectoEnRecurrentes?: boolean;
+
+  @Prop({ type: String, default: null })
+  subcuentaPorDefectoRecurrentesId?: string | null;
+
   @Prop({ required: false })
   telefono?: string;
 
