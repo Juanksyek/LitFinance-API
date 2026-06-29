@@ -1,14 +1,20 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConceptosController } from './conceptos.controller';
 import { ConceptosService } from './conceptos.service';
+import { SearchProtectionService } from '../common/services/search-protection.service';
 
 describe('ConceptosController', () => {
   let controller: ConceptosController;
 
   const mockConceptosService = {
-    findAll: jest.fn(),
-    findOne: jest.fn(),
-    create: jest.fn(),
+    listar: jest.fn(),
+    crear: jest.fn(),
+    actualizar: jest.fn(),
+    eliminar: jest.fn(),
+  };
+
+  const mockSearchProtectionService = {
+    guard: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -16,6 +22,10 @@ describe('ConceptosController', () => {
       controllers: [ConceptosController],
       providers: [
         { provide: ConceptosService, useValue: mockConceptosService },
+        {
+          provide: SearchProtectionService,
+          useValue: mockSearchProtectionService,
+        },
       ],
     }).compile();
 
