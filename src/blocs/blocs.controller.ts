@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
   UsePipes,
@@ -19,6 +20,8 @@ import { UpdateBlocItemDto } from './dto/update-bloc-item.dto';
 import { LiquidarBlocDto, LiquidarBlocPreviewDto } from './dto/liquidar-bloc.dto';
 import { PatchBlocItemsDto } from './dto/patch-bloc-items.dto';
 import { UpdateBlocDto } from './dto/update-bloc.dto';
+import { BlocListQueryDto } from './dto/bloc-list-query.dto';
+import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('blocs')
@@ -32,8 +35,14 @@ export class BlocsController {
   }
 
   @Get()
-  async listar(@Req() req) {
-    return this.blocsService.listarBlocs(req.user.id);
+  async listar(@Req() req, @Query() query: BlocListQueryDto) {
+    return this.blocsService.listarBlocs(
+      req.user.id,
+      Number(query.page ?? 1),
+      Number(query.limit ?? 20),
+      query.search ?? '',
+      query.tipo,
+    );
   }
 
   @Get(':blocId')
@@ -87,7 +96,16 @@ export class BlocsController {
   }
 
   @Get(':blocId/liquidaciones')
-  async listarLiquidaciones(@Req() req, @Param('blocId') blocId: string) {
-    return this.blocsService.listarLiquidaciones(blocId, req.user.id);
+  async listarLiquidaciones(
+    @Req() req,
+    @Param('blocId') blocId: string,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.blocsService.listarLiquidaciones(
+      blocId,
+      req.user.id,
+      Number(query.page ?? 1),
+      Number(query.limit ?? 20),
+    );
   }
 }

@@ -1,6 +1,7 @@
-import { BadRequestException, Controller, Get, Param, Res } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Param, Req, Res } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
+import { sendSuccessResponse } from '../common/http/http-response.helper';
 
 // Endpoint público para enlaces de activación enviados por correo.
 // Nota: NO lleva prefijo /auth, porque el email históricamente usa /activate/:token
@@ -9,7 +10,11 @@ export class ActivationController {
   constructor(private readonly authService: AuthService) {}
 
   @Get('activate/:token')
-  async activate(@Param('token') token: string, @Res() res: Response) {
+  async activate(
+    @Param('token') token: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
     if (!token) throw new BadRequestException('Token no proporcionado');
 
     const result = await this.authService.confirmAccount(token);
@@ -23,6 +28,6 @@ export class ActivationController {
     }
 
     // Fallback: devolver JSON si no hay frontend configurado
-    return res.status(200).json(result);
+    return sendSuccessResponse(req, res, result);
   }
 }
