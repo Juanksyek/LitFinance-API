@@ -1,7 +1,28 @@
 
+import mongoose from 'mongoose';
 import { AppVersion, IAppVersion } from '../models/AppVersion';
 
 export class VersionService {
+  private async isMongoReady(maxWaitMs = 1500): Promise<boolean> {
+    if (mongoose.connection.readyState === 1) {
+      return true;
+    }
+
+    if (mongoose.connection.readyState === 0) {
+      return false;
+    }
+
+    return await Promise.race([
+      mongoose.connection
+        .asPromise()
+        .then(() => true)
+        .catch(() => false),
+      new Promise<boolean>((resolve) => {
+        setTimeout(() => resolve(false), maxWaitMs);
+      }),
+    ]);
+  }
+
   /**
    * Compara dos versiones en formato semántico (x.y.z)
    * @returns -1 si v1 < v2, 0 si v1 = v2, 1 si v1 > v2
@@ -35,14 +56,29 @@ export class VersionService {
     message?: string;
     storeUrl?: string;
     latestVersion?: string;
+    minRequiredVersion?: string;
     releaseNotes?: string;
   }> {
     try {
+      const mongoReady = await this.isMongoReady();
+      if (!mongoReady) {
+        console.warn('Mongo no está listo para validar la versión móvil. Se permitirá el acceso temporalmente.');
+        return {
+          isValid: true,
+          isActive: true,
+          needsUpdate: false,
+          forceUpdate: false,
+        };
+      }
+
       // Buscar la configuración de versión más reciente
       const latestConfig = await AppVersion.findOne({
         platform: { $in: [platform, 'both'] },
         isActive: true,
-      }).sort({ releaseDate: -1 });
+      })
+        .sort({ releaseDate: -1 })
+        .lean()
+        .exec();
 
       if (!latestConfig) {
         // Si no hay configuración, permitir acceso por defecto
@@ -94,6 +130,7 @@ export class VersionService {
         message: message || undefined,
         storeUrl: storeUrl || undefined,
         latestVersion: latestConfig.version,
+        minRequiredVersion: latestConfig.minRequiredVersion,
         releaseNotes: needsUpdate ? latestConfig.releaseNotes : undefined,
       };
     } catch (error) {
@@ -112,17 +149,27 @@ export class VersionService {
    * Obtener la última versión disponible
    */
   async getLatestVersion(platform?: 'android' | 'ios') {
+    const mongoReady = await this.isMongoReady();
+    if (!mongoReady) {
+      return null;
+    }
+
     const query = platform 
       ? { platform: { $in: [platform, 'both'] }, isActive: true }
       : { isActive: true };
 
-    return await AppVersion.findOne(query).sort({ releaseDate: -1 });
+    return await AppVersion.findOne(query).sort({ releaseDate: -1 }).lean().exec();
   }
 
   /**
    * Crear o actualizar configuración de versión
    */
   async createOrUpdateVersion(versionData: Partial<IAppVersion>) {
+    const mongoReady = await this.isMongoReady();
+    if (!mongoReady) {
+      throw new Error('MongoDB no está disponible para crear o actualizar la configuración de versión');
+    }
+
     if (versionData.version) {
       return await AppVersion.findOneAndUpdate(
         { version: versionData.version },

@@ -6,6 +6,7 @@ import { SharedInvitationsService } from '../services/shared-invitations.service
 import { SharedMembersService } from '../services/shared-members.service';
 import { CreateInvitationDto } from '../dto/shared-invitation.dto';
 import { UpdateMemberRoleDto } from '../dto/shared-member.dto';
+import { SearchPaginationQueryDto } from '../../common/dto/search-pagination-query.dto';
 
 @Controller('shared')
 export class SharedInvitationsController {
@@ -31,15 +32,29 @@ export class SharedInvitationsController {
   /** GET /shared/spaces/:spaceId/invitations — Listar invitaciones del espacio */
   @UseGuards(JwtAuthGuard)
   @Get('spaces/:spaceId/invitations')
-  listBySpace(@Req() req, @Param('spaceId') spaceId: string) {
-    return this.invitationsService.listBySpace(spaceId);
+  listBySpace(
+    @Req() req,
+    @Param('spaceId') spaceId: string,
+    @Query() query: SearchPaginationQueryDto,
+  ) {
+    return this.invitationsService.listBySpace(
+      spaceId,
+      Number(query.page ?? 1),
+      Number(query.limit ?? 20),
+      query.search,
+    );
   }
 
   /** GET /shared/invitations/pending — Invitaciones pendientes del usuario actual */
   @UseGuards(JwtAuthGuard)
   @Get('invitations/pending')
-  listPending(@Req() req) {
-    return this.invitationsService.listPendingForUser(req.user.id);
+  listPending(@Req() req, @Query() query: SearchPaginationQueryDto) {
+    return this.invitationsService.listPendingForUser(
+      req.user.id,
+      Number(query.page ?? 1),
+      Number(query.limit ?? 20),
+      query.search,
+    );
   }
 
   /**
