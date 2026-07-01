@@ -197,13 +197,44 @@ export class SharedInvitationsService {
 
   // ─── Listar invitaciones del espacio ─────────────────────────
 
-  async listBySpace(spaceId: string) {
-    return this.invitationModel.find({ spaceId }).sort({ createdAt: -1 }).lean();
+  async listBySpace(spaceId: string, page = 1, limit = 20, search?: string) {
+    const safePage = Math.max(1, Number(page || 1));
+    const safeLimit = Math.min(100, Math.max(1, Number(limit || 20)));
+    const filter: any = { spaceId };
+
+    if (search) {
+      filter.$or = [
+        { email: { $regex: search, $options: 'i' } },
+        { invitationType: { $regex: search, $options: 'i' } },
+        { estado: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const [items, total] = await Promise.all([
+      this.invitationModel
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .skip((safePage - 1) * safeLimit)
+        .limit(safeLimit)
+        .lean(),
+      this.invitationModel.countDocuments(filter),
+    ]);
+
+    return {
+      items,
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: total > 0 ? Math.ceil(total / safeLimit) : 0,
+      hasNextPage: safePage * safeLimit < total,
+    };
   }
 
   // ─── Invitaciones pendientes del usuario actual ──────────────
 
-  async listPendingForUser(userId: string) {
+  async listPendingForUser(userId: string, page = 1, limit = 20, search?: string) {
+    const safePage = Math.max(1, Number(page || 1));
+    const safeLimit = Math.min(100, Math.max(1, Number(limit || 20)));
     const user = await this.userModel.findOne({ id: userId }).select('email');
     const filter: any = {
       estado: 'pending',
@@ -220,10 +251,33 @@ export class SharedInvitationsService {
     const spaces = await this.spaceModel.find({ spaceId: { $in: spaceIds } }).select('spaceId nombre').lean();
     const spaceMap = new Map(spaces.map((s) => [s.spaceId, s.nombre]));
 
-    return invitations.map((inv) => ({
+    let items = invitations.map((inv) => ({
       ...inv,
       spaceName: spaceMap.get(inv.spaceId) ?? 'Espacio',
     }));
+
+    if (search) {
+      const term = String(search).toLowerCase();
+      items = items.filter((inv: any) => {
+        return (
+          String(inv.spaceName ?? '').toLowerCase().includes(term) ||
+          String(inv.email ?? '').toLowerCase().includes(term) ||
+          String(inv.invitationType ?? '').toLowerCase().includes(term)
+        );
+      });
+    }
+
+    const total = items.length;
+    const paged = items.slice((safePage - 1) * safeLimit, (safePage - 1) * safeLimit + safeLimit);
+
+    return {
+      items: paged,
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: total > 0 ? Math.ceil(total / safeLimit) : 0,
+      hasNextPage: safePage * safeLimit < total,
+    };
   }
 
   // ─── Verificar token (público, sin aceptar) ─────────────────

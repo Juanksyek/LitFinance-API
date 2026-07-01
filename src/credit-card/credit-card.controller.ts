@@ -21,6 +21,7 @@ import {
   AddMovimientoDto,
   MovimientosQueryDto,
 } from './dto/credit-card.dto';
+import { CreditCardListQueryDto } from './dto/credit-card-list-query.dto';
 import { Request } from 'express';
 
 @UseGuards(JwtAuthGuard)
@@ -48,9 +49,15 @@ export class CreditCardController {
    * Lista todas las tarjetas del usuario con salud financiera calculada.
    */
   @Get()
-  listar(@Req() req: Request) {
+  listar(@Req() req: Request, @Query() query: CreditCardListQueryDto) {
     const userId = (req as any).user.id;
-    return this.creditCardService.listar(userId);
+    return this.creditCardService.listar(
+      userId,
+      Number(query.page ?? 1),
+      Number(query.limit ?? 20),
+      query.search ?? '',
+      query.estado,
+    );
   }
 
   /**

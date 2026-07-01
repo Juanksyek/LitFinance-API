@@ -176,6 +176,23 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  async ping(timeoutMs = 1000): Promise<boolean> {
+    if (!this._ready) return false;
+
+    try {
+      const result = await Promise.race([
+        this.client.ping(),
+        new Promise<string>((_, reject) =>
+          setTimeout(() => reject(new Error('Redis ping timeout')), timeoutMs),
+        ),
+      ]);
+
+      return result === 'PONG';
+    } catch {
+      return false;
+    }
+  }
+
   // ─────────────────────────────────────────────
   // Domain helpers
   // ─────────────────────────────────────────────
@@ -185,6 +202,12 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await Promise.all([
       this.del(`lf:version:${userId}`),
       this.scanDel(`lf:snap:${userId}:*`),
+      this.invalidateUserMobileBootstrap(userId),
     ]);
+  }
+
+  /** Invalidates all mobile bootstrap cache for a given user. */
+  async invalidateUserMobileBootstrap(userId: string): Promise<void> {
+    await this.scanDel(`lf:mobile:bootstrap:${userId}:*`);
   }
 }

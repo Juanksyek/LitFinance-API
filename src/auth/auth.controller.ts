@@ -1,5 +1,18 @@
-import { Controller, Post, Body, Get, Req, Query, BadRequestException, UseGuards, Param } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Req,
+  Query,
+  BadRequestException,
+  UseGuards,
+  Param,
+} from '@nestjs/common';
+import { Request } from 'express';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { AuthRateLimitService } from './auth-rate-limit.service';
+import { TooManyRequestsException } from '../common/exceptions/too-many-requests.exception';
 import { AuthService } from './auth.service';
 import { RegisterAuthDto } from './dto/register-auth.dto';
 import { LoginAuthDto } from './dto/login-auth.dto';
@@ -10,15 +23,43 @@ import { ChangePasswordDto } from './dto/change-password.dto/change-password.dto
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) { }
+  constructor(
+    private readonly authService: AuthService,
+    private readonly authRateLimitService: AuthRateLimitService,
+  ) {}
+
+  private async enforceRateLimit(
+    scope: 'login' | 'register',
+    req: Request,
+    email?: string,
+  ) {
+    const normalizedEmail = String(email ?? '')
+      .trim()
+      .toLowerCase();
+    const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+    const rateLimit = await this.authRateLimitService.check(
+      scope,
+      `${normalizedEmail}:${ip}`,
+    );
+
+    if (!rateLimit.allowed) {
+      throw new TooManyRequestsException({
+        code: 'RATE_LIMITED',
+        message: 'Too Many Requests',
+        retryAfterSeconds: rateLimit.retryAfterSeconds,
+      });
+    }
+  }
 
   @Post('register')
-  async register(@Body() dto: RegisterAuthDto): Promise<any> {
+  async register(@Req() req: Request, @Body() dto: RegisterAuthDto): Promise<any> {
+    await this.enforceRateLimit('register', req, dto?.email);
     return await this.authService.register(dto);
   }
 
   @Post('login')
-  async login(@Body() dto: LoginAuthDto): Promise<any> {
+  async login(@Req() req: Request, @Body() dto: LoginAuthDto): Promise<any> {
+    await this.enforceRateLimit('login', req, dto?.email);
     return await this.authService.login(dto);
   }
 

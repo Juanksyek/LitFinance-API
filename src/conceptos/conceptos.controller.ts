@@ -3,11 +3,16 @@ import { ConceptosService } from './conceptos.service';
 import { CreateConceptoDto } from './dto/create-concepto.dto';
 import { UpdateConceptoDto } from './dto/update-concepto.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { SearchPaginationQueryDto } from '../common/dto/search-pagination-query.dto';
+import { SearchProtectionService } from '../common/services/search-protection.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('conceptos')
 export class ConceptosController {
-  constructor(private readonly conceptosService: ConceptosService) {}
+  constructor(
+    private readonly conceptosService: ConceptosService,
+    private readonly searchProtectionService: SearchProtectionService,
+  ) {}
 
   @Post()
   async crear(@Req() req, @Body() dto: CreateConceptoDto) {
@@ -16,13 +21,44 @@ export class ConceptosController {
   }
 
   @Get()
-  listar(
+  async listar(
     @Req() req,
-    @Query('page') page = 1,
-    @Query('limit') limit = 10,
-    @Query('search') search?: string,
+    @Query() query: SearchPaginationQueryDto,
   ) {
-    return this.conceptosService.listar(req.user.id, Number(page), Number(limit), search);
+    await this.searchProtectionService.guard({
+      search: query.search,
+      tracker: String(req.user?.id ?? req.ip ?? 'anonymous'),
+      scope: 'conceptos',
+    });
+
+    return this.conceptosService.listar(
+      req.user.id,
+      Number(query.page ?? 1),
+      Number(query.limit ?? 10),
+      query.search,
+    );
+  }
+
+  @Get(':rawSearch')
+  async listarPorRuta(
+    @Req() req,
+    @Param('rawSearch') rawSearch: string,
+    @Query() query: SearchPaginationQueryDto,
+  ) {
+    const normalizedSearch = decodeURIComponent(String(rawSearch ?? '')).trim();
+
+    await this.searchProtectionService.guard({
+      search: normalizedSearch,
+      tracker: String(req.user?.id ?? req.ip ?? 'anonymous'),
+      scope: 'conceptos',
+    });
+
+    return this.conceptosService.listar(
+      req.user.id,
+      Number(query.page ?? 1),
+      Number(query.limit ?? 10),
+      normalizedSearch,
+    );
   }
 
   @Patch(':id')

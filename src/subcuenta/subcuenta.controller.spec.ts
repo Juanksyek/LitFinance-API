@@ -9,6 +9,7 @@ describe('SubcuentaController', () => {
   const mockService = {
     crear: jest.fn(),
     listar: jest.fn(),
+    buscarPorSubCuentaId: jest.fn(),
     actualizar: jest.fn(),
     eliminar: jest.fn(),
     obtenerHistorial: jest.fn(),
@@ -35,5 +36,21 @@ describe('SubcuentaController', () => {
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+  });
+
+  it('listar debe usar el userId autenticado', async () => {
+    const req = { user: { id: 'user-token' } };
+
+    await controller.listarPorUserId(req as any, 'otro-user', undefined, undefined, 1, 4, undefined);
+
+    expect(mockService.listar).toHaveBeenCalledWith('user-token', undefined, undefined, 1, 4, true);
+  });
+
+  it('buscarPorSubCuentaId debe filtrar por el userId autenticado', async () => {
+    const req = { user: { id: 'user-token' } };
+
+    await controller.buscarPorSubCuentaId(req as any, 'sub-1');
+
+    expect(mockService.buscarPorSubCuentaId).toHaveBeenCalledWith('sub-1', 'user-token');
   });
 });

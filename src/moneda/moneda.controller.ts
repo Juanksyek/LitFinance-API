@@ -4,10 +4,15 @@ import { CreateMonedaDto } from './dto/create.moneda.dto';
 import { CatalogoMonedaDto } from './dto/catalogo-moneda.dto';
 import { ToggleFavoritaMonedaDto } from './dto/toggle-favorita-moneda.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { SearchPaginationQueryDto } from '../common/dto/search-pagination-query.dto';
+import { SearchProtectionService } from '../common/services/search-protection.service';
 
 @Controller('monedas')
 export class MonedaController {
-  constructor(private readonly monedaService: MonedaService) {}
+  constructor(
+    private readonly monedaService: MonedaService,
+    private readonly searchProtectionService: SearchProtectionService,
+  ) {}
 
   @Get('catalogo')
   async obtenerCatalogo(): Promise<CatalogoMonedaDto[]> {
@@ -16,9 +21,20 @@ export class MonedaController {
 
   @UseGuards(JwtAuthGuard)
   @Get()
-  async listar(@Req() req: any) {
+  async listar(@Req() req: any, @Query() query: SearchPaginationQueryDto) {
+    await this.searchProtectionService.guard({
+      search: query.search,
+      tracker: String(req.user?.userId || req.user?.sub || req.ip || 'anonymous'),
+      scope: 'monedas',
+    });
+
     const userId = req.user?.userId || req.user?.sub;
-    return this.monedaService.listarMonedasConFavoritas(userId);
+    return this.monedaService.listarMonedasConFavoritas(
+      userId,
+      Number(query.page ?? 1),
+      Number(query.limit ?? 20),
+      query.search,
+    );
   }
 
   @UseGuards(JwtAuthGuard)

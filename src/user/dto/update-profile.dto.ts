@@ -45,5 +45,13 @@ export class UpdateProfileDto {
 
   @IsOptional()
   @IsBoolean()
+  usarSubcuentaPorDefectoEnRecurrentes?: boolean;
+
+  @IsOptional()
+  @IsString()
+  subcuentaPorDefectoRecurrentesId?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
   isPremium?: boolean;
 }

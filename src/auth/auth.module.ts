@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthController } from './auth.controller';
 import { ActivationController } from './activation.controller';
+import { AuthRateLimitService } from './auth-rate-limit.service';
 import { AuthService } from './auth.service';
 import { UserModule } from '../user/user.module';
 import { EmailModule } from '../email/email.module';
@@ -83,6 +84,7 @@ import { Moneda, MonedaSchema } from '../moneda/schema/moneda.schema';
   ],
   providers: [
     AuthService,
+    AuthRateLimitService,
     JwtStrategy,
     PasswordResetService,
     AccountDeletionService,

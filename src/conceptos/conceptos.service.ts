@@ -33,6 +33,8 @@ export class ConceptosService {
   }
 
   async listar(userId: string, page = 1, limit = 10, busqueda?: string) {
+    const safePage = Math.max(1, Number(page || 1));
+    const safeLimit = Math.min(100, Math.max(1, Number(limit || 10)));
     const query: any = { userId };
 
     if (busqueda) {
@@ -41,17 +43,23 @@ export class ConceptosService {
 
     const resultados = await this.conceptoModel
       .find(query)
-      .skip((page - 1) * limit)
-      .limit(limit)
+      .skip((safePage - 1) * safeLimit)
+      .limit(safeLimit)
       .sort({ createdAt: -1 });
 
     const total = await this.conceptoModel.countDocuments(query);
+    const totalPages = total > 0 ? Math.ceil(total / safeLimit) : 0;
+    const items = resultados;
 
     return {
+      items,
       total,
-      page,
-      perPage: limit,
-      resultados,
+      page: safePage,
+      limit: safeLimit,
+      totalPages,
+      hasNextPage: safePage * safeLimit < total,
+      perPage: safeLimit,
+      resultados: items,
     };
   }
 

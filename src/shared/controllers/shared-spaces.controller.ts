@@ -5,6 +5,7 @@ import {
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { SharedSpacesService } from '../services/shared-spaces.service';
 import { CreateSharedSpaceDto, UpdateSharedSpaceDto } from '../dto/shared-space.dto';
+import { SharedSpaceListQueryDto } from '../dto/shared-space-list-query.dto';
 
 @UseGuards(JwtAuthGuard)
 @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
@@ -20,8 +21,14 @@ export class SharedSpacesController {
 
   /** GET /shared/spaces — Listar espacios del usuario */
   @Get()
-  list(@Req() req) {
-    return this.spacesService.listByUser(req.user.id);
+  list(@Req() req, @Query() query: SharedSpaceListQueryDto) {
+    return this.spacesService.listByUser(
+      req.user.id,
+      query.estado,
+      Number(query.page ?? 1),
+      Number(query.limit ?? 20),
+      query.search,
+    );
   }
 
   /** GET /shared/spaces/:spaceId — Detalle del espacio con miembros */

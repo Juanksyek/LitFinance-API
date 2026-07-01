@@ -39,54 +39,83 @@ export class RecurrentesService {
   async crear(dto: CrearRecurrenteDto, userId: string): Promise<Recurrente> {
     const recurrenteId = await generateUniqueId(this.recurrenteModel, 'recurrenteId');
     const cuenta: CuentaDocument = await this.cuentaService.obtenerCuentaPrincipal(userId);
+    const perfil: any = await this.userService.getProfile(userId);
+    const hasExplicitSubcuentaDecision =
+      Object.prototype.hasOwnProperty.call(dto, 'subcuentaId') ||
+      Object.prototype.hasOwnProperty.call(dto, 'afectaSubcuenta');
+    const resolvedDto: CrearRecurrenteDto = {
+      ...dto,
+    };
+
+    if (
+      !hasExplicitSubcuentaDecision &&
+      perfil?.usarSubcuentaPorDefectoEnRecurrentes === true &&
+      perfil?.subcuentaPorDefectoRecurrentesId
+    ) {
+      resolvedDto.subcuentaId = perfil.subcuentaPorDefectoRecurrentesId;
+      resolvedDto.afectaSubcuenta = true;
+    }
+
+    if (resolvedDto.subcuentaId) {
+      const subcuenta = await this.subcuentaModel.findOne({
+        subCuentaId: resolvedDto.subcuentaId,
+        userId,
+      });
+      if (!subcuenta) {
+        throw new BadRequestException('La subcuenta del recurrente no existe o no pertenece al usuario');
+      }
+      if (subcuenta.activa !== true) {
+        throw new BadRequestException('La subcuenta del recurrente debe estar activa');
+      }
+    }
 
     // Default para compatibilidad con recurrentes existentes
-    const tipoRecurrente = dto.tipoRecurrente || 'indefinido';
+    const tipoRecurrente = resolvedDto.tipoRecurrente || 'indefinido';
 
     // Validación: si es plazo_fijo, totalPagos es obligatorio
-    if (tipoRecurrente === 'plazo_fijo' && (!dto.totalPagos || dto.totalPagos <= 0)) {
+    if (tipoRecurrente === 'plazo_fijo' && (!resolvedDto.totalPagos || resolvedDto.totalPagos <= 0)) {
       throw new BadRequestException(
         'totalPagos es obligatorio y debe ser mayor a 0 cuando tipoRecurrente es plazo_fijo'
       );
     }
 
     // Calcular fechas para plazo_fijo
-    const fechaInicio = dto.fechaInicio || new Date();
+    const fechaInicio = resolvedDto.fechaInicio || new Date();
     let fechaFin: Date | undefined;
 
-    if (tipoRecurrente === 'plazo_fijo' && dto.totalPagos) {
+    if (tipoRecurrente === 'plazo_fijo' && resolvedDto.totalPagos) {
       fechaFin = this.calcularFechaFin(
         fechaInicio,
-        dto.frecuenciaTipo,
-        dto.frecuenciaValor,
-        dto.totalPagos
+        resolvedDto.frecuenciaTipo,
+        resolvedDto.frecuenciaValor,
+        resolvedDto.totalPagos
       );
     }
 
     // Registrar creación de recurrente en historial
     await this.cuentaHistorialService.registrarMovimiento({
-      cuentaId: dto.cuentaId || cuenta.id,
+      cuentaId: resolvedDto.cuentaId || cuenta.id,
       userId,
       tipo: 'recurrente',
-      descripcion: `Recurrente creado: "${dto.nombre}" - ${dto.monto} ${dto.moneda}${tipoRecurrente === 'plazo_fijo' ? ` (${dto.totalPagos} pagos)` : ''}`,
+      descripcion: `Recurrente creado: "${resolvedDto.nombre}" - ${resolvedDto.monto} ${resolvedDto.moneda}${tipoRecurrente === 'plazo_fijo' ? ` (${resolvedDto.totalPagos} pagos)` : ''}`,
       monto: 0,
       fecha: new Date().toISOString(),
       conceptoId: undefined,
-      subcuentaId: dto.subcuentaId,
+      subcuentaId: resolvedDto.subcuentaId,
       metadata: {
         accion: 'crear',
         recurrenteId,
-        moneda: dto.moneda,
-        monto: dto.monto,
-        afectaCuentaPrincipal: dto.afectaCuentaPrincipal,
-        afectaSubcuenta: dto.afectaSubcuenta,
+        moneda: resolvedDto.moneda,
+        monto: resolvedDto.monto,
+        afectaCuentaPrincipal: resolvedDto.afectaCuentaPrincipal,
+        afectaSubcuenta: resolvedDto.afectaSubcuenta,
         tipoRecurrente,
-        totalPagos: dto.totalPagos,
+        totalPagos: resolvedDto.totalPagos,
       },
     });
 
     const nuevo = new this.recurrenteModel({
-      ...dto,
+      ...resolvedDto,
       recurrenteId,
       userId,
       tipoRecurrente,
@@ -95,8 +124,8 @@ export class RecurrentesService {
       fechaFin: tipoRecurrente === 'plazo_fijo' ? fechaFin : undefined,
       proximaEjecucion: this.calcularProximaFechaPersonalizada(
         new Date(),
-        dto.frecuenciaTipo,
-        dto.frecuenciaValor
+        resolvedDto.frecuenciaTipo,
+        resolvedDto.frecuenciaValor
       ),
     });
 
@@ -176,7 +205,9 @@ export class RecurrentesService {
   }
 
   async listar(userId: string, page = 1, limit = 10, search = '', subcuentaId?: string) {
-    const skip = (page - 1) * limit;
+    const safePage = Math.max(1, Number(page || 1));
+    const safeLimit = Math.min(100, Math.max(1, Number(limit || 10)));
+    const skip = (safePage - 1) * safeLimit;
     const filtroBase: any = {
       userId,
       ...(search && { nombre: { $regex: search, $options: 'i' } }),
@@ -188,7 +219,7 @@ export class RecurrentesService {
         .find(filtroBase)
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(limit)
+        .limit(safeLimit)
         .lean()
         .exec(),
       this.recurrenteModel.countDocuments(filtroBase),
@@ -211,7 +242,7 @@ export class RecurrentesService {
         totalCount: total,
         planLimit,
         planType,
-        currentPage: page,
+        currentPage: safePage,
         skip,
       });
       
@@ -248,8 +279,10 @@ export class RecurrentesService {
     return {
       items: itemsWithPauseStatus,
       total,
-      page,
-      hasNextPage: page * limit < total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: total > 0 ? Math.ceil(total / safeLimit) : 0,
+      hasNextPage: safePage * safeLimit < total,
     };
   }
 

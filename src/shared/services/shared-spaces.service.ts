@@ -70,23 +70,34 @@ export class SharedSpacesService {
   }
 
   async listByUser(userId: string, estado?: string, page = 1, limit = 20, search?: string) {
+    const safePage = Math.max(1, Number(page || 1));
+    const safeLimit = Math.min(100, Math.max(1, Number(limit || 20)));
     // Buscar espacios donde el usuario es miembro activo
     const memberships = await this.membersService.listMemberspacesForUser(userId);
     const spaceIds = memberships.map((m) => m.spaceId);
 
-    if (spaceIds.length === 0) return { items: [], total: 0, page, limit, totalPages: 0 };
+    if (spaceIds.length === 0) {
+      return { items: [], total: 0, page: safePage, limit: safeLimit, totalPages: 0, hasNextPage: false };
+    }
 
     const filter: any = { spaceId: { $in: spaceIds } };
     if (estado) filter.estado = estado;
     if (search) filter.nombre = { $regex: search, $options: 'i' };
 
-    const skip = (page - 1) * limit;
+    const skip = (safePage - 1) * safeLimit;
     const [items, total] = await Promise.all([
-      this.spaceModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      this.spaceModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(safeLimit).lean(),
       this.spaceModel.countDocuments(filter),
     ]);
 
-    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return {
+      items,
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: total > 0 ? Math.ceil(total / safeLimit) : 0,
+      hasNextPage: safePage * safeLimit < total,
+    };
   }
 
   async getById(spaceId: string): Promise<SharedSpaceDocument> {

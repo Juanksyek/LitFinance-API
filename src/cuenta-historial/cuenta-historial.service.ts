@@ -148,6 +148,8 @@ export class CuentaHistorialService {
   }
 
   async buscarHistorial(cuentaId: string, page = 1, limit = 10, search?: string) {
+    const safePage = Math.max(1, Number(page || 1));
+    const safeLimit = Math.min(100, Math.max(1, Number(limit || 10)));
     const filtro: any = { cuentaId };
 
     if (search) {
@@ -241,11 +243,19 @@ export class CuentaHistorialService {
     );
 
     const total = todosLosMovimientos.length;
-    const start = (page - 1) * limit;
-    const end = start + limit;
+    const start = (safePage - 1) * safeLimit;
+    const end = start + safeLimit;
     const paginados = todosLosMovimientos.slice(start, end);
 
-    return { total, page, limit, data: paginados };
+    return {
+      items: paginados,
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: total > 0 ? Math.ceil(total / safeLimit) : 0,
+      hasNextPage: safePage * safeLimit < total,
+      data: paginados,
+    };
   }
 
   async eliminar(id: string) {

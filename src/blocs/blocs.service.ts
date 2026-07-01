@@ -161,8 +161,40 @@ export class BlocsService {
     return creado;
   }
 
-  async listarBlocs(userId: string) {
-    return this.blocModel.find({ userId }).sort({ createdAt: -1 }).lean();
+  async listarBlocs(userId: string, page = 1, limit = 20, search = '', tipo?: string) {
+    const safePage = Math.max(1, Number(page || 1));
+    const safeLimit = Math.min(100, Math.max(1, Number(limit || 20)));
+    const filter: any = { userId };
+
+    if (search) {
+      filter.$or = [
+        { nombre: { $regex: search, $options: 'i' } },
+        { descripcion: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    if (tipo) {
+      filter.tipo = tipo;
+    }
+
+    const [items, total] = await Promise.all([
+      this.blocModel
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .skip((safePage - 1) * safeLimit)
+        .limit(safeLimit)
+        .lean(),
+      this.blocModel.countDocuments(filter),
+    ]);
+
+    return {
+      items,
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: total > 0 ? Math.ceil(total / safeLimit) : 0,
+      hasNextPage: safePage * safeLimit < total,
+    };
   }
 
   async obtenerBloc(blocId: string, userId: string) {
@@ -745,10 +777,30 @@ export class BlocsService {
     }
   }
 
-  async listarLiquidaciones(blocId: string, userId: string) {
+  async listarLiquidaciones(blocId: string, userId: string, page = 1, limit = 20) {
     const bloc = await this.blocModel.findOne({ blocId, userId }).lean();
     if (!bloc) throw new NotFoundException('Bloc no encontrado');
 
-    return this.liquidationModel.find({ userId, blocId }).sort({ createdAt: -1 }).lean();
+    const safePage = Math.max(1, Number(page || 1));
+    const safeLimit = Math.min(100, Math.max(1, Number(limit || 20)));
+
+    const [items, total] = await Promise.all([
+      this.liquidationModel
+        .find({ userId, blocId })
+        .sort({ createdAt: -1 })
+        .skip((safePage - 1) * safeLimit)
+        .limit(safeLimit)
+        .lean(),
+      this.liquidationModel.countDocuments({ userId, blocId }),
+    ]);
+
+    return {
+      items,
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: total > 0 ? Math.ceil(total / safeLimit) : 0,
+      hasNextPage: safePage * safeLimit < total,
+    };
   }
 }
